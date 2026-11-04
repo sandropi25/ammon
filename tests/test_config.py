@@ -13,3 +13,14 @@ def test_url_database_default(monkeypatch):
 
 def test_stagioni():
     assert config.STAGIONI == (2026, 2025, 2024)
+
+
+def test_chiave_da_db_se_env_vuota(monkeypatch, sessione):
+    from ammonizioni.db import repo
+
+    monkeypatch.delenv("API_FOOTBALL_KEY", raising=False)
+    assert config.chiave_api(sessione) is None
+    repo.scrivi_impostazione(sessione, "chiave_api", "dal-db")
+    assert config.chiave_api(sessione) == "dal-db"
+    monkeypatch.setenv("API_FOOTBALL_KEY", "da-env")
+    assert config.chiave_api(sessione) == "da-env"

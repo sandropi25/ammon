@@ -1,4 +1,4 @@
-"""Configurazione di base: competizioni, stagioni, chiave API e database."""
+﻿"""Configurazione di base: competizioni, stagioni, chiave API e database."""
 import os
 
 COMPETIZIONI: dict[str, int] = {
@@ -16,10 +16,18 @@ URL_API = "https://v3.football.api-sports.io"
 
 
 def chiave_api(sessione=None) -> str | None:
-    """Chiave API-Football letta dalla variabile d'ambiente API_FOOTBALL_KEY."""
+    """Chiave API-Football: prima la variabile d'ambiente API_FOOTBALL_KEY,
+    poi (se data una sessione) l'impostazione 'chiave_api' nel database."""
     valore = os.environ.get("API_FOOTBALL_KEY")
-    return valore or None
+    if valore:
+        return valore
+    if sessione is not None:
+        from ammonizioni.db import repo  # import locale: evita import circolari
+
+        return repo.leggi_impostazione(sessione, "chiave_api", None) or None
+    return None
 
 
 def url_database() -> str:
     return os.environ.get("DATABASE_URL") or "sqlite:///ammonizioni.db"
+
