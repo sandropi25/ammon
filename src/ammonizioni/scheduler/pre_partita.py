@@ -51,7 +51,15 @@ def _ha_probabili(s: Session, partita_id: int) -> bool:
     )
 
 
-def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> None:
+def _complete(partita: Partita, formazioni) -> bool:
+    """True se sono arrivati i titolari (non vuoti) di entrambe le squadre."""
+    con_titolari = {f.squadra_id for f in formazioni if f.titolari}
+    return {partita.casa_id, partita.trasferta_id} <= con_titolari
+
+
+def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> bool:
+    """Salva le formazioni arrivate; la partita passa a "ufficiali" solo se sono complete
+    (altrimenti resta "probabili" e il controllo successivo riprova). True se complete."""
     s.execute(
         delete(Formazione).where(
             Formazione.partita_id == partita.id, Formazione.tipo == "ufficiale"
@@ -73,7 +81,10 @@ def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> None:
                     griglia=griglia,
                 )
             )
+    if not _complete(partita, formazioni):
+        return False
     partita.stato_formazioni = "ufficiali"
+    return True
 
 
 def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
@@ -105,9 +116,12 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
             continue
         if not formazioni:
             continue
-        _salva_ufficiali(s, partita, formazioni)
+        complete = _salva_ufficiali(s, partita, formazioni)
         s.commit()
-        diventate_ufficiali += 1
+        if complete:
+            diventate_ufficiali += 1
+        else:
+            log.info("Formazioni della partita %s incomplete: riprovo", partita_id)
     return diventate_ufficiali
 
 

@@ -99,6 +99,33 @@ def test_formazioni_non_uscite_resta_probabili(sessione):
     assert sessione.scalars(select(Formazione).where(Formazione.tipo == "ufficiale")).all() == []
 
 
+@pytest.mark.parametrize(
+    "arrivate",
+    [
+        [FormazioneDati(100, 1, [(1, "G1", "D", "2:1"), (2, "G2", "D", "2:2")])],
+        [
+            FormazioneDati(100, 1, [(1, "G1", "D", "2:1"), (2, "G2", "D", "2:2")]),
+            FormazioneDati(100, 2, []),
+        ],
+    ],
+    ids=["una_squadra_sola", "trasferta_senza_titolari"],
+)
+def test_formazione_parziale_salvata_ma_resta_probabili(sessione, arrivate):
+    prepara(sessione)
+    adesso = INIZIO - timedelta(minutes=30)
+    fonte = FonteFinta(formazioni_uscite={100: arrivate})
+    assert pre_partita.esegui(sessione, fonte, adesso) == 0
+    assert sessione.get(Partita, 100).stato_formazioni == "probabili"
+    righe = sessione.scalars(select(Formazione).where(Formazione.tipo == "ufficiale")).all()
+    assert sorted(f.giocatore_id for f in righe) == [1, 2]
+    # al controllo successivo arrivano entrambe: ufficiali, e le righe non si duplicano
+    fonte = FonteFinta(formazioni_uscite=ufficiali())
+    assert pre_partita.esegui(sessione, fonte, adesso + timedelta(minutes=10)) == 1
+    assert sessione.get(Partita, 100).stato_formazioni == "ufficiali"
+    righe = sessione.scalars(select(Formazione).where(Formazione.tipo == "ufficiale")).all()
+    assert sorted(f.giocatore_id for f in righe) == [1, 2, 5]
+
+
 def test_probabili_da_ultimo_xi_se_mancano(sessione):
     prepara(sessione, 50, data=INIZIO - timedelta(days=7), stato="FT")
     sessione.add(
