@@ -63,9 +63,12 @@ class FonteFinta:
         calendari=None,
         formazioni_uscite=None,
         errori_formazioni=(),
+        statistiche_vuote=(),
     ):
         self.limite_dopo = limite_dopo
         self.errori = set(errori)
+        # partite per cui `statistiche` risponde con una lista vuota
+        self.statistiche_vuote = set(statistiche_vuote)
         # partita_id -> formazioni restituite da `formazioni` (assenti = non ancora uscite)
         self.formazioni_uscite = formazioni_uscite or {}
         self.errori_formazioni = set(errori_formazioni)
@@ -97,6 +100,8 @@ class FonteFinta:
         self._chiamata("statistiche", partita_id)
         if partita_id in self.errori:
             raise ErroreFonte(f"errore finto sulla partita {partita_id}")
+        if partita_id in self.statistiche_vuote:
+            return []
         p = self._per_id[partita_id]
         return [
             PresenzaDati(

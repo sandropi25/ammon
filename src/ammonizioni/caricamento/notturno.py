@@ -31,7 +31,8 @@ class RiepilogoJob:
 
 class FonteContata:
     """Avvolge una Fonte e conta le richieste fatte (anche quelle finite in errore, non
-    quelle bloccate da LimiteSuperato, che non consumano budget) e le statistiche ricevute."""
+    quelle bloccate da LimiteSuperato, che non consumano budget) e le statistiche ricevute
+    (solo le risposte non vuote)."""
 
     def __init__(self, fonte: Fonte):
         self._fonte = fonte
@@ -57,7 +58,8 @@ class FonteContata:
 
     def statistiche(self, partita_id):
         risultato = self._chiama("statistiche", partita_id)
-        self.statistiche_ricevute += 1
+        if risultato:
+            self.statistiche_ricevute += 1
         return risultato
 
     def formazioni(self, partita_id):
@@ -119,12 +121,16 @@ def _salva_presenza(s: Session, dati: PresenzaDati) -> None:
 
 
 def scarica_statistiche_partita(s: Session, fonte: Fonte, partita_id: int) -> bool:
-    """Scarica e salva le statistiche di una partita (commit incluso). Un ErroreFonte
-    viene registrato nel log e la partita saltata (False); LimiteSuperato risale."""
+    """Scarica e salva le statistiche di una partita (commit incluso). Un ErroreFonte o una
+    risposta vuota vengono registrati nel log e la partita saltata (False, resta da
+    scaricare e verrà richiesta di nuovo); LimiteSuperato risale."""
     try:
         presenze = fonte.statistiche(partita_id)
     except ErroreFonte as errore:
         log.warning("Statistiche della partita %s non scaricate: %s", partita_id, errore)
+        return False
+    if not presenze:
+        log.warning("Statistiche della partita %s vuote: riprovo la prossima volta", partita_id)
         return False
     for dati in presenze:
         _salva_presenza(s, dati)

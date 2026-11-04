@@ -120,6 +120,31 @@ def test_partita_con_errore_saltata_le_altre_scaricate(sessione, caplog):
     assert "2" in avvisi[0].getMessage()
 
 
+def test_statistiche_vuote_non_segnano_la_partita_ne_rimborsano_le_giocate(sessione, caplog):
+    notturno.aggiorna_calendario(sessione, FonteFinta(partite_ft=1))
+    sessione.add(Giocatore(id=101, nome="Giocatore 1"))
+    giocata = aggiungi_giocata(sessione, 1, 101, "Tipster", 3.0, 10.0, date(2026, 9, 2))
+    sessione.commit()
+    with caplog.at_level(logging.WARNING, logger="ammonizioni.caricamento.notturno"):
+        r = esegui(sessione, FonteFinta(partite_ft=1, statistiche_vuote={1}))
+    assert sessione.get(Partita, 1).statistiche_scaricate is False
+    assert sessione.get(Giocata, giocata.id).esito == "in_attesa"
+    assert r.partite_aggiornate == 0
+    assert any("1" in x.getMessage() for x in caplog.records if x.levelno >= logging.WARNING)
+    # la notte dopo la partita viene richiesta di nuovo e la giocata si chiude
+    fonte = FonteFinta(partite_ft=1)
+    esegui(sessione, fonte)
+    assert chieste_statistiche(fonte) == [1]
+    assert sessione.get(Giocata, giocata.id).esito == "vinta"
+
+
+def test_scarica_statistiche_partita_vuote_restituisce_false(sessione):
+    notturno.aggiorna_calendario(sessione, FonteFinta(partite_ft=1))
+    fonte = FonteFinta(partite_ft=1, statistiche_vuote={1})
+    assert notturno.scarica_statistiche_partita(sessione, fonte, 1) is False
+    assert sessione.get(Partita, 1).statistiche_scaricate is False
+
+
 def test_calendario_crea_squadre_arbitro_e_non_resetta_le_statistiche(sessione):
     fonte = FonteFinta(partite_ft=1)
     notturno.aggiorna_calendario(sessione, fonte)
