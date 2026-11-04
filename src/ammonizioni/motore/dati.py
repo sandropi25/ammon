@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import titolare_da, ultimo_xi
-from ammonizioni.config import COMPETIZIONI
+from ammonizioni.config import COMPETIZIONI, STATI_FINITI
 from ammonizioni.db.modelli import (
     DuelloManuale,
     Formazione,
@@ -204,7 +204,7 @@ def _contesto(
             ).where(
                 Partita.competizione_id == SERIE_A,
                 Partita.stagione == partita.stagione,
-                Partita.stato == "FT",
+                Partita.stato.in_(STATI_FINITI),
                 Partita.data_utc < prima_di,
                 Partita.gol_casa.is_not(None),
                 Partita.gol_trasferta.is_not(None),

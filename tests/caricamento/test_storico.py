@@ -44,6 +44,17 @@ def test_storico_prima_le_squadre_della_prossima_giornata(sessione):
     assert storico.prossime_da_scaricare(sessione, OGGI) == [11, 13, 10, 14, 12]
 
 
+def test_storico_prende_anche_le_partite_finite_ai_supplementari_o_ai_rigori(sessione):
+    _salva(
+        sessione,
+        partita_dati(30, OGGI - timedelta(days=1), competizione_id=137, stato="AET"),
+        partita_dati(31, OGGI - timedelta(days=2), competizione_id=2, stato="PEN"),
+        partita_dati(32, OGGI - timedelta(days=3), stato="FT"),
+        partita_dati(33, OGGI - timedelta(days=4), stato="PST"),  # non giocata: esclusa
+    )
+    assert storico.prossime_da_scaricare(sessione, OGGI) == [30, 31, 32]
+
+
 def test_coda_storico_tutte_le_coppie_tranne_il_calendario_notturno(sessione):
     coda = storico.coda_storico(sessione, OGGI)
     assert len(coda) == len(COMPETIZIONI) * len(STAGIONI) - 1

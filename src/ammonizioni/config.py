@@ -12,6 +12,9 @@ COMPETIZIONI: dict[str, int] = {
 STAGIONE_CORRENTE = 2026
 STAGIONI = (2026, 2025, 2024)
 
+# Stati API-Football di una partita finita: tempi regolamentari, supplementari, rigori.
+STATI_FINITI = ("FT", "AET", "PEN")
+
 URL_API = "https://v3.football.api-sports.io"
 
 

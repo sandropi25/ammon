@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.arbitri import trova_o_crea
-from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE
+from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STATI_FINITI
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import Giocatore, Partita, Presenza, Squadra
 from ammonizioni.fonti.base import ErroreFonte, Fonte
@@ -144,7 +144,7 @@ def scarica_statistiche_giocate(s: Session, fonte: Fonte) -> int:
     Restituisce quante ne ha scaricate; su LimiteSuperato il lavoro già fatto resta salvato."""
     ids = s.scalars(
         select(Partita.id)
-        .where(Partita.stato == "FT", Partita.statistiche_scaricate.is_(False))
+        .where(Partita.stato.in_(STATI_FINITI), Partita.statistiche_scaricate.is_(False))
         .order_by(Partita.data_utc.desc())
     ).all()
     scaricate = 0

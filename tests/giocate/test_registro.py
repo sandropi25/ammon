@@ -68,6 +68,15 @@ def test_giallo_vinta(sessione):
     assert sessione.query(Giocata).one().esito == "vinta"
 
 
+@pytest.mark.parametrize("stato", ["AET", "PEN"])
+def test_partita_finita_ai_supplementari_o_ai_rigori_decisa(sessione, stato):
+    crea_partita(sessione, stato=stato)
+    crea_giocatore_con_presenza(sessione, 10, gialli=1)
+    aggiungi_giocata(sessione, 1, 10, "A", 3.0, 10.0, GIORNO)
+    assert aggiorna_esiti(sessione) == 1
+    assert sessione.query(Giocata).one().esito == "vinta"
+
+
 def test_senza_giallo_persa_anche_con_rosso_diretto(sessione):
     crea_partita(sessione)
     crea_giocatore_con_presenza(sessione, 10, gialli=0)

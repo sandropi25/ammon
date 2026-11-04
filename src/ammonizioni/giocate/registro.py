@@ -7,6 +7,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ammonizioni.config import STATI_FINITI
 from ammonizioni.db.modelli import Giocata, Partita, Presenza
 
 
@@ -58,7 +59,7 @@ def _esito(s: Session, giocata: Giocata, partita: Partita) -> str | None:
     """Esito della giocata, o None se la partita non è ancora decidibile."""
     if partita.stato == "CANC":
         return "rimborsata"
-    if partita.stato != "FT" or not partita.statistiche_scaricate:
+    if partita.stato not in STATI_FINITI or not partita.statistiche_scaricate:
         return None
     presenza = s.get(Presenza, (giocata.partita_id, giocata.giocatore_id))
     if presenza is None or presenza.minuti == 0:

@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import titolare_da
-from ammonizioni.config import COMPETIZIONI
+from ammonizioni.config import COMPETIZIONI, STATI_FINITI
 from ammonizioni.db.modelli import Giocatore, Partita, Presenza
 from ammonizioni.motore.mercati import MercatoAmmonizioni
 from ammonizioni.motore.tipi import Titolare
@@ -91,7 +91,7 @@ def prova_stagione(
         .where(
             Partita.competizione_id == SERIE_A,
             Partita.stagione == stagione,
-            Partita.stato == "FT",
+            Partita.stato.in_(STATI_FINITI),
             Partita.statistiche_scaricate.is_(True),
         )
         .order_by(Partita.data_utc, Partita.id)

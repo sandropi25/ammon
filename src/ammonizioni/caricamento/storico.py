@@ -14,7 +14,7 @@ from ammonizioni.caricamento.notturno import (
     salva_partita,
     scarica_statistiche_partita,
 )
-from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STAGIONI
+from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STAGIONI, STATI_FINITI
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import Partita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
@@ -85,7 +85,7 @@ def prossime_da_scaricare(s: Session, oggi: datetime) -> list[int]:
     partite = s.execute(
         select(Partita.id, Partita.casa_id, Partita.trasferta_id)
         .where(
-            Partita.stato == "FT",
+            Partita.stato.in_(STATI_FINITI),
             Partita.statistiche_scaricate.is_(False),
             Partita.competizione_id.in_(COMPETIZIONI.values()),
             Partita.stagione.in_(STAGIONI),

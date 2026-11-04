@@ -31,6 +31,10 @@ def test_stagioni():
     assert config.STAGIONI == (2026, 2025, 2024)
 
 
+def test_stati_finiti_comprendono_supplementari_e_rigori():
+    assert config.STATI_FINITI == ("FT", "AET", "PEN")
+
+
 def test_chiave_da_db_se_env_vuota(monkeypatch, sessione):
     from ammonizioni.db import repo
 
