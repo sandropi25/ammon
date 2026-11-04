@@ -174,12 +174,18 @@ def scarica_statistiche_giocate(s: Session, fonte: Fonte, adesso: datetime) -> i
 
 def esegui(s: Session, fonte: Fonte, adesso: datetime | None = None) -> RiepilogoJob:
     """Calendario, statistiche, esiti delle giocate; poi segna l'aggiornamento "notte".
-    Se il limite di richieste finisce a metà, salva il parziale e restituisce completo=False."""
+    Se il limite di richieste finisce a metà, salva il parziale e restituisce completo=False.
+    Un ErroreFonte sul calendario viene registrato nel log: statistiche ed esiti proseguono
+    con le partite già note e l'aggiornamento risulta incompleto."""
     adesso = adesso or datetime.now(timezone.utc)
     contata = FonteContata(fonte)
     completo = True
     try:
-        aggiorna_calendario(s, contata)
+        try:
+            aggiorna_calendario(s, contata)
+        except ErroreFonte as errore:
+            log.warning("Calendario Serie A non aggiornato: %s", errore)
+            completo = False
         scarica_statistiche_giocate(s, contata, adesso)
     except LimiteSuperato:
         s.commit()

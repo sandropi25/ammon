@@ -15,6 +15,7 @@ from ammonizioni.db.modelli import (
     Squadra,
     UltimoAggiornamento,
 )
+from ammonizioni.fonti.base import ErroreFonte
 from ammonizioni.giocate.registro import aggiungi_giocata
 
 
@@ -136,6 +137,28 @@ def test_statistiche_vuote_non_segnano_la_partita_ne_rimborsano_le_giocate(sessi
     esegui(sessione, fonte)
     assert chieste_statistiche(fonte) == [1]
     assert sessione.get(Giocata, giocata.id).esito == "vinta"
+
+
+class FonteCalendarioRotto(FonteFinta):
+    def partite(self, competizione_id, stagione):
+        self._chiamata("partite", competizione_id, stagione)
+        raise ErroreFonte("calendario rotto")
+
+
+def test_errore_sul_calendario_non_ferma_statistiche_ed_esiti(sessione, caplog):
+    notturno.aggiorna_calendario(sessione, FonteFinta(partite_ft=2))
+    sessione.add(Giocatore(id=101, nome="Giocatore 1"))
+    giocata = aggiungi_giocata(sessione, 1, 101, "Tipster", 3.0, 10.0, date(2026, 9, 2))
+    sessione.commit()
+    fonte = FonteCalendarioRotto(partite_ft=2)
+    with caplog.at_level(logging.WARNING, logger="ammonizioni.caricamento.notturno"):
+        r = esegui(sessione, fonte)
+    assert chieste_statistiche(fonte) == [2, 1]
+    assert r.partite_aggiornate == 2
+    assert r.completo is False
+    assert sessione.get(UltimoAggiornamento, "notte").completo is False
+    assert sessione.get(Giocata, giocata.id).esito == "vinta"
+    assert any("calendario rotto" in x.getMessage() for x in caplog.records)
 
 
 def test_scarica_statistiche_partita_vuote_restituisce_false(sessione):

@@ -7,7 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ammonizioni.db import sessione as modulo_sessione
-from ammonizioni.db.modelli import Formazione, Giocatore, Partita, Presenza, Squadra
+from ammonizioni.db.modelli import (
+    Formazione,
+    Giocatore,
+    Partita,
+    Presenza,
+    Squadra,
+    UltimoAggiornamento,
+)
 from ammonizioni.fonti.limite import Priorita
 from ammonizioni.fonti.tipi import FormazioneDati
 from ammonizioni.scheduler import notte, pre_partita
@@ -199,6 +206,35 @@ def test_main_notte_usa_due_fonti_e_restituisce_0(db_file, monkeypatch):
 
     assert notte.main([], crea_fonte=crea) == 0
     assert richieste == [("chiave-di-prova", Priorita.OGGI), ("chiave-di-prova", Priorita.STORICO)]
+
+
+def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
+    from ammonizioni.fonti.base import ErroreFonte
+
+    monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
+
+    class CalendarioRotto(FonteFinta):
+        def partite(self, competizione_id, stagione):
+            if (competizione_id, stagione) == (135, 2026):
+                self._chiamata("partite", competizione_id, stagione)
+                raise ErroreFonte("calendario rotto")
+            return super().partite(competizione_id, stagione)
+
+    fonti = []
+
+    def crea(s, chiave, priorita):
+        fonti.append(CalendarioRotto())
+        return fonti[-1]
+
+    assert notte.main([], crea_fonte=crea) == 0
+    assert len(fonti) == 2
+    assert len(fonti[1].chiamate) == 14  # lo storico ha scaricato i suoi calendari
+
+    def controlla(s):
+        assert s.get(UltimoAggiornamento, "notte").completo is False
+        assert s.get(UltimoAggiornamento, "storico") is not None
+
+    dentro_db(db_file, controlla)
 
 
 def test_main_notte_con_limite_raggiunto_restituisce_0(db_file, monkeypatch):
