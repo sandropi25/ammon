@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ammonizioni"
+version = "0.1.0"
+description = "Previsione ammonizioni Serie A"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx",
+    "sqlalchemy>=2",
+    "streamlit",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "respx"]
+online = ["psycopg[binary]"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
