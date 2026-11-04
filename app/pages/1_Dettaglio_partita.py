@@ -170,6 +170,9 @@ if rosa:
     if st.button("Salva formazioni probabili", key="salva_probabili"):
         with apri() as s:
             salva_probabili(
-                s, partita_id, {sq: list(st.session_state[f"probabili_{sq}"]) for sq in rosa}
+                s,
+                partita_id,
+                {sq: list(st.session_state[f"probabili_{sq}"]) for sq in rosa},
+                griglie={t.giocatore_id: t.griglia for t in dati.titolari},
             )
         st.rerun()

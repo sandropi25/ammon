@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ammonizioni.caricamento.arbitri import trova_o_crea
 from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STATI_FINITI
 from ammonizioni.db import repo
-from ammonizioni.db.modelli import Giocatore, Partita, Presenza, Squadra
+from ammonizioni.db.modelli import Formazione, Giocatore, Partita, Presenza, Squadra
 from ammonizioni.fonti.base import ErroreFonte, Fonte
 from ammonizioni.fonti.limite import LimiteSuperato
 from ammonizioni.fonti.tipi import PartitaDati, PresenzaDati
@@ -90,12 +90,28 @@ def salva_partita(s: Session, dati: PartitaDati) -> Partita:
     return partita
 
 
+def _griglia(s: Session, dati: PresenzaDati) -> str | None:
+    """Griglia della presenza: quella ricevuta, altrimenti quella della formazione ufficiale
+    salvata dal pre-partita, altrimenti quella già salvata (mai sovrascritta con None).
+    /fixtures/players non la fornisce: arriva solo dalle formazioni."""
+    if dati.griglia is not None:
+        return dati.griglia
+    ufficiale = s.get(
+        Formazione, (dati.partita_id, dati.squadra_id, dati.giocatore_id, "ufficiale")
+    )
+    if ufficiale is not None and ufficiale.griglia is not None:
+        return ufficiale.griglia
+    esistente = s.get(Presenza, (dati.partita_id, dati.giocatore_id))
+    return esistente.griglia if esistente is not None else None
+
+
 def _salva_presenza(s: Session, dati: PresenzaDati) -> None:
     giocatore = {"id": dati.giocatore_id, "nome": dati.giocatore_nome}
     if dati.ruolo is not None:
         giocatore["ruolo"] = dati.ruolo
     repo.upsert(s, Giocatore(**giocatore))
     s.flush()
+    griglia = _griglia(s, dati)
     repo.upsert(
         s,
         Presenza(
@@ -104,7 +120,7 @@ def _salva_presenza(s: Session, dati: PresenzaDati) -> None:
             squadra_id=dati.squadra_id,
             titolare=dati.titolare,
             ruolo=dati.ruolo,
-            griglia=dati.griglia,
+            griglia=griglia,
             minuti=dati.minuti,
             gialli=dati.gialli,
             rossi=dati.rossi,

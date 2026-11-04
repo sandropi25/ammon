@@ -111,7 +111,9 @@ def test_probabili_da_ultimo_xi_se_mancano(sessione):
     probabili = sessione.scalars(
         select(Formazione).where(Formazione.tipo == "probabile", Formazione.partita_id == 100)
     ).all()
-    assert sorted((f.squadra_id, f.giocatore_id) for f in probabili) == [(1, 3), (2, 6)]
+    assert sorted((f.squadra_id, f.giocatore_id, f.griglia) for f in probabili) == [
+        (1, 3, "2:1"), (2, 6, "2:1"),
+    ]
 
 
 def test_probabili_esistenti_non_sovrascritte(sessione):

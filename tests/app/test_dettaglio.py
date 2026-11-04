@@ -156,11 +156,13 @@ def test_probabili_correggibili_con_multiselect(sessione_db):
     assert not at.exception
     with sessione_db() as s:
         righe = s.execute(
-            select(Formazione.squadra_id, Formazione.giocatore_id).where(
+            select(Formazione.squadra_id, Formazione.giocatore_id, Formazione.griglia).where(
                 Formazione.partita_id == PARTITA_FUTURA, Formazione.tipo == "probabile"
             )
         ).all()
-    assert sorted(g for sq, g in righe if sq == CASA) == [11, 12, 13]
-    assert sorted(g for sq, g in righe if sq == TRASF) == [21, 22, 23, 24]
+    assert sorted(g for sq, g, _ in righe if sq == CASA) == [11, 12, 13]
+    assert sorted(g for sq, g, _ in righe if sq == TRASF) == [21, 22, 23, 24]
+    # le griglie dell'ultimo XI restano (servono all'avversario diretto)
+    assert {g: griglia for _, g, griglia in righe}[12] == "2:1"
     # candidati dopo la correzione: 12, 13 (casa) + 22, 23, 24 (trasferta); i portieri sono esclusi
     assert len(at.dataframe[0].value) == 5

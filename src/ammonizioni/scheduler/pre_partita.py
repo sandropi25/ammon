@@ -84,13 +84,15 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
         partita_id = partita.id
         try:
             if not _ha_probabili(s, partita_id):
+                xi = {
+                    squadra: ultimo_xi(s, squadra, partita.data_utc)
+                    for squadra in (partita.casa_id, partita.trasferta_id)
+                }
                 salva_probabili(
                     s,
                     partita_id,
-                    {
-                        squadra: [t.giocatore_id for t in ultimo_xi(s, squadra, partita.data_utc)]
-                        for squadra in (partita.casa_id, partita.trasferta_id)
-                    },
+                    {squadra: [t.giocatore_id for t in titolari] for squadra, titolari in xi.items()},
+                    griglie={t.giocatore_id: t.griglia for titolari in xi.values() for t in titolari},
                 )
                 s.commit()
             formazioni = fonte.formazioni(partita_id)

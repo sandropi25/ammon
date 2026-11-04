@@ -52,7 +52,9 @@ def aggiungi_partita(
             s.add(
                 Presenza(
                     partita_id=pid, giocatore_id=gid, squadra_id=sq, titolare=True,
-                    ruolo=ruolo, griglia="2:1", minuti=minuti.get(gid, 90),
+                    # griglia None come in produzione per le partite passate
+                    # (/fixtures/players non la fornisce): duello neutro
+                    ruolo=ruolo, griglia=None, minuti=minuti.get(gid, 90),
                     gialli=gialli.get(gid, 0), falli_commessi=2, falli_subiti=1, voto=6.0,
                 )
             )

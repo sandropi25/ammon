@@ -58,6 +58,17 @@ python scripts/controlla_stagioni.py
 
 Usa 3 richieste del piano giornaliero. Se la stagione 2026 non risulta accessibile serve il piano Pro (19 $ al mese).
 
+### Da verificare con la chiave: griglia delle partite passate
+
+Le statistiche dei giocatori arrivano da `/fixtures/players`, che non contiene la posizione in campo (la "griglia",
+es. `2:3`). La griglia serve a trovare l'avversario diretto (fattore duello). Oggi viene salvata solo per le partite
+di cui il controllo pre-partita ha letto la formazione ufficiale (`/fixtures/lineups`); per le partite dello storico
+resta vuota, quindi prima delle formazioni ufficiali e in tutta la prova del modello il duello vale 1 (neutro).
+
+Con la chiave, verifica se `/fixtures?id=X` restituisce in una sola chiamata anche `lineups` (con `grid`) e
+`players` (le statistiche). Se sì, conviene usarlo per lo storico al posto di `/fixtures/players`: stessa spesa di
+richieste, ma con la griglia, così anche la prova del modello misura il fattore duello.
+
 ### Prova del modello (backtest)
 
 Dopo aver caricato lo storico, per confrontare il modello con la scelta semplice (il giocatore con più gialli in stagione) sulla scorsa stagione:

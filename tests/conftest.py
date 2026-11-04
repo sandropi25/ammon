@@ -64,7 +64,10 @@ class FonteFinta:
         formazioni_uscite=None,
         errori_formazioni=(),
         statistiche_vuote=(),
+        due_squadre=False,
     ):
+        # True: `statistiche` restituisce anche un attaccante della squadra in trasferta
+        self.due_squadre = due_squadre
         self.limite_dopo = limite_dopo
         self.errori = set(errori)
         # partite per cui `statistiche` risponde con una lista vuota
@@ -103,7 +106,8 @@ class FonteFinta:
         if partita_id in self.statistiche_vuote:
             return []
         p = self._per_id[partita_id]
-        return [
+        # come /fixtures/players: nessuna griglia (arriva solo da /fixtures/lineups)
+        presenze = [
             PresenzaDati(
                 partita_id=partita_id,
                 giocatore_id=partita_id * 100 + 1,
@@ -111,7 +115,7 @@ class FonteFinta:
                 squadra_id=p.casa_id,
                 titolare=True,
                 ruolo="D",
-                griglia="2:1",
+                griglia=None,
                 minuti=90,
                 gialli=1,
                 rossi=0,
@@ -125,6 +129,30 @@ class FonteFinta:
                 voto=6.5,
             )
         ]
+        if self.due_squadre:
+            presenze.append(
+                PresenzaDati(
+                    partita_id=partita_id,
+                    giocatore_id=partita_id * 100 + 2,
+                    giocatore_nome=f"Attaccante {partita_id}",
+                    squadra_id=p.trasferta_id,
+                    titolare=True,
+                    ruolo="F",
+                    griglia=None,
+                    minuti=90,
+                    gialli=0,
+                    rossi=0,
+                    falli_commessi=1,
+                    falli_subiti=3,
+                    dribbling_tentati=4,
+                    dribbling_riusciti=2,
+                    tiri=2,
+                    gol=1,
+                    assist=0,
+                    voto=7.0,
+                )
+            )
+        return presenze
 
     def formazioni(self, partita_id) -> list[FormazioneDati]:
         self._chiamata("formazioni", partita_id)

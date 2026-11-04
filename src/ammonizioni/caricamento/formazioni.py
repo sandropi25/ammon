@@ -41,8 +41,15 @@ def ultimo_xi(s: Session, squadra_id: int, prima_di: datetime) -> list[Titolare]
     if ultima is None:
         return []
     righe = s.execute(
-        select(Presenza, Giocatore)
+        select(Presenza, Giocatore, Formazione.griglia)
         .join(Giocatore, Giocatore.id == Presenza.giocatore_id)
+        .outerjoin(
+            Formazione,
+            (Formazione.partita_id == Presenza.partita_id)
+            & (Formazione.squadra_id == Presenza.squadra_id)
+            & (Formazione.giocatore_id == Presenza.giocatore_id)
+            & (Formazione.tipo == "ufficiale"),
+        )
         .where(
             Presenza.partita_id == ultima,
             Presenza.squadra_id == squadra_id,
@@ -50,11 +57,23 @@ def ultimo_xi(s: Session, squadra_id: int, prima_di: datetime) -> list[Titolare]
         )
         .order_by(Giocatore.id)
     ).all()
-    return [titolare_da(g, squadra_id, p.griglia, p.ruolo) for p, g in righe]
+    # griglia della presenza, altrimenti quella della formazione ufficiale di quella partita
+    return [
+        titolare_da(g, squadra_id, p.griglia or griglia_ufficiale, p.ruolo)
+        for p, g, griglia_ufficiale in righe
+    ]
 
 
-def salva_probabili(s: Session, partita_id: int, titolari_per_squadra: dict[int, list[int]]) -> None:
-    """Sostituisce le formazioni probabili della partita (le ufficiali restano)."""
+def salva_probabili(
+    s: Session,
+    partita_id: int,
+    titolari_per_squadra: dict[int, list[int]],
+    griglie: dict[int, str | None] | None = None,
+) -> None:
+    """Sostituisce le formazioni probabili della partita (le ufficiali restano).
+    `griglie` (giocatore_id -> griglia) conserva le posizioni dell'ultimo XI, che servono
+    a trovare l'avversario diretto prima delle formazioni ufficiali."""
+    griglie = griglie or {}
     s.execute(
         delete(Formazione).where(
             Formazione.partita_id == partita_id, Formazione.tipo == "probabile"
@@ -68,6 +87,7 @@ def salva_probabili(s: Session, partita_id: int, titolari_per_squadra: dict[int,
                     squadra_id=squadra_id,
                     giocatore_id=giocatore_id,
                     tipo="probabile",
+                    griglia=griglie.get(giocatore_id),
                 )
             )
     s.flush()
