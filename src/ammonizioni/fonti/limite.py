@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from datetime import date
+from datetime import date, datetime, timezone
 from enum import Enum
 
 from sqlalchemy.orm import Session
@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session
 from ammonizioni.db.modelli import ContatoreRichieste
 
 FINESTRA_SECONDI = 60.0
+
+
+def oggi_utc() -> date:
+    """Giorno del contatore: data UTC (la quota di API-Football si azzera a mezzanotte UTC)."""
+    return datetime.now(timezone.utc).date()
 
 
 class Priorita(Enum):
@@ -32,7 +37,7 @@ class LimiteRichieste:
         riserva_oggi: int = 30,
         orologio=time.monotonic,
         dormi=time.sleep,
-        oggi=date.today,
+        oggi=None,
     ):
         self.sessione = sessione
         self.max_giorno = max_giorno
@@ -40,7 +45,7 @@ class LimiteRichieste:
         self.riserva_oggi = riserva_oggi
         self.orologio = orologio
         self.dormi = dormi
-        self.oggi = oggi
+        self.oggi = oggi if oggi is not None else oggi_utc
         self._recenti: deque[float] = deque()
 
     def _tetto(self, priorita: Priorita) -> int:
