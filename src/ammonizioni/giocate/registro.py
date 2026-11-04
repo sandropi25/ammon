@@ -32,6 +32,10 @@ def aggiungi_giocata(
     data: date,
 ) -> Giocata:
     """Registra una giocata "in_attesa" (flush, commit a carico del chiamante)."""
+    if partita_id is None:
+        raise ValueError("Seleziona una partita.")
+    if giocatore_id is None:
+        raise ValueError("Seleziona un giocatore.")
     if quota <= 1:
         raise ValueError("La quota deve essere maggiore di 1.")
     if puntata <= 0:

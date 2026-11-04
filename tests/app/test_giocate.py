@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 import componenti_giocate  # noqa: E402  (app/ è in sys.path grazie ad ayuda_app)
 
-from ammonizioni.db.modelli import Giocata, Partita
+from ammonizioni.db.modelli import Giocata, Partita, Squadra
 
 PARTITA_VICINA = 200
 PARTITA_LONTANA = 201
@@ -172,6 +172,34 @@ def test_parametri_url_non_validi_ignorati(sessione_db):
         _prepara(s)
     at = avvia(PAGINA_GIOCATE, partita="abc", giocatore="xyz")
     assert not at.exception
+
+
+def test_partita_senza_giocatori_niente_form_e_niente_eccezioni(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        s.add(Squadra(id=7, nome="Vuota A"))
+        s.add(Squadra(id=8, nome="Vuota B"))
+        s.flush()
+        s.add(Partita(id=210, data_utc=datetime.now(timezone.utc) + timedelta(days=2),
+                      competizione_id=135, stagione=2026, casa_id=7, trasferta_id=8, stato="NS"))
+    at = avvia(PAGINA_GIOCATE)
+    at.selectbox(key="giocata_partita").select(210).run()
+    assert not at.exception
+    assert "Nessun giocatore disponibile per questa partita" in visibile(at)
+    assert len(at.button) == 0
+    with sessione_db() as s:
+        assert s.execute(select(Giocata)).first() is None
+
+
+def test_aggiungi_giocata_rifiuta_id_mancanti(sessione_db):
+    from ammonizioni.giocate.registro import aggiungi_giocata
+
+    with sessione_db() as s:
+        _prepara(s)
+        with pytest.raises(ValueError, match="giocatore"):
+            aggiungi_giocata(s, PARTITA_VICINA, None, "io", 2.0, 10, date(2026, 11, 4))
+        with pytest.raises(ValueError, match="partita"):
+            aggiungi_giocata(s, None, 12, "io", 2.0, 10, date(2026, 11, 4))
 
 
 def test_nessuna_partita_mostra_messaggio(sessione_db):

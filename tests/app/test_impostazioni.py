@@ -153,6 +153,9 @@ def test_un_campo_per_ogni_peso_scalare(sessione_db):
         ("limiti_fattore", "a, b"),            # non numerico
         ("soglie_diffida", "4, 9.5, 13"),      # soglie non intere
         ("soglie_diffida", ""),                # vuoto
+        ("limiti_probabilita", "0, 0.7"),      # minimo non > 0
+        ("limiti_probabilita", "0.02, 1"),     # massimo non < 1
+        ("limiti_probabilita", "0.5, 0.3"),    # ordine invertito
     ],
 )
 def test_tuple_non_valide_rifiutate_senza_salvare(sessione_db, campo, testo):
@@ -166,6 +169,15 @@ def test_tuple_non_valide_rifiutate_senza_salvare(sessione_db, campo, testo):
     assert len(at.error) == 1
     with sessione_db() as s:
         assert s.get(Impostazione, "pesi") is None
+
+
+def test_peso_scalare_negativo_rifiutato():
+    scalari = {n: getattr(Pesi(), n) for n, _ in componenti_giocate.campi_pesi()[0]}
+    testi = {n: componenti_giocate.testo_tupla(getattr(Pesi(), n)) for n in componenti_giocate.campi_pesi()[1]}
+    assert componenti_giocate.costruisci_pesi(scalari, testi) == Pesi()
+    scalari["rivalita"] = -0.5
+    with pytest.raises(ValueError, match="negativo"):
+        componenti_giocate.costruisci_pesi(scalari, testi)
 
 
 def test_tuple_con_virgola_decimale_e_punto_e_virgola():

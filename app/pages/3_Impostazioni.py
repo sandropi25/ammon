@@ -89,11 +89,11 @@ with st.form("form_pesi"):
     for nome, tipo in scalari:
         corrente = getattr(pesi, nome)
         if tipo is int:
-            valori_scalari[nome] = st.number_input(nome, value=int(corrente), step=1, key=f"peso_{nome}")
+            valori_scalari[nome] = st.number_input(nome, value=int(corrente), min_value=0, step=1, key=f"peso_{nome}")
         else:
             passo = 0.01 if abs(corrente) < 10 else 1.0
             valori_scalari[nome] = st.number_input(
-                nome, value=float(corrente), step=passo, format="%g", key=f"peso_{nome}"
+                nome, value=float(corrente), min_value=0.0, step=passo, format="%g", key=f"peso_{nome}"
             )
     testi_tuple: dict[str, str] = {}
     for nome in nomi_tuple:

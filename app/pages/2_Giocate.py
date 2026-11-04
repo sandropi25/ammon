@@ -53,30 +53,36 @@ else:
         format_func=lambda i: nomi_giocatori[i],
         key="giocata_giocatore",
     )
-    giorno = st.date_input(
-        "Data", value=datetime.now(componenti.ROMA).date(), format="DD/MM/YYYY", key="giocata_data"
-    )
-    colonne = st.columns(2)
-    scelta_fonte = colonne[0].selectbox("Fonte", cg.FONTI, key="giocata_fonte")
-    tipster = colonne[1].text_input(
-        "Nome del tipster (se la fonte è tipster)", key="giocata_tipster"
-    )
-    colonne = st.columns(2)
-    quota = colonne[0].text_input("Quota", key="giocata_quota", placeholder="es. 2,10")
-    puntata = colonne[1].text_input("Puntata (€)", key="giocata_puntata", placeholder="es. 10,00")
-    if st.button("Registra giocata", key="salva_giocata"):
-        try:
-            with apri() as s:
-                cg.registra_giocata(
-                    s, giorno, partita_id, giocatore_id, scelta_fonte, tipster, quota, puntata
-                )
-        except ValueError as errore:
-            st.error(str(errore))
-        else:
-            st.session_state["giocata_registrata"] = True
-            for chiave in ("giocata_quota", "giocata_puntata"):
-                del st.session_state[chiave]
-            st.rerun()
+    if giocatore_id is None:
+        st.info("Nessun giocatore disponibile per questa partita")
+    else:
+        giorno = st.date_input(
+            "Data", value=datetime.now(componenti.ROMA).date(), format="DD/MM/YYYY",
+            key="giocata_data",
+        )
+        colonne = st.columns(2)
+        scelta_fonte = colonne[0].selectbox("Fonte", cg.FONTI, key="giocata_fonte")
+        tipster = colonne[1].text_input(
+            "Nome del tipster (se la fonte è tipster)", key="giocata_tipster"
+        )
+        colonne = st.columns(2)
+        quota = colonne[0].text_input("Quota", key="giocata_quota", placeholder="es. 2,10")
+        puntata = colonne[1].text_input(
+            "Puntata (€)", key="giocata_puntata", placeholder="es. 10,00"
+        )
+        if st.button("Registra giocata", key="salva_giocata"):
+            try:
+                with apri() as s:
+                    cg.registra_giocata(
+                        s, giorno, partita_id, giocatore_id, scelta_fonte, tipster, quota, puntata
+                    )
+            except ValueError as errore:
+                st.error(str(errore))
+            else:
+                st.session_state["giocata_registrata"] = True
+                for chiave in ("giocata_quota", "giocata_puntata"):
+                    del st.session_state[chiave]
+                st.rerun()
 
 st.subheader("Registro")
 if not registro:

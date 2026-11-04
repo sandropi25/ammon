@@ -296,6 +296,8 @@ def costruisci_pesi(scalari: dict[str, float], testi: dict[str, str]) -> Pesi:
     valori: dict[str, object] = {}
     for nome, tipo in campi_pesi()[0]:
         valori[nome] = tipo(scalari[nome])
+        if valori[nome] < 0:
+            raise ValueError(f"{nome}: il valore non può essere negativo")
     for nome, testo in testi.items():
         tipo = int if all(isinstance(v, int) for v in getattr(default, nome)) else float
         try:
@@ -304,4 +306,6 @@ def costruisci_pesi(scalari: dict[str, float], testi: dict[str, str]) -> Pesi:
             raise ValueError(f"{nome}: {errore}") from None
         if nome.startswith("limiti_") and valori[nome][0] >= valori[nome][1]:
             raise ValueError(f"{nome}: il primo valore deve essere minore del secondo")
+        if nome == "limiti_probabilita" and not 0 < valori[nome][0] < valori[nome][1] < 1:
+            raise ValueError(f"{nome}: servono due probabilità con 0 < minimo < massimo < 1")
     return replace(default, **valori)
