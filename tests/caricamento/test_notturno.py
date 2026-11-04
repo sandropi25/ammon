@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from conftest import FonteFinta, partita_dati
 from sqlalchemy import select
@@ -8,12 +8,14 @@ from ammonizioni.caricamento import notturno
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import (
     Arbitro,
+    Giocata,
     Giocatore,
     Partita,
     Presenza,
     Squadra,
     UltimoAggiornamento,
 )
+from ammonizioni.giocate.registro import aggiungi_giocata
 
 
 def conta_presenze_scaricate(s) -> int:
@@ -99,3 +101,13 @@ def test_statistiche_creano_giocatore_con_ruolo(sessione):
     assert (g.nome, g.ruolo) == ("Giocatore 1", "D")
     pr = sessione.get(Presenza, (1, 101))
     assert (pr.gialli, pr.minuti, pr.titolare) == (1, 90, True)
+
+
+def test_esegui_chiude_le_giocate_delle_partite_scaricate_nel_giro(sessione):
+    notturno.aggiorna_calendario(sessione, FonteFinta(partite_ft=1))
+    sessione.add(Giocatore(id=101, nome="Giocatore 1"))
+    giocata = aggiungi_giocata(sessione, 1, 101, "Tipster", 3.0, 10.0, date(2026, 9, 2))
+    sessione.commit()
+    assert giocata.esito == "in_attesa"
+    notturno.esegui(sessione, FonteFinta(partite_ft=1))
+    assert sessione.get(Giocata, giocata.id).esito == "vinta"

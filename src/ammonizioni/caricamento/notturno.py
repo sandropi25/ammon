@@ -14,6 +14,7 @@ from ammonizioni.db.modelli import Giocatore, Partita, Presenza, Squadra
 from ammonizioni.fonti.base import ErroreFonte, Fonte
 from ammonizioni.fonti.limite import LimiteSuperato
 from ammonizioni.fonti.tipi import PartitaDati, PresenzaDati
+from ammonizioni.giocate.registro import aggiorna_esiti
 
 log = logging.getLogger(__name__)
 
@@ -153,17 +154,6 @@ def scarica_statistiche_giocate(s: Session, fonte: Fonte) -> int:
     return scaricate
 
 
-def _aggiorna_esiti_giocate(s: Session) -> None:
-    try:
-        # Task 10: `giocate.registro` non esiste ancora; finché manca il passo è saltato.
-        from ammonizioni.giocate.registro import aggiorna_esiti
-    except ModuleNotFoundError as errore:
-        if not (errore.name or "").startswith("ammonizioni.giocate"):
-            raise
-        return
-    aggiorna_esiti(s)
-
-
 def esegui(s: Session, fonte: Fonte) -> RiepilogoJob:
     """Calendario, statistiche, esiti delle giocate; poi segna l'aggiornamento "notte".
     Se il limite di richieste finisce a metà, salva il parziale e restituisce completo=False."""
@@ -175,7 +165,7 @@ def esegui(s: Session, fonte: Fonte) -> RiepilogoJob:
     except LimiteSuperato:
         s.commit()
         completo = False
-    _aggiorna_esiti_giocate(s)
+    aggiorna_esiti(s)
     repo.segna_aggiornamento(s, "notte", completo)
     s.commit()
     return RiepilogoJob(contata.richieste, contata.statistiche_ricevute, completo)
