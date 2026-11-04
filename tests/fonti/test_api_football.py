@@ -170,8 +170,8 @@ def test_retry_esauriti_solleva_errore_fonte(api, attese):
     rotta = respx.get(f"{URL_API}/fixtures").mock(return_value=httpx.Response(503))
     with pytest.raises(ErroreFonte):
         api.partite(135, 2026)
-    assert rotta.call_count == 4
-    assert attese == [1, 2, 4]
+    assert rotta.call_count == 5
+    assert attese == [1, 2, 4, 8]
 
 
 @respx.mock

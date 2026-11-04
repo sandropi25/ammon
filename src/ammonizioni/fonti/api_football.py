@@ -12,7 +12,7 @@ from ammonizioni.fonti.base import ErroreFonte
 from ammonizioni.fonti.limite import LimiteRichieste, Priorita
 from ammonizioni.fonti.tipi import FormazioneDati, PartitaDati, PresenzaDati
 
-TENTATIVI = 4
+TENTATIVI = 5  # primo tentativo + 4 retry
 ATTESE_RETRY = (1, 2, 4, 8)
 TIMEOUT_SECONDI = 30.0
 
