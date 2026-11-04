@@ -55,9 +55,20 @@ class FonteFinta:
     (id 1..N, la più recente è quella con id più alto) e le altre combinazioni nessuna.
     """
 
-    def __init__(self, partite_ft=0, limite_dopo=None, errori=(), calendari=None):
+    def __init__(
+        self,
+        partite_ft=0,
+        limite_dopo=None,
+        errori=(),
+        calendari=None,
+        formazioni_uscite=None,
+        errori_formazioni=(),
+    ):
         self.limite_dopo = limite_dopo
         self.errori = set(errori)
+        # partita_id -> formazioni restituite da `formazioni` (assenti = non ancora uscite)
+        self.formazioni_uscite = formazioni_uscite or {}
+        self.errori_formazioni = set(errori_formazioni)
         self.chiamate: list[tuple] = []
         if calendari is None:
             base = datetime(2026, 9, 1, 18, 0, tzinfo=timezone.utc)
@@ -112,4 +123,6 @@ class FonteFinta:
 
     def formazioni(self, partita_id) -> list[FormazioneDati]:
         self._chiamata("formazioni", partita_id)
-        return []
+        if partita_id in self.errori_formazioni:
+            raise ErroreFonte(f"errore finto sulle formazioni della partita {partita_id}")
+        return list(self.formazioni_uscite.get(partita_id, []))

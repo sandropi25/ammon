@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ammonizioni.caricamento.formazioni import titolare_da, ultimo_xi
 from ammonizioni.config import COMPETIZIONI
 from ammonizioni.db.modelli import (
     DuelloManuale,
@@ -235,17 +236,6 @@ def _contesto(
     )
 
 
-def _titolare(g: Giocatore, squadra_id: int, griglia: str | None, ruolo: str | None) -> Titolare:
-    return Titolare(
-        giocatore_id=g.id,
-        nome=g.nome,
-        squadra_id=squadra_id,
-        ruolo=_ruolo(ruolo or g.ruolo),
-        griglia=griglia,
-        sofascore_url=g.sofascore_url,
-    )
-
-
 def _da_formazione(s: Session, partita_id: int, squadra_id: int, tipo: str) -> list[Titolare]:
     righe = s.execute(
         select(Formazione, Giocatore)
@@ -257,35 +247,7 @@ def _da_formazione(s: Session, partita_id: int, squadra_id: int, tipo: str) -> l
         )
         .order_by(Giocatore.id)
     ).all()
-    return [_titolare(g, squadra_id, f.griglia, None) for f, g in righe]
-
-
-def _ultimo_xi_da_presenze(s: Session, squadra_id: int, prima_di: datetime) -> list[Titolare]:
-    # sostituito da caricamento.formazioni.ultimo_xi nel Task 11
-    ultima = s.execute(
-        select(Partita.id)
-        .join(Presenza, Presenza.partita_id == Partita.id)
-        .where(
-            Presenza.squadra_id == squadra_id,
-            Presenza.titolare.is_(True),
-            Partita.data_utc < prima_di,
-        )
-        .order_by(Partita.data_utc.desc())
-        .limit(1)
-    ).scalar()
-    if ultima is None:
-        return []
-    righe = s.execute(
-        select(Presenza, Giocatore)
-        .join(Giocatore, Giocatore.id == Presenza.giocatore_id)
-        .where(
-            Presenza.partita_id == ultima,
-            Presenza.squadra_id == squadra_id,
-            Presenza.titolare.is_(True),
-        )
-        .order_by(Giocatore.id)
-    ).all()
-    return [_titolare(g, squadra_id, p.griglia, p.ruolo) for p, g in righe]
+    return [titolare_da(g, squadra_id, f.griglia, None) for f, g in righe]
 
 
 def _titolari(s: Session, partita: Partita, prima_di: datetime) -> list[Titolare]:
@@ -294,7 +256,7 @@ def _titolari(s: Session, partita: Partita, prima_di: datetime) -> list[Titolare
         scelti = (
             _da_formazione(s, partita.id, squadra, "ufficiale")
             or _da_formazione(s, partita.id, squadra, "probabile")
-            or _ultimo_xi_da_presenze(s, squadra, prima_di)
+            or ultimo_xi(s, squadra, prima_di)
         )
         risultato.extend(scelti)
     return risultato
