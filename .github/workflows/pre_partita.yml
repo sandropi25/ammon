@@ -1,0 +1,24 @@
+name: Controllo pre-partita
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # ogni 10 minuti (GitHub può ritardarlo di qualche minuto)
+  workflow_dispatch:
+
+concurrency:
+  group: pre-partita
+  cancel-in-progress: false
+
+jobs:
+  pre_partita:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ".[online]"
+      - run: python -m ammonizioni.scheduler.pre_partita
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

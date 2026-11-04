@@ -1,0 +1,24 @@
+name: Caricamento notturno
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC ogni notte (GitHub può ritardarlo di qualche minuto)
+  workflow_dispatch:
+
+concurrency:
+  group: notte
+  cancel-in-progress: false
+
+jobs:
+  notte:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ".[online]"
+      - run: python -m ammonizioni.scheduler.notte
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

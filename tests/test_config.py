@@ -1,3 +1,5 @@
+import pytest
+
 from ammonizioni import config
 
 
@@ -9,6 +11,20 @@ def test_chiave_da_env(monkeypatch):
 def test_url_database_default(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     assert config.url_database() == "sqlite:///ammonizioni.db"
+
+
+@pytest.mark.parametrize(
+    "ricevuto, atteso",
+    [
+        ("postgresql://u:p@host:5432/postgres", "postgresql+psycopg://u:p@host:5432/postgres"),
+        ("postgres://u:p@host:6543/postgres", "postgresql+psycopg://u:p@host:6543/postgres"),
+        ("postgresql+psycopg://u:p@host/db", "postgresql+psycopg://u:p@host/db"),
+        ("sqlite:///altro.db", "sqlite:///altro.db"),
+    ],
+)
+def test_url_database_normalizza_postgres(monkeypatch, ricevuto, atteso):
+    monkeypatch.setenv("DATABASE_URL", ricevuto)
+    assert config.url_database() == atteso
 
 
 def test_stagioni():

@@ -29,4 +29,10 @@ def chiave_api(sessione=None) -> str | None:
 
 
 def url_database() -> str:
-    return os.environ.get("DATABASE_URL") or "sqlite:///ammonizioni.db"
+    """URL del database. Gli URL Postgres di Supabase (`postgres://` o `postgresql://`)
+    vengono portati a `postgresql+psycopg://`, il driver psycopg 3 usato da SQLAlchemy."""
+    url = os.environ.get("DATABASE_URL") or "sqlite:///ammonizioni.db"
+    for prefisso in ("postgres://", "postgresql://"):
+        if url.startswith(prefisso):
+            return "postgresql+psycopg://" + url[len(prefisso):]
+    return url
