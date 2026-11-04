@@ -5,6 +5,9 @@ on:
     - cron: "0 3 * * *" # 03:00 UTC ogni notte (GitHub può ritardarlo di qualche minuto)
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: notte
   cancel-in-progress: false
@@ -12,11 +15,14 @@ concurrency:
 jobs:
   notte:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install ".[online]"
       - run: python -m ammonizioni.scheduler.notte
         env:

@@ -25,5 +25,5 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
-    "postgres: richiede un database Postgres reale (DATABASE_URL che inizia con postgresql); altrimenti saltato",
+    "postgres: richiede un database Postgres reale (DATABASE_URL che inizia con postgres); altrimenti saltato",
 ]

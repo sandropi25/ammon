@@ -94,9 +94,17 @@ Senza un `DATABASE_URL` Postgres i test marcati `postgres` vengono saltati.
    - `API_FOOTBALL_KEY`: la chiave API-Football;
    - `DATABASE_URL`: la stringa di Supabase del punto 1.
 3. Lancia il caricamento a mano: scheda **Actions > Caricamento notturno > Run workflow**. Nei log del passo `python -m ammonizioni.scheduler.notte` controlla le righe `Notte: ... richieste, ... partite aggiornate, completo=...` e `Storico: ...`: devono comparire il numero di richieste usate e `completo=True` (o `False` se è stato raggiunto il limite giornaliero, caso normale mentre lo storico si carica).
-4. Da quel momento: `notte.yml` parte ogni giorno alle 03:00 UTC, `pre_partita.yml` ogni 10 minuti. Entrambi si possono lanciare anche a mano (`workflow_dispatch`) e hanno un gruppo di concorrenza che impedisce due esecuzioni sovrapposte.
+4. Da quel momento: `notte.yml` parte ogni giorno alle 03:00 UTC; `pre_partita.yml` parte ogni 10 minuti ma solo dalle 10:00 alle 19:50 UTC (cron `*/10 10-19 * * *`). Entrambi si possono lanciare anche a mano (`workflow_dispatch`) e hanno un gruppo di concorrenza che impedisce due esecuzioni sovrapposte.
 
 Nota: GitHub può ritardare l'avvio dei cron di qualche minuto (e a volte saltarne qualcuno nei momenti di carico). Per il controllo delle formazioni, a intervalli di 10 minuti, non è un problema. I cron dei repository senza attività per 60 giorni vengono disattivati da GitHub: basta riattivarli dalla scheda Actions.
+
+#### Minuti di GitHub Actions e orari del cron
+
+Un repository privato sul piano GitHub Free ha 2000 minuti di Actions al mese e ogni esecuzione conta almeno 1 minuto. Un cron ogni 10 minuti tutto il giorno farebbe circa 4320 esecuzioni al mese ed esaurirebbe la quota in circa due settimane, dopo di che i job si fermerebbero. Per questo `pre_partita.yml` gira solo nelle ore in cui un calcio d'inizio può cadere nella finestra di 75 minuti: 10-19 UTC, cioè 6 esecuzioni x 10 ore = 60 al giorno, circa 1800 al mese, più circa 30 della notte: circa 1830 minuti al mese, sotto il limite.
+
+- Copertura: calci d'inizio dalle 12:30 alle 20:45 ora italiana, sia con ora solare (CET) sia con ora legale (CEST).
+- Se una partita è mai fuori da questo intervallo (per esempio un anticipo alle 12:00 o un orario tardivo), allarga le ore del cron in `.github/workflows/pre_partita.yml`, tenendo d'occhio la quota (ogni ora in più costa circa 180 minuti al mese).
+- Un repository pubblico ha minuti illimitati, quindi il cron potrebbe girare tutto il giorno. I segreti restano protetti, ma il codice sarebbe visibile a tutti.
 
 ### 3. Streamlit Community Cloud
 

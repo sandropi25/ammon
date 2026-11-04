@@ -2,8 +2,13 @@ name: Controllo pre-partita
 
 on:
   schedule:
-    - cron: "*/10 * * * *" # ogni 10 minuti (GitHub può ritardarlo di qualche minuto)
+    # Ogni 10 minuti dalle 10:00 alle 19:50 UTC (12:00-21:50 ora italiana in estate, 11:00-20:50 in inverno).
+    # Copre i calci d'inizio dalle 12:30 alle 20:45 italiane. GitHub può ritardarlo di qualche minuto.
+    - cron: "*/10 10-19 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: pre-partita
@@ -12,11 +17,14 @@ concurrency:
 jobs:
   pre_partita:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install ".[online]"
       - run: python -m ammonizioni.scheduler.pre_partita
         env:
