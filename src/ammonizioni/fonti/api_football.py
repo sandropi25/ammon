@@ -33,7 +33,7 @@ def _voto(valore) -> float | None:
 def _giornata(testo: str | None) -> int | None:
     if not testo:
         return None
-    trovato = re.search(r"(\d+)\s*$", testo)
+    trovato = re.search(r"-\s*(\d+)\s*$", testo)
     return int(trovato.group(1)) if trovato else None
 
 

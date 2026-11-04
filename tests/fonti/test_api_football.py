@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from ammonizioni.config import URL_API
-from ammonizioni.fonti.api_football import ApiFootball
+from ammonizioni.fonti.api_football import ApiFootball, _giornata
 from ammonizioni.fonti.base import ErroreFonte
 from ammonizioni.fonti.limite import LimiteRichieste, LimiteSuperato, Priorita
 
@@ -28,6 +28,22 @@ def api(sessione, attese):
     limite = LimiteRichieste(sessione, dormi=lambda s: None)
     with httpx.Client() as client:
         yield ApiFootball("chiave-prova", limite, client=client, dormi=attese.append)
+
+
+@pytest.mark.parametrize(
+    "testo, atteso",
+    [
+        ("Regular Season - 12", 12),
+        ("League Stage - 3", 3),
+        ("Round of 16", None),
+        ("Round of 32", None),
+        ("Round of 64", None),
+        ("Quarter-finals", None),
+        (None, None),
+    ],
+)
+def test_giornata_solo_formato_campionato(testo, atteso):
+    assert _giornata(testo) == atteso
 
 
 @respx.mock
