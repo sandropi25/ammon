@@ -58,6 +58,30 @@ def test_coda_storico_salta_i_calendari_gia_scaricati(sessione):
     assert len(coda) == len(COMPETIZIONI) * len(STAGIONI) - 3
 
 
+def test_calendari_stagione_corrente_non_serie_a_riscaricati_dopo_7_giorni(sessione):
+    tutti = [
+        [c, st] for st in STAGIONI for c in COMPETIZIONI.values()
+        if (c, st) != (135, STAGIONE_CORRENTE)
+    ]
+    repo.scrivi_impostazione(sessione, "calendari_scaricati", tutti)
+    repo.scrivi_impostazione(
+        sessione,
+        "calendari_scaricati_il",
+        {
+            "137-2026": (OGGI - timedelta(days=8)).isoformat(),   # scaduto
+            "2-2026": (OGGI - timedelta(days=2)).isoformat(),     # recente
+            "137-2025": (OGGI - timedelta(days=300)).isoformat(),  # passata: mai
+        },
+    )
+    coda = storico.coda_storico(sessione, OGGI)
+    assert (137, 2026) in coda
+    assert (2, 2026) not in coda
+    assert (137, 2025) not in coda
+    # data ignota per la stagione corrente: da riscaricare; stagioni passate mai
+    assert (3, 2026) in coda and (3, 2025) not in coda
+    assert (135, 2026) not in coda
+
+
 def test_avanza_scarica_calendari_poi_statistiche(sessione):
     base = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
     calendari = {

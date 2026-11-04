@@ -23,7 +23,9 @@ from ammonizioni.fonti.limite import LimiteSuperato
 log = logging.getLogger(__name__)
 
 CALENDARI_SCARICATI = "calendari_scaricati"
+CALENDARI_QUANDO = "calendari_scaricati_il"  # {"competizione-stagione": iso UTC}
 GIORNI_PROSSIMA_GIORNATA = 7
+GIORNI_RISCARICO_CALENDARIO = 7  # calendari della stagione corrente (non Serie A)
 
 
 def _scaricati(s: Session) -> set[tuple[int, int]]:
@@ -35,16 +37,33 @@ def coda_storico(s: Session, oggi: datetime) -> list[tuple[int, int]]:
     """(competizione, stagione) di cui manca l'elenco partite, stagioni recenti per prime.
     Il calendario Serie A della stagione corrente è già aggiornato dal job notturno."""
     fatti = _scaricati(s)
+    quando = repo.leggi_impostazione(s, CALENDARI_QUANDO, {}) or {}
     coda = []
     for stagione in STAGIONI:
         if stagione > oggi.year:
             continue
         for competizione_id in COMPETIZIONI.values():
             coppia = (competizione_id, stagione)
-            if coppia in fatti or coppia == (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE):
+            if coppia == (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE):
+                continue
+            if coppia in fatti and not (
+                stagione == STAGIONE_CORRENTE
+                and _scaduto(quando.get(_chiave(coppia)), oggi)
+            ):
                 continue
             coda.append(coppia)
     return coda
+
+
+def _chiave(coppia: tuple[int, int]) -> str:
+    return f"{coppia[0]}-{coppia[1]}"
+
+
+def _scaduto(iso: str | None, oggi: datetime) -> bool:
+    """True se il calendario della stagione corrente ha più di 7 giorni (o data ignota)."""
+    if not iso:
+        return True
+    return oggi - datetime.fromisoformat(iso) > timedelta(days=GIORNI_RISCARICO_CALENDARIO)
 
 
 def _squadre_prossima_giornata(s: Session, oggi: datetime) -> set[int]:
@@ -90,7 +109,13 @@ def _scarica_calendari(s: Session, fonte: Fonte, oggi: datetime) -> None:
         for dati in partite:
             salva_partita(s, dati)
         fatti = repo.leggi_impostazione(s, CALENDARI_SCARICATI, []) or []
-        repo.scrivi_impostazione(s, CALENDARI_SCARICATI, fatti + [[competizione_id, stagione]])
+        if [competizione_id, stagione] not in fatti:
+            repo.scrivi_impostazione(
+                s, CALENDARI_SCARICATI, fatti + [[competizione_id, stagione]]
+            )
+        quando = dict(repo.leggi_impostazione(s, CALENDARI_QUANDO, {}) or {})
+        quando[_chiave((competizione_id, stagione))] = oggi.isoformat()
+        repo.scrivi_impostazione(s, CALENDARI_QUANDO, quando)
         s.commit()
 
 
