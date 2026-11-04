@@ -37,6 +37,23 @@ def _giornata(testo: str | None) -> int | None:
     return int(trovato.group(1)) if trovato else None
 
 
+def _elenco_errori(errori) -> list:
+    if isinstance(errori, dict):
+        return list(errori.values())
+    if isinstance(errori, list):
+        return errori
+    return [errori]
+
+
+def _limite_al_minuto(errori) -> bool:
+    """True se `errors` segnala il limite al minuto (chiave "rateLimit" o testo
+    "requests per minute"/"rateLimit"); il limite giornaliero no."""
+    if isinstance(errori, dict) and "rateLimit" in errori:
+        return True
+    testo = " ".join(str(e) for e in _elenco_errori(errori)).lower()
+    return "requests per minute" in testo or "ratelimit" in testo
+
+
 class ApiFootball:
     def __init__(
         self,
@@ -175,10 +192,11 @@ class ApiFootball:
                 raise ErroreFonte(f"Risposta non valida su {percorso}: {e}") from e
             errori = corpo.get("errors")
             if errori:
-                if isinstance(errori, dict):
-                    errori = list(errori.values())
-                elif not isinstance(errori, list):
-                    errori = [errori]
-                raise ErroreFonte("; ".join(str(e) for e in errori))
+                testo = "; ".join(str(e) for e in _elenco_errori(errori))
+                if _limite_al_minuto(errori):
+                    # risposta 200 con il limite al minuto superato: come un 429
+                    ultimo_errore = testo
+                    continue
+                raise ErroreFonte(testo)
             return corpo.get("response") or []
         raise ErroreFonte(f"{percorso}: {TENTATIVI} tentativi falliti ({ultimo_errore})")

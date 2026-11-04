@@ -15,7 +15,7 @@ from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
 from ammonizioni.fonti.limite import LimiteSuperato, Priorita
-from ammonizioni.scheduler.comune import configura_log, crea_api_football
+from ammonizioni.scheduler.comune import configura_log, crea_api_football, crea_limite
 
 log = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ def main(argv=None, crea_fonte=crea_api_football) -> int:
         if not partite_da_controllare(s, adesso):
             log.info("Nessuna partita nella finestra di controllo")
             return 0
-        n = esegui(s, crea_fonte(s, chiave, Priorita.OGGI), adesso)
+        n = esegui(s, crea_fonte(chiave, Priorita.OGGI, crea_limite(s)), adesso)
         log.info("Formazioni ufficiali trovate per %s partite", n)
     return 0
 

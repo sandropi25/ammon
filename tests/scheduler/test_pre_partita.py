@@ -15,9 +15,10 @@ from ammonizioni.db.modelli import (
     Squadra,
     UltimoAggiornamento,
 )
-from ammonizioni.fonti.limite import Priorita
+from ammonizioni.fonti.api_football import ApiFootball
+from ammonizioni.fonti.limite import LimiteRichieste, Priorita
 from ammonizioni.fonti.tipi import FormazioneDati
-from ammonizioni.scheduler import notte, pre_partita
+from ammonizioni.scheduler import comune, notte, pre_partita
 
 INIZIO = datetime(2026, 11, 20, 18, 0, tzinfo=timezone.utc)
 
@@ -181,7 +182,7 @@ def test_main_pre_partita_senza_partite_nessuna_chiamata(db_file, monkeypatch):
     monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
     dentro_db(db_file, lambda s: prepara(s, data=datetime.now(timezone.utc) + timedelta(hours=5)))
     fonte = FonteFinta()
-    assert pre_partita.main([], crea_fonte=lambda s, chiave, priorita: fonte) == 0
+    assert pre_partita.main([], crea_fonte=lambda chiave, priorita, limite: fonte) == 0
     assert fonte.chiamate == []
 
 
@@ -189,7 +190,7 @@ def test_main_pre_partita_salva_ufficiali(db_file, monkeypatch):
     monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
     dentro_db(db_file, lambda s: prepara(s, data=datetime.now(timezone.utc) + timedelta(minutes=30)))
     fonte = FonteFinta(formazioni_uscite=ufficiali())
-    assert pre_partita.main([], crea_fonte=lambda s, chiave, priorita: fonte) == 0
+    assert pre_partita.main([], crea_fonte=lambda chiave, priorita, limite: fonte) == 0
     assert fonte.chiamate == [("formazioni", 100)]
 
     def controlla(s):
@@ -202,12 +203,26 @@ def test_main_notte_usa_due_fonti_e_restituisce_0(db_file, monkeypatch):
     monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
     richieste = []
 
-    def crea(s, chiave, priorita):
-        richieste.append((chiave, priorita))
+    def crea(chiave, priorita, limite):
+        richieste.append((chiave, priorita, limite))
         return FonteFinta(partite_ft=2)
 
     assert notte.main([], crea_fonte=crea) == 0
-    assert richieste == [("chiave-di-prova", Priorita.OGGI), ("chiave-di-prova", Priorita.STORICO)]
+    assert [(c, p) for c, p, _ in richieste] == [
+        ("chiave-di-prova", Priorita.OGGI), ("chiave-di-prova", Priorita.STORICO),
+    ]
+    # un solo limite (stesso ritmo al minuto) per le due fonti
+    limite_oggi, limite_storico = (limite for _, _, limite in richieste)
+    assert isinstance(limite_oggi, LimiteRichieste)
+    assert limite_oggi is limite_storico
+
+
+def test_crea_api_football_usa_il_limite_dato(sessione):
+    limite = LimiteRichieste(sessione)
+    fonte = comune.crea_api_football("k", Priorita.STORICO, limite)
+    assert isinstance(fonte, ApiFootball)
+    assert fonte.limite is limite and fonte.priorita is Priorita.STORICO
+    fonte.client.close()
 
 
 def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
@@ -224,7 +239,7 @@ def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
 
     fonti = []
 
-    def crea(s, chiave, priorita):
+    def crea(chiave, priorita, limite):
         fonti.append(CalendarioRotto())
         return fonti[-1]
 
@@ -241,4 +256,4 @@ def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
 
 def test_main_notte_con_limite_raggiunto_restituisce_0(db_file, monkeypatch):
     monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
-    assert notte.main([], crea_fonte=lambda s, c, p: FonteFinta(partite_ft=3, limite_dopo=1)) == 0
+    assert notte.main([], crea_fonte=lambda c, p, l: FonteFinta(partite_ft=3, limite_dopo=1)) == 0

@@ -181,6 +181,44 @@ def test_retry_su_429_e_errori_di_rete(api, attese):
     assert attese == [1, 2]
 
 
+LIMITE_AL_MINUTO = {
+    "errors": {"rateLimit": "Too many requests. Your rate limit is 10 requests per minute."},
+    "response": [],
+}
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        LIMITE_AL_MINUTO,
+        {"errors": ["Too many requests per minute"], "response": []},
+    ],
+    ids=["chiave_rateLimit", "testo_requests_per_minute"],
+)
+@respx.mock
+def test_limite_al_minuto_nel_corpo_200_ritenta_come_429(api, attese, corpo):
+    rotta = respx.get(f"{URL_API}/fixtures").mock(
+        side_effect=[
+            httpx.Response(200, json=corpo),
+            httpx.Response(200, json=carica("fixtures_lista.json")),
+        ]
+    )
+    assert len(api.partite(135, 2026)) == 2
+    assert rotta.call_count == 2
+    assert attese == [1]
+
+
+@respx.mock
+def test_limite_al_minuto_nel_corpo_retry_esauriti(api, attese):
+    rotta = respx.get(f"{URL_API}/fixtures").mock(
+        return_value=httpx.Response(200, json=LIMITE_AL_MINUTO)
+    )
+    with pytest.raises(ErroreFonte, match="rate limit"):
+        api.partite(135, 2026)
+    assert rotta.call_count == 5
+    assert attese == [1, 2, 4, 8]
+
+
 @respx.mock
 def test_retry_esauriti_solleva_errore_fonte(api, attese):
     rotta = respx.get(f"{URL_API}/fixtures").mock(return_value=httpx.Response(503))

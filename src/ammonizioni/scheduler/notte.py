@@ -8,7 +8,7 @@ from ammonizioni import config
 from ammonizioni.caricamento import notturno, storico
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.fonti.limite import Priorita
-from ammonizioni.scheduler.comune import configura_log, crea_api_football
+from ammonizioni.scheduler.comune import configura_log, crea_api_football, crea_limite
 
 log = logging.getLogger(__name__)
 
@@ -20,12 +20,13 @@ def main(argv=None, crea_fonte=crea_api_football) -> int:
         if not chiave:
             log.error("Chiave API-Football mancante (API_FOOTBALL_KEY o impostazione 'chiave_api')")
             return 2
-        riepilogo = notturno.esegui(s, crea_fonte(s, chiave, Priorita.OGGI))
+        limite = crea_limite(s)  # uno solo: le due fonti condividono il ritmo al minuto
+        riepilogo = notturno.esegui(s, crea_fonte(chiave, Priorita.OGGI, limite))
         log.info(
             "Notte: %s richieste, %s partite aggiornate, completo=%s",
             riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,
         )
-        riepilogo = storico.avanza(s, crea_fonte(s, chiave, Priorita.STORICO))
+        riepilogo = storico.avanza(s, crea_fonte(chiave, Priorita.STORICO, limite))
         log.info(
             "Storico: %s richieste, %s partite aggiornate, completo=%s",
             riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,

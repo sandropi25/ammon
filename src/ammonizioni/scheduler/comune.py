@@ -14,6 +14,12 @@ def configura_log() -> None:
     logging.basicConfig(level=logging.INFO)
 
 
-def crea_api_football(s: Session, chiave: str, priorita: Priorita) -> Fonte:
-    """Client API-Football; il contatore giornaliero e' nel database (condiviso fra i job)."""
-    return ApiFootball(chiave, LimiteRichieste(s), priorita=priorita)
+def crea_limite(s: Session) -> LimiteRichieste:
+    """Limite richieste del job: uno solo per tutte le fonti del processo, cosi' il ritmo
+    al minuto e' condiviso. Il contatore giornaliero e' nel database (condiviso fra i job)."""
+    return LimiteRichieste(s)
+
+
+def crea_api_football(chiave: str, priorita: Priorita, limite: LimiteRichieste) -> Fonte:
+    """Client API-Football con il limite (condiviso) dato."""
+    return ApiFootball(chiave, limite, priorita=priorita)
