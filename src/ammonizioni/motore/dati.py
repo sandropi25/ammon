@@ -85,55 +85,74 @@ def _media(valori: list[float]) -> float | None:
 
 
 def _medie_campionato(s: Session, stagione: int, prima_di: datetime) -> MedieCampionato:
-    partite = s.execute(
-        select(Partita.id).where(
-            Partita.competizione_id == SERIE_A,
-            Partita.statistiche_scaricate.is_(True),
-            Partita.data_utc < prima_di,
-            Partita.stagione.in_((stagione, stagione - 1, stagione - 2)),
+    # partite Serie A con statistiche, nelle 3 stagioni, prima di `prima_di`
+    filtro_partite = (
+        Partita.competizione_id == SERIE_A,
+        Partita.statistiche_scaricate.is_(True),
+        Partita.data_utc < prima_di,
+        Partita.stagione.in_((stagione, stagione - 1, stagione - 2)),
+    )
+    # totali per partita (solo partite con presenze), aggregati in SQL
+    per_partita = (
+        select(
+            func.sum(Presenza.gialli).label("gialli"),
+            func.sum(Presenza.falli_commessi).label("falli"),
         )
-    ).scalars().all()
-    totali = _totali_partite(s, list(partite))
+        .join(Partita, Partita.id == Presenza.partita_id)
+        .where(*filtro_partite)
+        .group_by(Presenza.partita_id)
+        .subquery()
+    )
+    n, tot_gialli, tot_falli = s.execute(
+        select(func.count(), func.sum(per_partita.c.gialli), func.sum(per_partita.c.falli))
+    ).one()
     gialli_partita = _positivo(
-        _media([g for g, _ in totali.values()]), MEDIE_PREDEFINITE.gialli_partita
+        tot_gialli / n if n else None, MEDIE_PREDEFINITE.gialli_partita
     )
-    falli_partita = _positivo(
-        _media([f for _, f in totali.values()]), MEDIE_PREDEFINITE.falli_partita
-    )
+    falli_partita = _positivo(tot_falli / n if n else None, MEDIE_PREDEFINITE.falli_partita)
 
-    righe = (
-        s.execute(
-            select(Presenza, Giocatore.ruolo)
-            .join(Giocatore, Giocatore.id == Presenza.giocatore_id)
-            .where(Presenza.partita_id.in_(list(partite)), Presenza.minuti > 0)
-        ).all()
-        if partite
-        else []
-    )
-    per_ruolo: dict[str, list[Presenza]] = {r: [] for r in RUOLI}
-    for p, ruolo_g in righe:
-        per_ruolo[_ruolo(p.ruolo or ruolo_g)].append(p)
+    ruolo_eff = func.coalesce(Presenza.ruolo, Giocatore.ruolo)
+    righe = s.execute(
+        select(
+            ruolo_eff,
+            func.sum(Presenza.minuti),
+            func.sum(Presenza.gialli),
+            func.sum(Presenza.falli_commessi),
+            func.sum(Presenza.falli_subiti),
+            func.sum(Presenza.dribbling_tentati),
+            func.sum(Presenza.gol + Presenza.assist),
+            func.sum(Presenza.voto),
+            func.count(Presenza.voto),
+        )
+        .join(Partita, Partita.id == Presenza.partita_id)
+        .join(Giocatore, Giocatore.id == Presenza.giocatore_id)
+        .where(*filtro_partite, Presenza.minuti > 0)
+        .group_by(ruolo_eff)
+    ).all()
+    # ruoli sconosciuti o None confluiscono in "M"
+    somme: dict[str, list[float]] = {r: [0.0] * 8 for r in RUOLI}
+    for ruolo, *valori in righe:
+        acc = somme[_ruolo(ruolo)]
+        for i, v in enumerate(valori):
+            acc[i] += v or 0
 
     medie: dict[str, MedieRuolo] = {}
     for ruolo in RUOLI:
-        rr = per_ruolo[ruolo]
+        minuti, gialli, falli, subiti, drib, ga, voto_somma, voto_n = somme[ruolo]
         pre = MEDIE_PREDEFINITE.per_ruolo[ruolo]
-        minuti = sum(p.minuti for p in rr)
 
-        def per90(valore: int) -> float | None:
+        def per90(valore: float) -> float | None:
             return valore / minuti * 90 if minuti > 0 else None
 
-        voti = [p.voto for p in rr if p.voto is not None]
         medie[ruolo] = MedieRuolo(
-            gialli90=_positivo(per90(sum(p.gialli for p in rr)), pre.gialli90),
-            falli90=_positivo(per90(sum(p.falli_commessi for p in rr)), pre.falli90),
-            falli_subiti90=_positivo(per90(sum(p.falli_subiti for p in rr)), pre.falli_subiti90),
-            dribbling90=_positivo(per90(sum(p.dribbling_tentati for p in rr)), pre.dribbling90),
-            ga90=_positivo(per90(sum(p.gol + p.assist for p in rr)), pre.ga90),
-            voto=_positivo(_media(voti), pre.voto),
+            gialli90=_positivo(per90(gialli), pre.gialli90),
+            falli90=_positivo(per90(falli), pre.falli90),
+            falli_subiti90=_positivo(per90(subiti), pre.falli_subiti90),
+            dribbling90=_positivo(per90(drib), pre.dribbling90),
+            ga90=_positivo(per90(ga), pre.ga90),
+            voto=_positivo(voto_somma / voto_n if voto_n else None, pre.voto),
         )
     return MedieCampionato(gialli_partita, falli_partita, medie)
-
 
 def _stat_arbitro(s: Session, partita: Partita, prima_di: datetime) -> StatArbitro | None:
     if partita.arbitro_id is None:
@@ -211,8 +230,8 @@ def _contesto(
         rivalita=_coppia(partita.casa_id, partita.trasferta_id) in derby,
         campo_caldo=campo_caldo,
         posta=posta,
-        precedenti_n=len(precedenti),
-        precedenti_gialli_medi=_media(gialli_prec) if precedenti else None,
+        precedenti_n=len(totali),
+        precedenti_gialli_medi=_media(gialli_prec),
     )
 
 
