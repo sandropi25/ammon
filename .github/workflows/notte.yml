@@ -28,3 +28,6 @@ jobs:
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # facoltative (variabili del repository): vuote -> 100 e 30, piano gratuito
+          API_RICHIESTE_GIORNO: ${{ vars.API_RICHIESTE_GIORNO }}
+          API_RISERVA_OGGI: ${{ vars.API_RISERVA_OGGI }}

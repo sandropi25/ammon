@@ -58,6 +58,15 @@ python scripts/controlla_stagioni.py
 
 Usa 3 richieste del piano giornaliero. Se la stagione 2026 non risulta accessibile serve il piano Pro (19 $ al mese).
 
+### Limite di richieste (piano gratuito o Pro)
+
+I job usano al massimo 100 richieste al giorno, di cui 30 riservate all'uso di oggi (calendario, statistiche
+recenti, formazioni): lo storico ne usa al massimo 70. I due valori si cambiano con le variabili d'ambiente
+`API_RICHIESTE_GIORNO` (default 100) e `API_RISERVA_OGGI` (default 30). Con il piano Pro (7500 richieste al
+giorno) imposta per esempio `API_RICHIESTE_GIORNO=7500` e `API_RISERVA_OGGI=500`: lo storico si carica in un
+paio di giorni. Su GitHub crea le due voci in **Settings > Secrets and variables > Actions > Variables** (non
+sono segreti); se mancano valgono i default. Il ritmo resta di 10 richieste al minuto.
+
 ### Da verificare con la chiave: griglia delle partite passate
 
 Le statistiche dei giocatori arrivano da `/fixtures/players`, che non contiene la posizione in campo (la "griglia",
