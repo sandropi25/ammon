@@ -1,4 +1,4 @@
-﻿"""Funzioni di accesso ai dati."""
+"""Funzioni di accesso ai dati."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

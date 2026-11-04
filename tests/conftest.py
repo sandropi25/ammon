@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from sqlalchemy.orm import Session
 
 from ammonizioni.db import sessione as modulo_sessione

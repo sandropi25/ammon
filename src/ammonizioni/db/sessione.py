@@ -1,4 +1,4 @@
-﻿"""Engine, creazione tabelle e sessioni."""
+"""Engine, creazione tabelle e sessioni."""
 from __future__ import annotations
 
 from contextlib import contextmanager

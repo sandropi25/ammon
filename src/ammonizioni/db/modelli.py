@@ -1,10 +1,30 @@
-﻿"""Modelli SQLAlchemy. Le chiavi primarie sono gli id API-Football dove esistono."""
+"""Modelli SQLAlchemy. Le chiavi primarie sono gli id API-Football dove esistono."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
+
+
+class DataOraUTC(TypeDecorator):
+    """Datetime sempre aware UTC: rifiuta i naive in scrittura, restituisce aware UTC in lettura."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("datetime senza fuso orario: usa un datetime aware UTC")
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
 
 class Base(DeclarativeBase):
@@ -35,7 +55,7 @@ class Arbitro(Base):
 class Partita(Base):
     __tablename__ = "partite"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
-    data_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    data_utc: Mapped[datetime] = mapped_column(DataOraUTC)
     competizione_id: Mapped[int] = mapped_column(Integer)
     stagione: Mapped[int] = mapped_column(Integer)
     giornata: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -131,5 +151,5 @@ class Impostazione(Base):
 class UltimoAggiornamento(Base):
     __tablename__ = "ultimi_aggiornamenti"
     job: Mapped[str] = mapped_column(String, primary_key=True)
-    quando_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    quando_utc: Mapped[datetime] = mapped_column(DataOraUTC)
     completo: Mapped[bool] = mapped_column(Boolean, default=False)

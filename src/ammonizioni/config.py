@@ -1,4 +1,4 @@
-﻿"""Configurazione di base: competizioni, stagioni, chiave API e database."""
+"""Configurazione di base: competizioni, stagioni, chiave API e database."""
 import os
 
 COMPETIZIONI: dict[str, int] = {
@@ -30,4 +30,3 @@ def chiave_api(sessione=None) -> str | None:
 
 def url_database() -> str:
     return os.environ.get("DATABASE_URL") or "sqlite:///ammonizioni.db"
-
