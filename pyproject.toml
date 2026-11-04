@@ -11,6 +11,7 @@ dependencies = [
     "httpx",
     "sqlalchemy>=2",
     "streamlit",
+    "tzdata",
 ]
 
 [project.optional-dependencies]
