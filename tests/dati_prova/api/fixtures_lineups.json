@@ -1,0 +1,28 @@
+{
+  "get": "fixtures/lineups",
+  "parameters": {"fixture": "900001"},
+  "errors": [],
+  "results": 2,
+  "paging": {"current": 1, "total": 1},
+  "response": [
+    {
+      "team": {"id": 505, "name": "Inter"},
+      "formation": "3-5-2",
+      "startXI": [
+        {"player": {"id": 1002, "name": "Y. Sommer", "number": 1, "pos": "G", "grid": "1:1"}},
+        {"player": {"id": 1001, "name": "N. Barella", "number": 23, "pos": "M", "grid": "3:2"}}
+      ],
+      "substitutes": [
+        {"player": {"id": 1003, "name": "D. Frattesi", "number": 16, "pos": "M", "grid": null}}
+      ]
+    },
+    {
+      "team": {"id": 489, "name": "AC Milan"},
+      "formation": "4-2-3-1",
+      "startXI": [
+        {"player": {"id": 2002, "name": "M. Maignan", "number": 16, "pos": "G", "grid": null}}
+      ],
+      "substitutes": []
+    }
+  ]
+}

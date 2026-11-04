@@ -1,0 +1,41 @@
+{
+  "get": "fixtures",
+  "parameters": {"league": "135", "season": "2026"},
+  "errors": [],
+  "results": 2,
+  "paging": {"current": 1, "total": 1},
+  "response": [
+    {
+      "fixture": {
+        "id": 900001,
+        "referee": "Daniele Doveri, Italy",
+        "timezone": "UTC",
+        "date": "2026-08-23T18:45:00+00:00",
+        "timestamp": 1787510700,
+        "status": {"long": "Match Finished", "short": "FT", "elapsed": 90}
+      },
+      "league": {"id": 135, "name": "Serie A", "season": 2026, "round": "Regular Season - 1"},
+      "teams": {
+        "home": {"id": 505, "name": "Inter", "winner": true},
+        "away": {"id": 489, "name": "AC Milan", "winner": false}
+      },
+      "goals": {"home": 2, "away": 1}
+    },
+    {
+      "fixture": {
+        "id": 900002,
+        "referee": null,
+        "timezone": "UTC",
+        "date": "2026-08-24T20:45:00+02:00",
+        "timestamp": 1787597100,
+        "status": {"long": "Not Started", "short": "NS", "elapsed": null}
+      },
+      "league": {"id": 135, "name": "Serie A", "season": 2026, "round": "Regular Season - 2"},
+      "teams": {
+        "home": {"id": 496, "name": "Juventus", "winner": null},
+        "away": {"id": 492, "name": "Napoli", "winner": null}
+      },
+      "goals": {"home": null, "away": null}
+    }
+  ]
+}

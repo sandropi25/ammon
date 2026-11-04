@@ -1,0 +1,58 @@
+{
+  "get": "fixtures/players",
+  "parameters": {"fixture": "900001"},
+  "errors": [],
+  "results": 2,
+  "paging": {"current": 1, "total": 1},
+  "response": [
+    {
+      "team": {"id": 505, "name": "Inter"},
+      "players": [
+        {
+          "player": {"id": 1001, "name": "N. Barella"},
+          "statistics": [
+            {
+              "games": {"minutes": 90, "position": "M", "rating": "7.1", "substitute": false},
+              "shots": {"total": 2, "on": 1},
+              "goals": {"total": 1, "conceded": 0, "assists": null},
+              "fouls": {"drawn": 2, "committed": 3},
+              "cards": {"yellow": 1, "red": 0},
+              "dribbles": {"attempts": 4, "success": 2, "past": null}
+            }
+          ]
+        },
+        {
+          "player": {"id": 1002, "name": "Y. Sommer"},
+          "statistics": [
+            {
+              "games": {"minutes": 90, "position": "G", "rating": null, "substitute": false},
+              "shots": {"total": null, "on": null},
+              "goals": {"total": null, "conceded": 1, "assists": null},
+              "fouls": {"drawn": null, "committed": null},
+              "cards": {"yellow": 0, "red": 0},
+              "dribbles": {"attempts": null, "success": null, "past": null}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": {"id": 489, "name": "AC Milan"},
+      "players": [
+        {
+          "player": {"id": 2001, "name": "R. Leao"},
+          "statistics": [
+            {
+              "games": {"minutes": 25, "position": "F", "rating": "6.4", "substitute": true},
+              "shots": {"total": 1, "on": 0},
+              "goals": {"total": 0, "conceded": 0, "assists": 1},
+              "fouls": {"drawn": 1, "committed": 0},
+              "cards": {"yellow": null, "red": 1},
+              "dribbles": {"attempts": 3, "success": 1, "past": null}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
