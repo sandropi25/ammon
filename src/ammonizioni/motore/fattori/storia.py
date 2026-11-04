@@ -49,6 +49,8 @@ def fattore_storia(
     giocate = [r for r in storico if r.minuti > 0]
     squadre_diretto: dict[int, set[int]] = {}
     for r in storico_avv_diretto:
+        if r.minuti <= 0:
+            continue
         squadre_diretto.setdefault(r.partita_id, set()).add(r.squadra_id)
 
     a = [r for r in giocate if r.avversario_id == avversario_squadra_id]
@@ -71,7 +73,7 @@ def fattore_storia(
 
     motivazione = None
     # il piu' forte per primo; a parita' resta l'ordine b, a, c (sort stabile)
-    for _, chiave, righe in sorted(qualificati, key=lambda t: -t[0]):
+    for f, chiave, righe in sorted(qualificati, key=lambda t: -t[0]):
         if chiave == "b":
             k = _derby_consecutivi(righe)
             if k >= MIN_DERBY_CONSECUTIVI:
@@ -79,10 +81,12 @@ def fattore_storia(
                 break
         elif chiave == "a":
             gialli = sum(r.gialli for r in righe)
-            motivazione = (
-                f"{gialli} gialli in {_partite(righe)} partite contro {nome_avversario}"
-            )
-            break
+            if gialli >= 1 and f > 1:
+                parola = "giallo" if gialli == 1 else "gialli"
+                motivazione = (
+                    f"{gialli} {parola} in {_partite(righe)} partite contro {nome_avversario}"
+                )
+                break
         elif any(r.gialli >= 1 for r in righe):
             motivazione = f"già ammonito contro {nome_avv_diretto}"
             break

@@ -96,7 +96,26 @@ def test_derby_non_consecutivi_ripiegano_sul_sottoinsieme_successivo():
     f = fattore_storia(
         storico, 7, True, [], 0.2, Pesi(), nome_avversario="Inter"
     )
-    assert f.motivazione == "1 gialli in 2 partite contro Inter"
+    assert f.motivazione == "1 giallo in 2 partite contro Inter"
+
+
+def test_avversario_diretto_che_non_ha_giocato_non_conta_come_duello():
+    s1 = riga(squadra_id=1, avversario_id=20, gialli=1)
+    s2 = riga(squadra_id=1, avversario_id=21, gialli=1)
+    diretto = [
+        riga(partita_id=s1.partita_id, squadra_id=2, minuti=0),
+        riga(partita_id=s2.partita_id, squadra_id=2, minuti=0),
+    ]
+    f = fattore_storia([s1, s2], 99, False, diretto, 0.2, Pesi(), nome_avv_diretto="Rossi")
+    assert f.valore == 1.0
+    assert f.motivazione is None
+    assert f.n_dati == 0
+
+
+def test_zero_gialli_contro_avversario_nessuna_motivazione():
+    storico = [riga(avversario_id=7, gialli=0) for _ in range(3)]
+    f = fattore_storia(storico, 7, False, [], 0.2, Pesi(), nome_avversario="Inter")
+    assert f.motivazione is None
 
 
 def test_n_dati_conta_partite_distinte_nell_unione():
