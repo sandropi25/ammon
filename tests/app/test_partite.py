@@ -77,3 +77,33 @@ def test_password_richiesta_se_configurata(sessione_db):
     at.text_input[0].set_value("x").run()
     assert not at.exception
     assert "Casa FC" in visibile(at)
+
+
+def _avvia_con_secrets_rotti(tmp_path, monkeypatch):
+    cartella = tmp_path / ".streamlit"
+    cartella.mkdir()
+    (cartella / "secrets.toml").write_text('password = "x\n', encoding="utf-8")  # TOML non valido
+    monkeypatch.chdir(tmp_path)
+    return AppTest.from_file(PAGINA_PARTITE, default_timeout=30).run()
+
+
+def test_secrets_illeggibili_bloccano_l_app(sessione_db, tmp_path, monkeypatch):
+    _prepara(sessione_db)
+    at = _avvia_con_secrets_rotti(tmp_path, monkeypatch)
+    assert not at.exception
+    assert any("configurazione della password" in e.value for e in at.error)
+    assert "Casa FC" not in visibile(at)
+
+
+def test_errore_imprevisto_nei_segreti_blocca_l_app(sessione_db, monkeypatch):
+    from streamlit.runtime.secrets import Secrets
+
+    def guasto(self, *args, **kwargs):
+        raise PermissionError("negato")
+
+    monkeypatch.setattr(Secrets, "get", guasto)
+    _prepara(sessione_db)
+    at = AppTest.from_file(PAGINA_PARTITE, default_timeout=30).run()
+    assert not at.exception
+    assert any("configurazione della password" in e.value for e in at.error)
+    assert "Casa FC" not in visibile(at)

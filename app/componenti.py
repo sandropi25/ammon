@@ -366,8 +366,8 @@ def salva_segnalazione(
     s.flush()
 
 
-def salva_duello(s: Session, partita_id: int, giocatore_id: int, avversario_id: int) -> None:
-    """Avversario diretto scelto a mano (sostituisce la scelta precedente per quel giocatore)."""
+def rimuovi_duello(s: Session, partita_id: int, giocatore_id: int) -> None:
+    """Annulla la scelta manuale dell'avversario diretto (torna quello automatico)."""
     precedenti = s.execute(
         select(DuelloManuale).where(
             DuelloManuale.partita_id == partita_id, DuelloManuale.giocatore_id == giocatore_id
@@ -376,5 +376,10 @@ def salva_duello(s: Session, partita_id: int, giocatore_id: int, avversario_id: 
     for p in precedenti:
         s.delete(p)
     s.flush()
+
+
+def salva_duello(s: Session, partita_id: int, giocatore_id: int, avversario_id: int) -> None:
+    """Avversario diretto scelto a mano (sostituisce la scelta precedente per quel giocatore)."""
+    rimuovi_duello(s, partita_id, giocatore_id)
     s.add(DuelloManuale(partita_id=partita_id, giocatore_id=giocatore_id, avversario_id=avversario_id))
     s.flush()

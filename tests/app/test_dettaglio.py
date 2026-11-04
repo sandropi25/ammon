@@ -1,3 +1,4 @@
+import pytest
 from ayuda_app import PAGINA_DETTAGLIO, avvia, sessione_db, url_db, visibile
 from db_prova import CASA, PARTITA_FUTURA, TRASF, popola
 from sqlalchemy import select
@@ -66,11 +67,12 @@ def test_quota_con_virgola_accettata_e_valore_mostrato(sessione_db):
         assert s.execute(select(Segnalazione)).first() is None
 
 
-def test_quota_non_valida_mostra_errore_senza_eccezioni(sessione_db):
+@pytest.mark.parametrize("quota", ["abc", "1", "0", ""])
+def test_quota_non_valida_mostra_errore_senza_eccezioni(sessione_db, quota):
     with sessione_db() as s:
         popola(s)
     at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
-    at.text_input(key="quota_12").set_value("abc")
+    at.text_input(key="quota_12").set_value(quota)
     at.button(key="salva_quota_12").click().run()
     assert not at.exception
     assert any("Quota non valida" in e.value for e in at.error)
@@ -110,6 +112,20 @@ def test_duello_manuale_scritto_nel_db(sessione_db):
         riga = s.execute(select(DuelloManuale)).scalar_one()
         assert (riga.partita_id, riga.giocatore_id, riga.avversario_id) == (PARTITA_FUTURA, 12, 23)
     assert at.selectbox(key="duello_12").value == 23
+
+
+def test_duello_manuale_annullabile_con_nessuno(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+        s.add(DuelloManuale(partita_id=PARTITA_FUTURA, giocatore_id=12, avversario_id=23))
+    at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
+    assert at.selectbox(key="duello_12").value == 23
+    at.selectbox(key="duello_12").select_index(0).run()  # la prima opzione è "(nessuno)"
+    assert not at.exception
+    with sessione_db() as s:
+        assert s.execute(select(DuelloManuale)).first() is None
+    # torna l'avversario automatico (non resta "(nessuno)")
+    assert at.selectbox(key="duello_12").value is not None
 
 
 def test_riepilogo_cambi_con_ufficiali(sessione_db):
