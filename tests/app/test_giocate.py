@@ -1,0 +1,217 @@
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
+from zoneinfo import ZoneInfo
+
+from ayuda_app import PAGINA_GIOCATE, avvia, sessione_db, url_db, visibile
+from db_prova import CASA, TRASF, popola
+from sqlalchemy import select
+
+import componenti_giocate  # noqa: E402  (app/ è in sys.path grazie ad ayuda_app)
+
+from ammonizioni.db.modelli import Giocata, Partita
+
+PARTITA_VICINA = 200
+PARTITA_LONTANA = 201
+
+
+def _prepara(s):
+    """Dati di prova più due partite relative a oggi: una tra 1 giorno, una tra 30."""
+    popola(s)
+    adesso = datetime.now(timezone.utc)
+    for pid, giorni in ((PARTITA_VICINA, 1), (PARTITA_LONTANA, 30)):
+        s.add(
+            Partita(
+                id=pid, data_utc=adesso + timedelta(days=giorni), competizione_id=135,
+                stagione=2026, giornata=20, casa_id=CASA, trasferta_id=TRASF, stato="NS",
+            )
+        )
+    s.flush()
+
+
+def _tabella(at, prima_colonna):
+    for d in at.dataframe:
+        if d.value.columns[0] == prima_colonna:
+            return d.value
+    raise AssertionError(f"tabella con prima colonna {prima_colonna!r} non trovata")
+
+
+def _compila(at, *, quota="2,10", puntata="10", fonte="io", tipster=""):
+    at.selectbox(key="giocata_fonte").select(fonte)
+    if tipster:
+        at.text_input(key="giocata_tipster").set_value(tipster)
+    at.text_input(key="giocata_quota").set_value(quota)
+    at.text_input(key="giocata_puntata").set_value(puntata)
+    return at
+
+
+def test_registra_giocata_e_compare_nel_registro(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE)
+    assert not at.exception
+    at.selectbox(key="giocata_partita").select(PARTITA_VICINA).run()
+    at.selectbox(key="giocata_giocatore").select(12).run()
+    _compila(at, quota="2,10", puntata="10,50").run()
+    at.button(key="salva_giocata").click().run()
+    assert not at.exception
+    assert not at.error
+    with sessione_db() as s:
+        g = s.execute(select(Giocata)).scalar_one()
+        assert (g.partita_id, g.giocatore_id, g.fonte) == (PARTITA_VICINA, 12, "io")
+        assert (g.quota, g.puntata, g.esito) == (2.1, 10.5, "in_attesa")
+        assert g.data == datetime.now(ZoneInfo("Europe/Rome")).date()
+    df = _tabella(at, "Data")
+    assert list(df.columns) == ["Data", "Partita", "Giocatore", "Fonte", "Quota", "Puntata", "Esito"]
+    riga = df.iloc[0]
+    assert riga["Partita"] == "Casa FC – Trasferta FC"
+    assert riga["Giocatore"] == "Terzino Casa"
+    assert riga["Fonte"] == "io"
+    assert riga["Quota"] == "2,10"
+    assert riga["Puntata"] == "10,50 €"
+    assert riga["Esito"] == "in attesa"
+
+
+def test_partite_proposte_solo_nella_finestra_di_sette_giorni(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+        ora = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+        # partite del seed: giornata 5 il 6/10, giornata 6 il 13/10 (nel passato di 7 giorni), futura l'8/11
+        s.add(Partita(id=300, data_utc=ora + timedelta(days=6), competizione_id=135, stagione=2026,
+                      casa_id=CASA, trasferta_id=TRASF, stato="NS"))
+        s.add(Partita(id=301, data_utc=ora + timedelta(days=8), competizione_id=135, stagione=2026,
+                      casa_id=CASA, trasferta_id=TRASF, stato="NS"))
+        s.add(Partita(id=302, data_utc=ora + timedelta(days=3), competizione_id=137, stagione=2026,
+                      casa_id=CASA, trasferta_id=TRASF, stato="NS"))
+        s.flush()
+        proposte = componenti_giocate.partite_selezionabili(s, ora)
+        ids = [i for i, _ in proposte]
+        assert 300 in ids and 6 in ids  # 6 = 13/10, una settimana prima
+        assert 301 not in ids and 302 not in ids  # fuori finestra / non Serie A
+        assert 1 not in ids  # troppo vecchia
+        assert ids == sorted(ids, key=lambda i: s.get(Partita, i).data_utc)
+        assert componenti_giocate.partite_selezionabili(s, ora, includi=1)[0][0] == 1
+        etichetta = dict(proposte)[300]
+        assert "Casa FC – Trasferta FC" in etichetta
+
+
+def test_giocatori_proposti_sono_quelli_delle_due_squadre(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE)
+    at.selectbox(key="giocata_partita").select(PARTITA_VICINA).run()
+    sel = at.selectbox(key="giocata_giocatore")
+    assert len(sel.options) == 8
+    for gid in (11, 12, 21, 24):
+        sel.select(gid)  # non solleva: l'id è tra le opzioni
+
+
+@pytest.mark.parametrize("puntata", ["0", "-5", "abc", ""])
+def test_puntata_zero_rifiutata(sessione_db, puntata):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE)
+    at.selectbox(key="giocata_partita").select(PARTITA_VICINA).run()
+    _compila(at, puntata=puntata).run()
+    at.button(key="salva_giocata").click().run()
+    assert not at.exception
+    assert any("untata" in e.value for e in at.error)
+    with sessione_db() as s:
+        assert s.execute(select(Giocata)).first() is None
+
+
+def test_quota_non_valida_rifiutata(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE)
+    at.selectbox(key="giocata_partita").select(PARTITA_VICINA).run()
+    _compila(at, quota="1").run()
+    at.button(key="salva_giocata").click().run()
+    assert not at.exception
+    assert any("Quota non valida" in e.value for e in at.error)
+    with sessione_db() as s:
+        assert s.execute(select(Giocata)).first() is None
+
+
+def test_fonte_tipster_salva_il_nome(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE)
+    at.selectbox(key="giocata_partita").select(PARTITA_VICINA).run()
+    _compila(at, fonte="tipster", tipster="Luca").run()
+    at.button(key="salva_giocata").click().run()
+    assert not at.exception
+    assert not at.error
+    with sessione_db() as s:
+        assert s.execute(select(Giocata.fonte)).scalar_one() == "Luca"
+
+
+def test_fonte_tipster_senza_nome_rifiutata(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE)
+    at.selectbox(key="giocata_partita").select(PARTITA_VICINA).run()
+    _compila(at, fonte="tipster").run()
+    at.button(key="salva_giocata").click().run()
+    assert any("tipster" in e.value for e in at.error)
+    with sessione_db() as s:
+        assert s.execute(select(Giocata)).first() is None
+
+
+def test_campi_precompilati_dai_parametri_url(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE, partita=PARTITA_VICINA, giocatore=23)
+    assert not at.exception
+    assert at.selectbox(key="giocata_partita").value == PARTITA_VICINA
+    assert at.selectbox(key="giocata_giocatore").value == 23
+
+
+def test_parametri_url_non_validi_ignorati(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_GIOCATE, partita="abc", giocatore="xyz")
+    assert not at.exception
+
+
+def test_nessuna_partita_mostra_messaggio(sessione_db):
+    at = avvia(PAGINA_GIOCATE)
+    assert not at.exception
+    assert "Nessuna partita" in visibile(at)
+
+
+def test_registro_piu_recente_per_primo(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        s.add(Giocata(data=date(2026, 10, 1), partita_id=1, giocatore_id=12, fonte="io",
+                      quota=2.0, puntata=5, esito="vinta"))
+        s.add(Giocata(data=date(2026, 10, 20), partita_id=2, giocatore_id=22, fonte="modello",
+                      quota=3.0, puntata=5, esito="persa"))
+    at = avvia(PAGINA_GIOCATE)
+    df = _tabella(at, "Data")
+    assert list(df["Data"]) == ["20/10/2026", "01/10/2026"]
+    assert list(df["Esito"]) == ["persa", "vinta"]
+
+
+def test_statistiche_per_fonte_mostrate(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        s.add(Giocata(data=date(2026, 10, 1), partita_id=1, giocatore_id=12, fonte="io",
+                      quota=2.5, puntata=10, esito="vinta"))
+        s.add(Giocata(data=date(2026, 10, 2), partita_id=2, giocatore_id=22, fonte="io",
+                      quota=2.5, puntata=10, esito="persa"))
+        s.add(Giocata(data=date(2026, 10, 3), partita_id=3, giocatore_id=12, fonte="io",
+                      quota=2.5, puntata=10, esito="in_attesa"))
+    at = avvia(PAGINA_GIOCATE)
+    assert not at.exception
+    df = _tabella(at, "Fonte")
+    assert list(df.columns) == [
+        "Fonte", "Giocate", "Successo", "Prob. implicita media", "Profitto", "Rendimento",
+    ]
+    riga = df.iloc[0]
+    assert riga["Fonte"] == "io"
+    assert riga["Giocate"] == 2
+    assert riga["Successo"] == "50%"
+    assert riga["Prob. implicita media"] == "40%"
+    assert riga["Profitto"] == "5,00 €"
+    assert riga["Rendimento"] == "25%"

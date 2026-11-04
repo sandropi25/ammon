@@ -15,6 +15,8 @@ from ammonizioni.db.sessione import apri  # noqa: E402
 
 PAGINA_PARTITE = str(RADICE / "app" / "Partite.py")
 PAGINA_DETTAGLIO = str(RADICE / "app" / "pages" / "1_Dettaglio_partita.py")
+PAGINA_GIOCATE = str(RADICE / "app" / "pages" / "2_Giocate.py")
+PAGINA_IMPOSTAZIONI = str(RADICE / "app" / "pages" / "3_Impostazioni.py")
 
 
 def visibile(at: AppTest) -> str:
