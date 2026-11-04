@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +18,8 @@ from ammonizioni.fonti.tipi import PartitaDati, PresenzaDati
 from ammonizioni.giocate.registro import aggiorna_esiti
 
 log = logging.getLogger(__name__)
+
+GIORNI_STATISTICHE_NOTTE = 7
 
 
 @dataclass
@@ -139,12 +142,21 @@ def aggiorna_calendario(s: Session, fonte: Fonte, stagione: int = STAGIONE_CORRE
     return len(partite)
 
 
-def scarica_statistiche_giocate(s: Session, fonte: Fonte) -> int:
-    """Statistiche delle partite finite (FT) non ancora scaricate, dalla più recente.
+def scarica_statistiche_giocate(s: Session, fonte: Fonte, adesso: datetime) -> int:
+    """Statistiche delle partite di Serie A della stagione corrente finite negli ultimi
+    7 giorni e non ancora scaricate, dalla più recente. Il resto (coppe, stagioni passate,
+    partite più vecchie) resta allo storico, con priorità STORICO: il job notturno non
+    deve consumare il budget del giorno (spec §3.3).
     Restituisce quante ne ha scaricate; su LimiteSuperato il lavoro già fatto resta salvato."""
     ids = s.scalars(
         select(Partita.id)
-        .where(Partita.stato.in_(STATI_FINITI), Partita.statistiche_scaricate.is_(False))
+        .where(
+            Partita.competizione_id == COMPETIZIONI["serie_a"],
+            Partita.stagione == STAGIONE_CORRENTE,
+            Partita.data_utc >= adesso - timedelta(days=GIORNI_STATISTICHE_NOTTE),
+            Partita.stato.in_(STATI_FINITI),
+            Partita.statistiche_scaricate.is_(False),
+        )
         .order_by(Partita.data_utc.desc())
     ).all()
     scaricate = 0
@@ -154,14 +166,15 @@ def scarica_statistiche_giocate(s: Session, fonte: Fonte) -> int:
     return scaricate
 
 
-def esegui(s: Session, fonte: Fonte) -> RiepilogoJob:
+def esegui(s: Session, fonte: Fonte, adesso: datetime | None = None) -> RiepilogoJob:
     """Calendario, statistiche, esiti delle giocate; poi segna l'aggiornamento "notte".
     Se il limite di richieste finisce a metà, salva il parziale e restituisce completo=False."""
+    adesso = adesso or datetime.now(timezone.utc)
     contata = FonteContata(fonte)
     completo = True
     try:
         aggiorna_calendario(s, contata)
-        scarica_statistiche_giocate(s, contata)
+        scarica_statistiche_giocate(s, contata, adesso)
     except LimiteSuperato:
         s.commit()
         completo = False
