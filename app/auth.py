@@ -5,6 +5,9 @@ import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 
 
+ERRORE_NESSUN_SEGRETO = "no-secrets-found"  # error_id di Streamlit: nessun file dei segreti
+
+
 class SegretiIllegibili(Exception):
     """Il file dei segreti esiste ma non si può leggere o interpretare."""
 
@@ -15,10 +18,11 @@ def _password_attesa() -> str | None:
     try:
         valore = st.secrets.get("password")
     except StreamlitSecretNotFoundError as errore:
-        # Streamlit usa la stessa eccezione anche per un file presente ma non interpretabile
-        if "parsing" in str(errore).lower():
-            raise SegretiIllegibili(str(errore)) from errore
-        return None
+        # Streamlit usa la stessa classe anche per file non interpretabili o percorsi non validi:
+        # passa solo il caso strutturato "nessun segreto trovato"; il resto blocca l'app.
+        if getattr(errore, "error_id", None) == ERRORE_NESSUN_SEGRETO:
+            return None
+        raise SegretiIllegibili(str(errore)) from errore
     except Exception as errore:
         raise SegretiIllegibili(str(errore)) from errore
     return str(valore) if valore else None

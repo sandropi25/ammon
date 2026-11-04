@@ -46,6 +46,10 @@ def test_dettaglio_mostra_classifica_ordinata(sessione_db):
     t = visibile(at)
     assert "Casa FC" in t and "Trasferta FC" in t
     assert "Arbitro: Rossi" in t
+    # caratteri non ASCII (niente mojibake)
+    assert "Casa FC – Trasferta FC" in [h.value for h in at.header]
+    assert "· Giornata 7 · formazioni ufficiali" in t
+    assert any(e.label.startswith("Terzino Casa (Casa FC) · ") for e in at.expander)
     assert "Rivalità" in t
 
 

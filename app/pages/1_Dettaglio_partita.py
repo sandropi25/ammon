@@ -59,9 +59,9 @@ if det is None:
     st.stop()
 
 casa, trasf = dati.nomi_squadre.get(dati.casa_id, ""), dati.nomi_squadre.get(dati.trasferta_id, "")
-st.header(f"{casa} â€“ {trasf}")
-giornata = f" Â· Giornata {partita.giornata}" if partita.giornata else ""
-st.caption(f"{componenti.data_italiana(partita.data_utc)}{giornata} Â· formazioni {partita.stato_formazioni}")
+st.header(f"{casa} – {trasf}")
+giornata = f" · Giornata {partita.giornata}" if partita.giornata else ""
+st.caption(f"{componenti.data_italiana(partita.data_utc)}{giornata} · formazioni {partita.stato_formazioni}")
 
 for riga in componenti.righe_contesto(dati):
     st.markdown(f"- {riga}")
@@ -88,7 +88,7 @@ nomi = {c.giocatore_id: c.nome for c in det.candidati}
 for c in det.candidati:
     info = extra[c.giocatore_id]
     squadra = dati.nomi_squadre.get(c.squadra_id, "")
-    with st.expander(f"{c.nome} ({squadra}) Â· {componenti.percentuale(c.probabilita)}"):
+    with st.expander(f"{c.nome} ({squadra}) · {componenti.percentuale(c.probabilita)}"):
         avv_nome = next((n for i, n in info["avversari"] if i == c.avversario_diretto_id), "n.d.")
         colonne = st.columns(2)
         colonne[0].markdown(f"**{c.nome}**")

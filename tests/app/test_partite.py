@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 from ayuda_app import PAGINA_PARTITE, avvia, sessione_db, url_db, visibile
 from db_prova import PARTITA_FUTURA, popola
+import pytest
+from streamlit.errors import StreamlitSecretNotFoundError
 from streamlit.testing.v1 import AppTest
 
 from ammonizioni.db.modelli import Partita, UltimoAggiornamento
@@ -95,11 +97,27 @@ def test_secrets_illeggibili_bloccano_l_app(sessione_db, tmp_path, monkeypatch):
     assert "Casa FC" not in visibile(at)
 
 
-def test_errore_imprevisto_nei_segreti_blocca_l_app(sessione_db, monkeypatch):
+def _errore_permesso(*_):
+    return PermissionError("negato")
+
+
+def _errore_percorso_non_valido(*_):
+    # stessa classe di "nessun segreto", ma errore_id diverso
+    return StreamlitSecretNotFoundError("Invalid secrets path: {p}", p="x", error_id="invalid-secrets-path")
+
+
+def _errore_senza_id(*_):
+    return StreamlitSecretNotFoundError("Messaggio riformulato da una nuova versione")
+
+
+@pytest.mark.parametrize(
+    "costruisci", [_errore_permesso, _errore_percorso_non_valido, _errore_senza_id]
+)
+def test_errore_imprevisto_nei_segreti_blocca_l_app(sessione_db, monkeypatch, costruisci):
     from streamlit.runtime.secrets import Secrets
 
     def guasto(self, *args, **kwargs):
-        raise PermissionError("negato")
+        raise costruisci()
 
     monkeypatch.setattr(Secrets, "get", guasto)
     _prepara(sessione_db)
