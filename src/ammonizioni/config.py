@@ -41,6 +41,21 @@ SOGLIE_DIFFIDA: dict[int, tuple[int, ...]] = {
     140: (4, 9, 14, 19),
 }
 
+SERIE_A = COMPETIZIONI["serie_a"]
+
+
+def campionato_di(competizione_id: int) -> int | None:
+    """Il campionato a cui appartiene una competizione: il campionato stesso, la sua coppa
+    nazionale (Coppa Italia -> Serie A, Copa del Rey -> Liga); None per le coppe europee,
+    che non appartengono a un campionato."""
+    if competizione_id in CAMPIONATI:
+        return competizione_id
+    for campionato, coppa in COPPE_NAZIONALI.items():
+        if coppa == competizione_id:
+            return campionato
+    return None
+
+
 FONTI_DATI = ("espn", "api_football")
 
 STAGIONE_CORRENTE = 2026

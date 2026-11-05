@@ -17,7 +17,16 @@ from ammonizioni.caricamento.notturno import (
     salva_partita,
     scarica_statistiche_partita,
 )
-from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STAGIONI, STATI_FINITI
+from ammonizioni.config import (
+    CAMPIONATI,
+    COMPETIZIONI,
+    NOMI_CAMPIONATI,
+    SERIE_A,
+    STAGIONE_CORRENTE,
+    STAGIONI,
+    STATI_FINITI,
+    campionato_di,
+)
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import Partita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
@@ -37,11 +46,11 @@ class TempoEsaurito(Exception):
     """Il tempo massimo di una esecuzione dello storico e' finito."""
 
 
-# Competizioni caricate oggi: Liga e Copa del Rey entrano con il Task 5 (più campionati),
-# finché non è fatto il comportamento resta quello della sola Serie A e coppe europee.
-_COMPETIZIONI_CARICATE = tuple(
-    v for k, v in COMPETIZIONI.items() if k not in ("liga", "copa_del_rey")
-)
+def _rango_competizione(competizione_id: int) -> int:
+    """Precedenza di una competizione nelle code: 0 per la Serie A, la Coppa Italia e le
+    coppe europee (che hanno anche le squadre di Serie A), poi la Liga e la sua coppa."""
+    campionato = campionato_di(competizione_id)
+    return CAMPIONATI.index(campionato) if campionato is not None else 0
 
 
 def _scaricati(s: Session) -> set[tuple[int, int]]:
@@ -50,24 +59,29 @@ def _scaricati(s: Session) -> set[tuple[int, int]]:
 
 
 def coda_storico(s: Session, oggi: datetime) -> list[tuple[int, int]]:
-    """(competizione, stagione) di cui manca l'elenco partite, stagioni recenti per prime.
-    Il calendario Serie A della stagione corrente è già aggiornato dal job notturno."""
+    """(competizione, stagione) di cui manca l'elenco partite: prima le competizioni della
+    Serie A (Serie A, Coppa Italia, coppe europee), poi quelle della Liga; in ciascun gruppo
+    le stagioni recenti per prime. Il calendario Serie A della stagione corrente è già
+    aggiornato dal job notturno."""
     fatti = _scaricati(s)
     quando = repo.leggi_impostazione(s, CALENDARI_QUANDO, {}) or {}
     coda = []
-    for stagione in STAGIONI:
-        if stagione > oggi.year:
-            continue
-        for competizione_id in _COMPETIZIONI_CARICATE:
-            coppia = (competizione_id, stagione)
-            if coppia == (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE):
+    for rango in range(len(CAMPIONATI)):
+        for stagione in STAGIONI:
+            if stagione > oggi.year:
                 continue
-            if coppia in fatti and not (
-                stagione == STAGIONE_CORRENTE
-                and _scaduto(quando.get(_chiave(coppia)), oggi)
-            ):
-                continue
-            coda.append(coppia)
+            for competizione_id in COMPETIZIONI.values():
+                if _rango_competizione(competizione_id) != rango:
+                    continue
+                coppia = (competizione_id, stagione)
+                if coppia == (SERIE_A, STAGIONE_CORRENTE):
+                    continue
+                if coppia in fatti and not (
+                    stagione == STAGIONE_CORRENTE
+                    and _scaduto(quando.get(_chiave(coppia)), oggi)
+                ):
+                    continue
+                coda.append(coppia)
     return coda
 
 
@@ -83,9 +97,10 @@ def _scaduto(iso: str | None, oggi: datetime) -> bool:
 
 
 def _squadre_prossima_giornata(s: Session, oggi: datetime) -> set[int]:
+    """Squadre dei campionati che giocano nei prossimi 7 giorni."""
     righe = s.execute(
         select(Partita.casa_id, Partita.trasferta_id).where(
-            Partita.competizione_id == COMPETIZIONI["serie_a"],
+            Partita.competizione_id.in_(CAMPIONATI),
             Partita.data_utc >= oggi,
             Partita.data_utc < oggi + timedelta(days=GIORNI_PROSSIMA_GIORNATA),
             Partita.stato.in_(("NS", "TBD")),
@@ -94,23 +109,55 @@ def _squadre_prossima_giornata(s: Session, oggi: datetime) -> set[int]:
     return {squadra for riga in righe for squadra in riga}
 
 
+def _squadre_per_campionato(s: Session) -> list[set[int]]:
+    """Per ogni campionato (nell'ordine di `CAMPIONATI`) le squadre che vi hanno giocato."""
+    risultato = []
+    for campionato in CAMPIONATI:
+        righe = s.execute(
+            select(Partita.casa_id, Partita.trasferta_id)
+            .where(Partita.competizione_id == campionato, Partita.stagione.in_(STAGIONI))
+            .distinct()
+        ).all()
+        risultato.append({squadra for riga in righe for squadra in riga})
+    return risultato
+
+
 def prossime_da_scaricare(s: Session, oggi: datetime) -> list[int]:
-    """Id delle partite giocate senza statistiche: prima quelle di squadre che giocano nei
-    prossimi 7 giorni, poi le altre; in ciascun gruppo dalla più recente."""
+    """Id delle partite giocate senza statistiche. Prima la Serie A: le sue partite, la Coppa
+    Italia e le coppe europee con una squadra di Serie A; poi quelle della Liga (campionato,
+    Copa del Rey, coppe europee con una squadra di Liga e nessuna di Serie A); in fondo le
+    coppe europee tra altre squadre. In ciascun gruppo prima le partite di squadre che giocano
+    nei prossimi 7 giorni, poi le altre; sempre dalla più recente."""
     squadre = _squadre_prossima_giornata(s, oggi)
+    squadre_campionati = _squadre_per_campionato(s)
     partite = s.execute(
-        select(Partita.id, Partita.casa_id, Partita.trasferta_id)
+        select(Partita.id, Partita.casa_id, Partita.trasferta_id, Partita.competizione_id)
         .where(
             Partita.stato.in_(STATI_FINITI),
             Partita.statistiche_scaricate.is_(False),
-            Partita.competizione_id.in_(_COMPETIZIONI_CARICATE),
+            Partita.competizione_id.in_(COMPETIZIONI.values()),
             Partita.stagione.in_(STAGIONI),
         )
         .order_by(Partita.data_utc.desc())
     ).all()
-    prima = [p.id for p in partite if p.casa_id in squadre or p.trasferta_id in squadre]
-    dopo = [p.id for p in partite if not (p.casa_id in squadre or p.trasferta_id in squadre)]
-    return prima + dopo
+
+    def rango(p) -> tuple[int, int]:
+        campionato = campionato_di(p.competizione_id)
+        if campionato is not None:
+            gruppo = CAMPIONATI.index(campionato)
+        else:  # coppa europea: il primo campionato di cui ha una squadra
+            gruppo = next(
+                (
+                    i
+                    for i, squadre_c in enumerate(squadre_campionati)
+                    if p.casa_id in squadre_c or p.trasferta_id in squadre_c
+                ),
+                len(CAMPIONATI),
+            )
+        prossima = p.casa_id in squadre or p.trasferta_id in squadre
+        return gruppo, 0 if prossima else 1
+
+    return [p.id for p in sorted(partite, key=rango)]  # sort stabile: resta l'ordine per data
 
 
 def _scarica_calendari(s: Session, fonte: Fonte, oggi: datetime, verifica_tempo) -> None:
@@ -150,38 +197,47 @@ def max_minuti_da_env() -> int:
         return MINUTI_MASSIMI_STORICO
 
 
+def _chiave_arbitri(campionato: int) -> str:
+    """Impostazione con le stagioni già collegate: per la Serie A resta `arbitri_collegati`."""
+    return ARBITRI_COLLEGATI if campionato == SERIE_A else f"{ARBITRI_COLLEGATI}_{campionato}"
+
+
 def _collega_arbitri_stagioni(s: Session, fonte_fd) -> bool:
-    """Arbitri della Serie A per ogni stagione dello storico, una volta sola per stagione
-    (una richiesta a football-data.org per stagione: `collega` sull'intero intervallo
-    1 luglio - 30 giugno). Vale anche per la stagione corrente: il job notturno collega solo
-    le partite da 7 giorni fa a fra 7 giorni. Senza chiave non fa nulla (e non segna nulla).
-    True se non ci sono stati errori."""
+    """Arbitri di ogni campionato (la Serie A per prima) per ogni stagione dello storico, una
+    volta sola per stagione (una richiesta a football-data.org per campionato e stagione:
+    `collega` sull'intero intervallo 1 luglio - 30 giugno). Vale anche per la stagione
+    corrente: il job notturno collega solo le partite da 7 giorni fa a fra 7 giorni. Senza
+    chiave non fa nulla (e non segna nulla). True se non ci sono stati errori."""
     if not getattr(fonte_fd, "chiave", None):
         return True
-    fatte = set(repo.leggi_impostazione(s, ARBITRI_COLLEGATI, []) or [])
     completo = True
-    for stagione in STAGIONI:  # dalla piu' recente
-        if stagione in fatte:
-            continue
-        # calendario non ancora scaricato (o fallito): niente da collegare, si riprova
-        if s.scalars(
-            select(Partita.id)
-            .where(Partita.competizione_id == COMPETIZIONI["serie_a"], Partita.stagione == stagione)
-            .limit(1)
-        ).first() is None:
-            continue
-        try:
-            arbitri_fd.collega(
-                s, fonte_fd, COMPETIZIONI["serie_a"], date(stagione, 7, 1), date(stagione + 1, 6, 30)
-            )
-        except (ErroreFonte, LimiteSuperato) as errore:
-            s.rollback()
-            log.warning("Arbitri Serie A %s non collegati: %s", stagione, errore)
-            completo = False
-            continue
-        fatte.add(stagione)
-        repo.scrivi_impostazione(s, ARBITRI_COLLEGATI, sorted(fatte, reverse=True))
-        s.commit()
+    for campionato in CAMPIONATI:
+        chiave = _chiave_arbitri(campionato)
+        fatte = set(repo.leggi_impostazione(s, chiave, []) or [])
+        for stagione in STAGIONI:  # dalla piu' recente
+            if stagione in fatte:
+                continue
+            # calendario non ancora scaricato (o fallito): niente da collegare, si riprova
+            if s.scalars(
+                select(Partita.id)
+                .where(Partita.competizione_id == campionato, Partita.stagione == stagione)
+                .limit(1)
+            ).first() is None:
+                continue
+            try:
+                arbitri_fd.collega(
+                    s, fonte_fd, campionato, date(stagione, 7, 1), date(stagione + 1, 6, 30)
+                )
+            except (ErroreFonte, LimiteSuperato) as errore:
+                s.rollback()
+                log.warning(
+                    "Arbitri %s %s non collegati: %s", NOMI_CAMPIONATI[campionato], stagione, errore
+                )
+                completo = False
+                continue
+            fatte.add(stagione)
+            repo.scrivi_impostazione(s, chiave, sorted(fatte, reverse=True))
+            s.commit()
     return completo
 
 

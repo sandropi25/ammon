@@ -1,19 +1,21 @@
-# Ammonizioni Serie A
+# Ammonizioni Serie A e Liga
 
-App per prevedere quali giocatori hanno più probabilità di essere ammoniti nelle prossime partite di Serie A.
-Scarica da ESPN (gratuita, senza chiave) calendario, formazioni e statistiche dei giocatori e da football-data.org (gratuita, con chiave) gli arbitri (Serie A, Coppa Italia,
-Champions, Europa League, Conference), le salva in un database e calcola per ogni partita una classifica di
+App per prevedere quali giocatori hanno più probabilità di essere ammoniti nelle prossime partite di Serie A e di Liga (la Serie A è il campionato principale e ha sempre la precedenza).
+Scarica da ESPN (gratuita, senza chiave) calendario, formazioni e statistiche dei giocatori e da football-data.org (gratuita, con chiave) gli arbitri dei due campionati (Coppa Italia, Copa del Rey,
+Champions, Europa League e Conference League hanno le partite ma non gli arbitri), le salva in un database e calcola per ogni partita una classifica di
 probabilità di ammonizione, con quote e valore atteso per le giocate. L'interfaccia è un'app Streamlit in italiano.
+
+Medie di campionato, posta in classifica e diffide (con le soglie di ciascun campionato) sono calcolate sul campionato della partita: aggiungere la Liga non cambia i risultati della Serie A. Nelle pagine **Partite** e **Giocate** il selettore del campionato (Serie A / Liga / Tutti) parte da Serie A; in **Impostazioni** derby e campi caldi offrono le squadre di entrambi i campionati, con il campionato fra parentesi.
 
 Due job programmati tengono i dati aggiornati:
 
-- `python -m ammonizioni.scheduler.notte`: ogni notte aggiorna calendario, risultati e statistiche e fa avanzare il caricamento dello storico (stagioni 2026, 2025, 2024).
-- `python -m ammonizioni.scheduler.pre_partita`: ogni 10 minuti, da 75 minuti prima del calcio d'inizio, controlla se sono uscite le formazioni ufficiali. Fuori finestra esce subito senza fare richieste.
+- `python -m ammonizioni.scheduler.notte`: ogni notte aggiorna calendario, risultati e statistiche (prima la Serie A, poi la Liga) e fa avanzare il caricamento dello storico (stagioni 2026, 2025, 2024).
+- `python -m ammonizioni.scheduler.pre_partita`: ogni 10 minuti, da 75 minuti prima del calcio d'inizio, controlla se sono uscite le formazioni ufficiali (Serie A e Liga). Fuori finestra esce subito senza fare richieste.
 
 ## Fonti dati
 
 - **ESPN (predefinita)**: API pubblica, gratuita e senza chiave, ma non ufficiale: la struttura può cambiare senza preavviso. Il programma fa al massimo 30 richieste al minuto. Fornisce partite, formazioni e statistiche dei giocatori (non ha dribbling, voto e arbitro: il modello usa solo i dati presenti).
-- **football-data.org** (chiave gratuita, 10 richieste al minuto): fornisce gli arbitri della Serie A, collegati alle partite ESPN per data e squadre. Senza chiave tutto funziona ma le partite restano senza arbitro (fattore arbitro neutro) e nel log compare l'avviso sulla chiave mancante.
+- **football-data.org** (chiave gratuita, 10 richieste al minuto): fornisce gli arbitri di Serie A e Liga, collegati alle partite ESPN per data e squadre. Senza chiave tutto funziona ma le partite restano senza arbitro (fattore arbitro neutro) e nel log compare l'avviso sulla chiave mancante.
 - **API-Football** (opzionale, a pagamento per le stagioni recenti): resta nel codice come fonte alternativa. Si attiva con `FONTE_DATI=api_football` (e `API_FOOTBALL_KEY`); con `FONTE_DATI` assente, vuota o `espn` si usa ESPN e `API_FOOTBALL_KEY` non serve.
 
 ### Chiave di football-data.org
@@ -29,7 +31,7 @@ Poiché ESPN non è ufficiale, `python scripts/controlla_espn.py` scarica una pa
 
 ### Primo caricamento dello storico
 
-Con ESPN lo storico delle tre stagioni richiede circa 1500 richieste a 30 al minuto, cioè circa 50 minuti. Il job notturno ferma lo storico dopo `STORICO_MAX_MINUTI` minuti (variabile d'ambiente o variabile del repository GitHub; default 40) e il giorno dopo riprende da dove era arrivato: **il primo caricamento può richiedere 2 notti**. Poi la notte dura pochi minuti. Insieme allo storico vengono collegati gli arbitri di ogni stagione (una richiesta a football-data.org per stagione).
+Con ESPN lo storico delle tre stagioni della sola Serie A (con Coppa Italia e coppe europee) richiede circa 1500 richieste a 30 al minuto, cioè circa 50 minuti; con la Liga e la Copa del Rey se ne aggiungono circa altrettante (stima: in tutto circa 2800 richieste, un'ora e mezza). Il job notturno ferma lo storico dopo `STORICO_MAX_MINUTI` minuti (variabile d'ambiente o variabile del repository GitHub; default 40) e il giorno dopo riprende da dove era arrivato: **il primo caricamento può richiedere 3 notti**. La Serie A viene sempre caricata per prima: i calendari della Serie A prima di quelli della Liga e, per le statistiche, prima le partite di Serie A (e le coppe delle squadre di Serie A), poi quelle di Liga. Poi la notte dura pochi minuti. Insieme allo storico vengono collegati gli arbitri di ogni stagione (una richiesta a football-data.org per campionato e stagione, la Serie A per prima).
 
 Il vecchio limite di 100 richieste al giorno riguarda solo API-Football (piano gratuito: 100 richieste al giorno e 10 al minuto, storico in circa 2 settimane).
 
@@ -107,6 +109,8 @@ Dopo aver caricato lo storico, per confrontare il modello con la scelta semplice
 python scripts/prova_stagione.py --stagione 2025 --k 3
 ```
 
+Predefinito: Serie A. Per la Liga aggiungi `--campionato 140`: il modello usa le medie, la classifica e le diffide della Liga.
+
 ## Messa online
 
 Architettura: database Postgres su Supabase, job programmati con GitHub Actions, app su Streamlit Community Cloud.
@@ -137,15 +141,22 @@ Senza un `DATABASE_URL` Postgres i test marcati `postgres` vengono saltati.
 
    `API_FOOTBALL_KEY` (segreto) e `FONTE_DATI` (variabile, in **Variables**) servono solo per tornare ad API-Football: con `FONTE_DATI` vuota o assente si usa ESPN. `STORICO_MAX_MINUTI` (variabile, facoltativa) cambia il tetto di 40 minuti dello storico.
 3. Lancia il caricamento a mano: scheda **Actions > Caricamento notturno > Run workflow**. Nei log del passo `python -m ammonizioni.scheduler.notte` controlla le righe `Notte: ... richieste, ... partite aggiornate, completo=...` e `Storico: ...`: devono comparire il numero di richieste usate e `completo=True` (o `False` se lo storico si è fermato per il tempo massimo `STORICO_MAX_MINUTI`, se il controllo di salute di ESPN ha trovato la struttura cambiata, se football-data ha dato errore o se è stato raggiunto il limite giornaliero, caso normale mentre lo storico si carica).
-4. Da quel momento: `notte.yml` parte ogni giorno alle 03:00 UTC; `pre_partita.yml` parte ogni 10 minuti ma solo dalle 10:00 alle 19:50 UTC (cron `*/10 10-19 * * *`). Entrambi si possono lanciare anche a mano (`workflow_dispatch`) e hanno un gruppo di concorrenza che impedisce due esecuzioni sovrapposte.
+4. Da quel momento: `notte.yml` parte ogni giorno alle 03:00 UTC; `pre_partita.yml` parte ogni 10 minuti ma solo dalle 10:00 alle 20:50 UTC (cron `*/10 10-20 * * *`). Entrambi si possono lanciare anche a mano (`workflow_dispatch`) e hanno un gruppo di concorrenza che impedisce due esecuzioni sovrapposte.
 
 Nota: GitHub può ritardare l'avvio dei cron di qualche minuto (e a volte saltarne qualcuno nei momenti di carico). Per il controllo delle formazioni, a intervalli di 10 minuti, non è un problema. I cron dei repository senza attività per 60 giorni vengono disattivati da GitHub: basta riattivarli dalla scheda Actions.
 
 #### Minuti di GitHub Actions e orari del cron
 
-Con ESPN il pre-partita pesa circa 1800 minuti al mese (cron `*/10 10-19 * * *`) e le prime due notti di storico fino a 40 minuti ciascuna (poi la notte dura pochi minuti): in totale si sta vicino ai 2000 minuti mensili del piano Free, quindi **si consiglia un repository pubblico** (minuti illimitati; i segreti restano protetti, il codice è visibile). La descrizione seguente, con i numeri del "primo mese", è calcolata sui limiti di API-Football.
+Con Serie A e Liga il pre-partita gira dalle 10:00 alle 20:50 UTC (la Liga arriva fino alle 21:00 spagnole, cioè le 19:00 o le 20:00 UTC): 11 ore x 6 esecuzioni = 66 al giorno, circa **1980 minuti al mese** (ogni esecuzione conta almeno 1 minuto), a cui si aggiungono la notte (almeno 30 minuti al mese, molti di più mentre lo storico si carica: fino a 40 minuti per le prime 3 notti). In totale si va **oltre i 2000 minuti mensili** del piano GitHub Free per i repository privati. Le strade sono due, e la scelta è tua:
 
-Un repository privato sul piano GitHub Free ha 2000 minuti di Actions al mese e ogni esecuzione conta almeno 1 minuto. Un cron ogni 10 minuti tutto il giorno farebbe circa 4320 esecuzioni al mese ed esaurirebbe la quota in circa due settimane, dopo di che i job si fermerebbero. Per questo `pre_partita.yml` gira solo nelle ore in cui un calcio d'inizio può cadere nella finestra di 75 minuti: 10-19 UTC, cioè 6 esecuzioni x 10 ore = 60 al giorno, circa 1800 al mese, più circa 30 della notte: circa 1830 minuti al mese, sotto il limite.
+- **rendere pubblico il repository** (minuti illimitati; i segreti restano protetti, il codice è visibile a tutti): è la strada consigliata;
+- **accettare i minuti a pagamento** oltre la quota di 2000 (o restare privati e ridurre le ore del cron, rinunciando a coprire alcuni calci d'inizio).
+
+Se non fai nessuna delle due, negli ultimi giorni del mese i job si fermano.
+
+La descrizione seguente, con i numeri del "primo mese", è calcolata sui limiti di API-Football e sulla sola Serie A (cron `*/10 10-19 * * *`, circa 1830 minuti al mese): per Serie A e Liga aggiungi circa 180 minuti.
+
+Un repository privato sul piano GitHub Free ha 2000 minuti di Actions al mese e ogni esecuzione conta almeno 1 minuto. Un cron ogni 10 minuti tutto il giorno farebbe circa 4320 esecuzioni al mese ed esaurirebbe la quota in circa due settimane, dopo di che i job si fermerebbero. Per questo `pre_partita.yml` gira solo nelle ore in cui un calcio d'inizio può cadere nella finestra di 75 minuti: 10-20 UTC, cioè 6 esecuzioni x 11 ore = 66 al giorno, circa 1980 al mese, più la notte.
 
 Attenzione al primo mese: finché lo storico si carica, il job notturno usa tutte le 100 richieste al ritmo di 10
 al minuto e dura circa 10-12 minuti, non 1. Sono circa 300-360 minuti al mese invece di 30: con il pre-partita si
@@ -158,7 +169,7 @@ periodo di caricamento hai due strade:
   `*/10 15-19 * * *` nei giorni feriali senza anticipi), tenendo conto che ogni ora in meno risparmia circa
   180 minuti al mese ma lascia scoperti i calci d'inizio in quella fascia.
 
-- Copertura: calci d'inizio dalle 12:30 alle 20:45 ora italiana, sia con ora solare (CET) sia con ora legale (CEST).
+- Copertura: calci d'inizio della Serie A dalle 12:30 alle 20:45 ora italiana e della Liga fino alle 21:00 ora spagnola, sia con ora solare (CET) sia con ora legale (CEST).
 - Se una partita è mai fuori da questo intervallo (per esempio un anticipo alle 12:00 o un orario tardivo), allarga le ore del cron in `.github/workflows/pre_partita.yml`, tenendo d'occhio la quota (ogni ora in più costa circa 180 minuti al mese).
 - Un repository pubblico ha minuti illimitati, quindi il cron potrebbe girare tutto il giorno. I segreti restano protetti, ma il codice sarebbe visibile a tutti.
 

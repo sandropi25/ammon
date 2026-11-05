@@ -1,4 +1,5 @@
-"""Job notturno: calendario Serie A, statistiche delle partite giocate, esiti delle giocate."""
+"""Job notturno: calendario dei campionati (Serie A per prima), statistiche delle partite
+giocate, arbitri ed esiti delle giocate."""
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,13 @@ from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento import arbitri_fd
 from ammonizioni.caricamento.arbitri import trova_o_crea
-from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STATI_FINITI
+from ammonizioni.config import (
+    CAMPIONATI,
+    NOMI_CAMPIONATI,
+    SERIE_A,
+    STAGIONE_CORRENTE,
+    STATI_FINITI,
+)
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita, Presenza, Squadra
 from ammonizioni.fonti.base import ErroreFonte, Fonte
@@ -66,6 +73,19 @@ class FonteContata:
 
     def formazioni(self, partita_id):
         return self._chiama("formazioni", partita_id)
+
+    def indica_competizione(self, partita_id, competizione_id):
+        """Passa alla fonte (se lo sa usare) la competizione di una partita; non è una richiesta."""
+        indica_competizione(self._fonte, partita_id, competizione_id)
+
+
+def indica_competizione(fonte, partita_id: int, competizione_id: int) -> None:
+    """Dice alla fonte a quale competizione appartiene la partita, se la fonte lo vuole sapere
+    (ESPN ha un indirizzo per competizione e, in un processo nuovo, non conosce quelle già nel
+    database: senza questo chiederebbe ogni partita alla Serie A)."""
+    metodo = getattr(fonte, "indica_competizione", None)
+    if metodo is not None:
+        metodo(partita_id, competizione_id)
 
 def salva_partita(s: Session, dati: PartitaDati) -> Partita:
     """Crea o aggiorna squadre, arbitro e partita (senza toccare `statistiche_scaricate`)."""
@@ -142,6 +162,8 @@ def scarica_statistiche_partita(s: Session, fonte: Fonte, partita_id: int) -> bo
     """Scarica e salva le statistiche di una partita (commit incluso). Un ErroreFonte o una
     risposta vuota vengono registrati nel log e la partita saltata (False, resta da
     scaricare e verrà richiesta di nuovo); LimiteSuperato risale."""
+    partita = s.get(Partita, partita_id)
+    indica_competizione(fonte, partita_id, partita.competizione_id)
     try:
         presenze = fonte.statistiche(partita_id)
     except ErroreFonte as errore:
@@ -152,30 +174,35 @@ def scarica_statistiche_partita(s: Session, fonte: Fonte, partita_id: int) -> bo
         return False
     for dati in presenze:
         _salva_presenza(s, dati)
-    s.get(Partita, partita_id).statistiche_scaricate = True
+    partita.statistiche_scaricate = True
     s.commit()
     return True
 
 
-def aggiorna_calendario(s: Session, fonte: Fonte, stagione: int = STAGIONE_CORRENTE) -> int:
-    """Partite Serie A della stagione (1 richiesta). Restituisce quante ne ha salvate."""
-    partite = fonte.partite(COMPETIZIONI["serie_a"], stagione)
+def aggiorna_calendario(
+    s: Session, fonte: Fonte, stagione: int = STAGIONE_CORRENTE, competizione_id: int = SERIE_A
+) -> int:
+    """Partite del campionato (Serie A se non indicato) della stagione (1 richiesta).
+    Restituisce quante ne ha salvate."""
+    partite = fonte.partite(competizione_id, stagione)
     for dati in partite:
         salva_partita(s, dati)
     s.commit()
     return len(partite)
 
 
-def scarica_statistiche_giocate(s: Session, fonte: Fonte, adesso: datetime) -> int:
-    """Statistiche delle partite di Serie A della stagione corrente finite negli ultimi
-    7 giorni e non ancora scaricate, dalla più recente. Il resto (coppe, stagioni passate,
-    partite più vecchie) resta allo storico, con priorità STORICO: il job notturno non
-    deve consumare il budget del giorno (spec §3.3).
+def scarica_statistiche_giocate(
+    s: Session, fonte: Fonte, adesso: datetime, competizione_id: int = SERIE_A
+) -> int:
+    """Statistiche delle partite del campionato (Serie A se non indicato) della stagione
+    corrente finite negli ultimi 7 giorni e non ancora scaricate, dalla più recente. Il resto
+    (coppe, stagioni passate, partite più vecchie) resta allo storico, con priorità STORICO:
+    il job notturno non deve consumare il budget del giorno (spec §3.3).
     Restituisce quante ne ha scaricate; su LimiteSuperato il lavoro già fatto resta salvato."""
     ids = s.scalars(
         select(Partita.id)
         .where(
-            Partita.competizione_id == COMPETIZIONI["serie_a"],
+            Partita.competizione_id == competizione_id,
             Partita.stagione == STAGIONE_CORRENTE,
             Partita.data_utc >= adesso - timedelta(days=GIORNI_STATISTICHE_NOTTE),
             Partita.stato.in_(STATI_FINITI),
@@ -190,24 +217,27 @@ def scarica_statistiche_giocate(s: Session, fonte: Fonte, adesso: datetime) -> i
     return scaricate
 
 
-def collega_arbitri_serie_a(s: Session, fonte_fd, adesso: datetime) -> bool:
-    """Arbitri da football-data.org per le partite di Serie A tra 7 giorni fa e fra 7 giorni.
-    Senza chiave `collega` salta e lo scrive nel log (esito normale, True). Un errore della
-    fonte viene registrato nel log: le partite restano senza arbitro (fattore neutro) e
-    restituisce False."""
-    try:
-        arbitri_fd.collega(
-            s,
-            fonte_fd,
-            COMPETIZIONI["serie_a"],
-            (adesso - timedelta(days=GIORNI_ARBITRI)).date(),
-            (adesso + timedelta(days=GIORNI_ARBITRI)).date(),
-        )
-    except (ErroreFonte, LimiteSuperato) as errore:
-        s.rollback()
-        log.warning("Arbitri Serie A non collegati: %s", errore)
-        return False
-    return True
+def collega_arbitri(s: Session, fonte_fd, adesso: datetime) -> bool:
+    """Arbitri da football-data.org per le partite di ogni campionato (la Serie A per prima)
+    tra 7 giorni fa e fra 7 giorni. Senza chiave `collega` salta e lo scrive nel log (esito
+    normale, True). Un errore della fonte viene registrato nel log: le partite di quel
+    campionato restano senza arbitro (fattore neutro), gli altri campionati proseguono e il
+    risultato è False."""
+    completo = True
+    for campionato in CAMPIONATI:
+        try:
+            arbitri_fd.collega(
+                s,
+                fonte_fd,
+                campionato,
+                (adesso - timedelta(days=GIORNI_ARBITRI)).date(),
+                (adesso + timedelta(days=GIORNI_ARBITRI)).date(),
+            )
+        except (ErroreFonte, LimiteSuperato) as errore:
+            s.rollback()
+            log.warning("Arbitri %s non collegati: %s", NOMI_CAMPIONATI[campionato], errore)
+            completo = False
+    return completo
 
 
 def esegui(
@@ -238,16 +268,18 @@ def esegui(
             if problemi:
                 log.error("La struttura dei dati ESPN è cambiata: %s", "; ".join(problemi))
                 completo = False
-        try:
-            aggiorna_calendario(s, contata)
-        except ErroreFonte as errore:
-            log.warning("Calendario Serie A non aggiornato: %s", errore)
-            completo = False
-        scarica_statistiche_giocate(s, contata, adesso)
+        # un campionato alla volta, la Serie A per prima: se il budget finisce, la Serie A è fatta
+        for campionato in CAMPIONATI:
+            try:
+                aggiorna_calendario(s, contata, competizione_id=campionato)
+            except ErroreFonte as errore:
+                log.warning("Calendario %s non aggiornato: %s", NOMI_CAMPIONATI[campionato], errore)
+                completo = False
+            scarica_statistiche_giocate(s, contata, adesso, campionato)
     except LimiteSuperato:
         s.commit()
         completo = False
-    if fonte_fd is not None and not collega_arbitri_serie_a(s, fonte_fd, adesso):
+    if fonte_fd is not None and not collega_arbitri(s, fonte_fd, adesso):
         completo = False
     aggiorna_esiti(s)
     repo.segna_aggiornamento(s, "notte", completo)

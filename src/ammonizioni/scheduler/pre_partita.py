@@ -9,7 +9,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import salva_probabili, ultimo_xi
-from ammonizioni.config import COMPETIZIONI
+from ammonizioni.caricamento.notturno import indica_competizione
+from ammonizioni.config import CAMPIONATI
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
@@ -27,12 +28,13 @@ STATI_ESCLUSI = ("PST", "CANC")
 
 
 def partite_da_controllare(s: Session, adesso_utc: datetime) -> list[Partita]:
-    """Serie A con formazioni ancora probabili, non rinviate/annullate, che iniziano entro 75 minuti."""
+    """Partite dei campionati (Serie A e Liga) con formazioni ancora probabili, non
+    rinviate/annullate, che iniziano entro 75 minuti."""
     return list(
         s.scalars(
             select(Partita)
             .where(
-                Partita.competizione_id == COMPETIZIONI["serie_a"],
+                Partita.competizione_id.in_(CAMPIONATI),
                 Partita.stato_formazioni == "probabili",
                 Partita.stato.not_in(STATI_ESCLUSI),
                 Partita.data_utc > adesso_utc,
@@ -109,6 +111,7 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
                     griglie={t.giocatore_id: t.griglia for titolari in xi.values() for t in titolari},
                 )
                 s.commit()
+            indica_competizione(fonte, partita_id, partita.competizione_id)
             formazioni = fonte.formazioni(partita_id)
         except LimiteSuperato:
             s.commit()

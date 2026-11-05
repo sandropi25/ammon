@@ -58,6 +58,122 @@ def test_notte_non_scarica_lo_storico_delle_altre_competizioni(sessione):
         assert sessione.get(Partita, pid).statistiche_scaricate is False
 
 
+def test_notte_scarica_calendario_e_statistiche_della_liga_dopo_la_serie_a(sessione):
+    vicino = ADESSO - timedelta(days=1)
+    serie_a = partita_dati(7, vicino)
+    liga = partita_dati(8, vicino, competizione_id=140, casa=(31, "Real"), trasferta=(32, "Barca"))
+    copa = partita_dati(9, vicino, competizione_id=143, casa=(33, "A"), trasferta=(34, "B"))
+    fonte = FonteFinta(calendari={(135, 2026): [serie_a], (140, 2026): [liga], (143, 2026): [copa]})
+    r = esegui(sessione, fonte)
+    assert r.completo is True
+    # prima tutta la Serie A (calendario e statistiche), poi la Liga; la Copa del Rey allo storico
+    assert fonte.chiamate == [
+        ("partite", 135, 2026), ("statistiche", 7),
+        ("partite", 140, 2026), ("statistiche", 8),
+    ]
+    assert sessione.get(Partita, 8).statistiche_scaricate is True
+    assert sessione.get(Partita, 9) is None  # il calendario della coppa non e' del job notturno
+
+
+def test_notte_con_il_budget_finito_ha_gia_fatto_la_serie_a(sessione):
+    vicino = ADESSO - timedelta(days=1)
+    serie_a = partita_dati(7, vicino)
+    liga = partita_dati(8, vicino, competizione_id=140, casa=(31, "Real"), trasferta=(32, "Barca"))
+    fonte = FonteFinta(calendari={(135, 2026): [serie_a], (140, 2026): [liga]}, limite_dopo=2)
+    r = esegui(sessione, fonte)
+    assert r.completo is False
+    assert sessione.get(Partita, 7).statistiche_scaricate is True  # Serie A completa
+    assert sessione.get(Partita, 8) is None  # Liga: il calendario non e' arrivato
+
+
+def test_errore_sul_calendario_della_liga_non_tocca_la_serie_a(sessione, caplog):
+    class FonteLigaRotta(FonteFinta):
+        def partite(self, competizione_id, stagione):
+            if competizione_id == 140:
+                self._chiamata("partite", competizione_id, stagione)
+                raise ErroreFonte("liga rotta")
+            return super().partite(competizione_id, stagione)
+
+    fonte = FonteLigaRotta(calendari={(135, 2026): [partita_dati(7, ADESSO - timedelta(days=1))]})
+    with caplog.at_level(logging.WARNING, logger="ammonizioni.caricamento.notturno"):
+        r = esegui(sessione, fonte)
+    assert r.completo is False
+    assert sessione.get(Partita, 7).statistiche_scaricate is True
+    assert any("Liga" in x.getMessage() and "liga rotta" in x.getMessage() for x in caplog.records)
+
+
+def test_notte_collega_gli_arbitri_di_ogni_campionato(sessione):
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    vicino = ADESSO - timedelta(days=1)
+    liga = partita_dati(8, vicino, competizione_id=140, casa=(31, "Real Madrid CF"),
+                        trasferta=(32, "FC Barcelona"), arbitro=None)
+    fonte = FonteFinta(calendari={
+        (135, 2026): [partita_dati(7, vicino, arbitro=None)], (140, 2026): [liga]})
+
+    class FonteFd:
+        chiave = "k"
+
+        def __init__(self):
+            self.chiamate = []
+
+        def arbitri(self, codice, dal, al):
+            self.chiamate.append(codice)
+            if codice == "SA":
+                return [ArbitroPartita(vicino, "Juventus FC", "FC Internazionale Milano", 1,
+                                       "Daniele Doveri")]
+            return [ArbitroPartita(vicino, "Real Madrid CF", "FC Barcelona", 2, "Gil Manzano")]
+
+    fd = FonteFd()
+    r = notturno.esegui(sessione, fonte, adesso=ADESSO, fonte_fd=fd)
+    assert r.completo is True
+    assert fd.chiamate == ["SA", "PD"]
+    nome = lambda pid: sessione.get(Arbitro, sessione.get(Partita, pid).arbitro_id).nome_normalizzato  # noqa: E731
+    assert (nome(7), nome(8)) == ("doveri", "manzano")
+
+
+def test_errore_football_data_su_un_campionato_non_ferma_l_altro(sessione, caplog):
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    vicino = ADESSO - timedelta(days=1)
+    liga = partita_dati(8, vicino, competizione_id=140, casa=(31, "Real Madrid CF"),
+                        trasferta=(32, "FC Barcelona"), arbitro=None)
+    fonte = FonteFinta(calendari={
+        (135, 2026): [partita_dati(7, vicino, arbitro=None)], (140, 2026): [liga]})
+
+    class FonteFd:
+        chiave = "k"
+
+        def arbitri(self, codice, dal, al):
+            if codice == "SA":
+                raise ErroreFonte("HTTP 403")
+            return [ArbitroPartita(vicino, "Real Madrid CF", "FC Barcelona", 2, "Gil Manzano")]
+
+    with caplog.at_level(logging.WARNING, logger="ammonizioni.caricamento.notturno"):
+        r = notturno.esegui(sessione, fonte, adesso=ADESSO, fonte_fd=FonteFd())
+    assert r.completo is False
+    assert sessione.get(Partita, 7).arbitro_id is None
+    assert sessione.get(Partita, 8).arbitro_id is not None
+    assert any("Arbitri Serie A non collegati" in x.getMessage() for x in caplog.records)
+
+
+def test_statistiche_dicono_alla_fonte_la_competizione_della_partita(sessione):
+    """Processo nuovo: la fonte non ha letto il calendario, la competizione arriva dal database."""
+    class FonteEspnFinta(FonteFinta):
+        indicate = []
+
+        def indica_competizione(self, partita_id, competizione_id):
+            self.indicate.append((partita_id, competizione_id))
+
+    liga = partita_dati(8, ADESSO - timedelta(days=1), competizione_id=140,
+                        casa=(31, "Real"), trasferta=(32, "Barca"))
+    notturno.salva_partita(sessione, liga)
+    sessione.commit()
+    fonte = FonteEspnFinta(calendari={(140, 2026): [liga]})
+    assert notturno.scarica_statistiche_partita(sessione, notturno.FonteContata(fonte), 8) is True
+    assert FonteEspnFinta.indicate == [(8, 140)]
+
+
 def test_notte_solo_partite_degli_ultimi_7_giorni(sessione):
     vecchia = partita_dati(8, ADESSO - timedelta(days=8))
     recente = partita_dati(9, ADESSO - timedelta(days=6))
@@ -93,7 +209,7 @@ def test_esegui_completo(sessione):
     fonte = FonteFinta(partite_ft=3)
     r = esegui(sessione,fonte)
     assert r.completo is True
-    assert r.richieste_usate == 4
+    assert r.richieste_usate == 5  # 2 calendari (Serie A, Liga) + 3 partite
     assert r.partite_aggiornate == 3
     assert conta_presenze_scaricate(sessione) == 3
 
@@ -104,7 +220,7 @@ def test_secondo_giro_non_riscarica(sessione):
     r = esegui(sessione,fonte)
     assert r.completo is True
     assert r.partite_aggiornate == 0
-    assert [c[0] for c in fonte.chiamate] == ["partite"]
+    assert [c[0] for c in fonte.chiamate] == ["partite", "partite"]  # Serie A e Liga
 
 
 def test_partita_con_errore_saltata_le_altre_scaricate(sessione, caplog):

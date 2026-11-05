@@ -32,6 +32,7 @@ class Pesi:
     diffidato: float = 0.85
     sostituzione: float = 0.90
     minuti_sostituzione: int = 60
+    # Soglie di diffida della Serie A (la Liga usa config.SOGLIE_DIFFIDA).
     # DA VERIFICARE sul regolamento Serie A in corso
     soglie_diffida: tuple[int, ...] = (4, 9, 13, 16, 19)
     attenuazione_pochi_dati: float = 0.2

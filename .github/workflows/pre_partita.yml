@@ -2,9 +2,10 @@ name: Controllo pre-partita
 
 on:
   schedule:
-    # Ogni 10 minuti dalle 10:00 alle 19:50 UTC (12:00-21:50 ora italiana in estate, 11:00-20:50 in inverno).
-    # Copre i calci d'inizio dalle 12:30 alle 20:45 italiane. GitHub può ritardarlo di qualche minuto.
-    - cron: "*/10 10-19 * * *"
+    # Ogni 10 minuti dalle 10:00 alle 20:50 UTC (12:00-22:50 ora italiana in estate, 11:00-21:50 in inverno).
+    # Copre i calci d'inizio della Serie A (12:30-20:45 italiane) e della Liga (fino alle 21:00
+    # spagnole, cioè le 19:00 UTC in estate e le 20:00 UTC in inverno). GitHub può ritardarlo di qualche minuto.
+    - cron: "*/10 10-20 * * *"
   workflow_dispatch:
 
 permissions:

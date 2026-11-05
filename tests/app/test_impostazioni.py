@@ -30,12 +30,51 @@ def _liste(s, tipo):
     ]
 
 
-def test_squadre_selezionabili_solo_serie_a_stagione_corrente(sessione_db):
+def test_squadre_selezionabili_solo_campionati_stagione_corrente(sessione_db):
     with sessione_db() as s:
         _prepara(s)
-        assert componenti_giocate.squadre_serie_a(s) == [
-            (CASA, "Casa FC"), (TERZA, "Terza FC"), (TRASF, "Trasferta FC"),
+        assert componenti_giocate.squadre_campionati(s) == [
+            (CASA, "Casa FC (Serie A)"), (TERZA, "Terza FC (Serie A)"),
+            (TRASF, "Trasferta FC (Serie A)"),
         ]
+
+
+def test_squadre_di_serie_a_e_liga_con_il_campionato_la_serie_a_per_prima(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        s.add_all([Squadra(id=501, nome="Zaragoza"), Squadra(id=502, nome="Alaves")])
+        s.flush()
+        s.add(Partita(id=60, data_utc=s.get(Partita, 1).data_utc, competizione_id=140,
+                      stagione=2026, casa_id=501, trasferta_id=502, stato="FT"))
+        s.add(Partita(id=61, data_utc=s.get(Partita, 1).data_utc, competizione_id=143,
+                      stagione=2026, casa_id=4, trasferta_id=502, stato="FT"))  # coppa: non conta
+        s.flush()
+        nomi = [n for _, n in componenti_giocate.squadre_campionati(s)]
+        assert nomi == [
+            "Casa FC (Serie A)", "Terza FC (Serie A)", "Trasferta FC (Serie A)",
+            "Alaves (Liga)", "Zaragoza (Liga)",
+        ]
+
+
+def test_derby_e_campo_caldo_offrono_le_squadre_di_entrambi_i_campionati(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        s.add_all([Squadra(id=501, nome="Real Liga"), Squadra(id=502, nome="Barca Liga")])
+        s.flush()
+        s.add(Partita(id=60, data_utc=s.get(Partita, 1).data_utc, competizione_id=140,
+                      stagione=2026, casa_id=501, trasferta_id=502, stato="FT"))
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert not at.exception
+    for chiave in ("derby_a", "derby_b", "campo_caldo_squadra"):
+        etichette = [str(o) for o in at.selectbox(key=chiave).options]
+        assert "Real Liga (Liga)" in etichette and "Casa FC (Serie A)" in etichette
+    at.selectbox(key="derby_a").select(501)
+    at.selectbox(key="derby_b").select(502)
+    at.button(key="aggiungi_derby").click().run()
+    assert not at.exception and not at.error
+    with sessione_db() as s:
+        assert (501, 502) in _liste(s, "derby")
+    assert "Real Liga – Barca Liga" in visibile(at)
 
 
 def test_aggiungi_derby_persistito(sessione_db):

@@ -94,7 +94,7 @@ def classifica(
             nome_avversario=dati.nomi_squadre.get(avversario_squadra, ""),
             nome_avv_diretto=avv.nome if avv else "",
         )
-        situazione = fattore_situazione(storico, dati.stagione, pesi)
+        situazione = fattore_situazione(storico, dati.stagione, pesi, dati.campionato_id)
         fattori = [base, duello, arbitro, contesto, storia, situazione]
 
         p = base.valore

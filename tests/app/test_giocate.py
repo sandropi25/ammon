@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 import componenti_giocate  # noqa: E402  (app/ è in sys.path grazie ad ayuda_app)
 
-from ammonizioni.db.modelli import Giocata, Partita, Squadra
+from ammonizioni.db.modelli import Giocata, Giocatore, Partita, Squadra
 
 PARTITA_VICINA = 200
 PARTITA_LONTANA = 201
@@ -93,6 +93,79 @@ def test_partite_proposte_solo_nella_finestra_di_sette_giorni(sessione_db):
         assert componenti_giocate.partite_selezionabili(s, ora, includi=1)[0][0] == 1
         etichetta = dict(proposte)[300]
         assert "Casa FC – Trasferta FC" in etichetta
+
+
+PARTITA_LIGA = 210
+
+
+def _aggiungi_liga(s):
+    """Partita di Liga tra 2 giorni e una giocata su di essa; una giocata anche su una Serie A."""
+    s.add_all([Squadra(id=501, nome="Real Liga"), Squadra(id=502, nome="Barca Liga")])
+    s.add_all([Giocatore(id=511, nome="Punta Real", ruolo="F"),
+               Giocatore(id=521, nome="Punta Barca", ruolo="F")])
+    s.flush()
+    s.add(Partita(id=PARTITA_LIGA, data_utc=datetime.now(timezone.utc) + timedelta(days=2),
+                  competizione_id=140, stagione=2026, casa_id=501, trasferta_id=502, stato="NS"))
+    s.flush()
+
+
+def test_partite_selezionabili_per_campionato(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        _aggiungi_liga(s)
+        ora = datetime.now(timezone.utc)
+        serie_a = [i for i, _ in componenti_giocate.partite_selezionabili(s, ora)]  # predefinito
+        liga = componenti_giocate.partite_selezionabili(s, ora, campionati=(140,))
+        tutte = componenti_giocate.partite_selezionabili(s, ora, campionati=(135, 140))
+        assert PARTITA_LIGA not in serie_a and PARTITA_VICINA in serie_a
+        assert [i for i, _ in liga] == [PARTITA_LIGA]
+        assert "Real Liga – Barca Liga" in liga[0][1]
+        assert {PARTITA_LIGA, PARTITA_VICINA} <= {i for i, _ in tutte}
+        # con piu' campionati l'etichetta dice di quale
+        assert dict(tutte)[PARTITA_LIGA].startswith("Liga · ")
+        assert dict(tutte)[PARTITA_VICINA].startswith("Serie A · ")
+
+
+def test_pagina_giocate_filtro_predefinito_serie_a(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        _aggiungi_liga(s)
+    at = avvia(PAGINA_GIOCATE)
+    assert not at.exception
+    assert at.radio(key="filtro_giocate").value == "Serie A"
+    # le opzioni sono le etichette "gg/mm hh:mm Casa – Trasferta"
+    opzioni = " | ".join(at.selectbox(key="giocata_partita").options)
+    assert "Casa FC – Trasferta FC" in opzioni and "Real Liga" not in opzioni
+
+    at.radio(key="filtro_giocate").set_value("Liga").run()
+    assert not at.exception
+    opzioni = at.selectbox(key="giocata_partita").options
+    assert len(opzioni) == 1 and "Real Liga – Barca Liga" in opzioni[0]
+
+    at.radio(key="filtro_giocate").set_value("Tutti").run()
+    assert not at.exception
+    opzioni = " | ".join(at.selectbox(key="giocata_partita").options)
+    assert "Liga · " in opzioni and "Serie A · " in opzioni
+
+
+def test_registro_filtrato_per_campionato(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        _aggiungi_liga(s)
+        # una giocata su una partita di Serie A, una su una di Liga, una su una Champions
+        s.add(Partita(id=211, data_utc=datetime.now(timezone.utc) + timedelta(days=3),
+                      competizione_id=2, stagione=2026, casa_id=CASA, trasferta_id=TRASF, stato="NS"))
+        s.flush()
+        for pid, gid in ((PARTITA_VICINA, 12), (PARTITA_LIGA, 511), (211, 12)):
+            s.add(Giocata(data=date(2026, 11, 5), partita_id=pid, giocatore_id=gid, fonte="io",
+                          quota=2.0, puntata=10.0))
+        s.flush()
+        partite = lambda righe: sorted(r["Partita"] for r in righe)  # noqa: E731
+        assert partite(componenti_giocate.righe_registro(s)) == ["Casa FC – Trasferta FC"]
+        assert partite(componenti_giocate.righe_registro(s, campionati=(140,))) == [
+            "Real Liga – Barca Liga"
+        ]
+        assert len(componenti_giocate.righe_registro(s, campionati=None)) == 3  # tutte, anche la Champions
 
 
 def test_giocatori_proposti_sono_quelli_delle_due_squadre(sessione_db):

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from ammonizioni.config import SERIE_A
+
 RUOLI = ("G", "D", "M", "F")  # portiere, difensore, centrocampista, attaccante
 
 
@@ -92,6 +94,7 @@ class DatiPartita:
     medie: MedieCampionato
     contesto: ContestoInfo
     duelli_manuali: dict[int, int]
+    campionato_id: int = SERIE_A  # il campionato della partita: medie, posta e diffide sono suoi
 
 
 @dataclass(frozen=True)

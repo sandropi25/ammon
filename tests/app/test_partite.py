@@ -6,7 +6,7 @@ import pytest
 from streamlit.errors import StreamlitSecretNotFoundError
 from streamlit.testing.v1 import AppTest
 
-from ammonizioni.db.modelli import Partita, UltimoAggiornamento
+from ammonizioni.db.modelli import Arbitro, Partita, Squadra, UltimoAggiornamento
 
 
 def _prepara(sessione_db, *, completo=True):
@@ -43,6 +43,86 @@ def test_partite_mostra_prossime_e_ultimo_aggiornamento(sessione_db):
     assert "Partita calda" in t  # derby nei dati di prova
     assert "ufficiali" in t
     assert not at.warning
+
+
+LIGA_PARTITA = 900
+
+
+def _aggiungi_liga(sessione_db):
+    """Una partita di Liga tra 3 giorni, con squadre e arbitro propri."""
+    with sessione_db() as s:
+        s.add_all([Squadra(id=501, nome="Real Liga"), Squadra(id=502, nome="Barca Liga")])
+        s.add(Arbitro(id=60, nome_normalizzato="manzano", nome_visualizzato="Gil Manzano"))
+        s.flush()
+        s.add(
+            Partita(
+                id=LIGA_PARTITA, data_utc=datetime.now(timezone.utc) + timedelta(days=3),
+                competizione_id=140, stagione=2026, giornata=11, casa_id=501, trasferta_id=502,
+                arbitro_id=60, stato="NS",
+            )
+        )
+
+
+def test_filtro_campionato_predefinito_serie_a(sessione_db):
+    _prepara(sessione_db)
+    _aggiungi_liga(sessione_db)
+    at = avvia(PAGINA_PARTITE)
+    assert not at.exception
+    assert at.radio(key="filtro_partite").value == "Serie A"
+    assert list(at.radio(key="filtro_partite").options) == ["Serie A", "Liga", "Tutti"]
+    t = visibile(at)
+    assert "Casa FC" in t and "Real Liga" not in t
+
+
+def test_filtro_campionato_liga_e_tutti(sessione_db):
+    _prepara(sessione_db)
+    _aggiungi_liga(sessione_db)
+    at = avvia(PAGINA_PARTITE)
+
+    at.radio(key="filtro_partite").set_value("Liga").run()
+    assert not at.exception
+    t = visibile(at)
+    assert "Real Liga – Barca Liga" in t and "Gil Manzano" in t and "Giornata 11" in t
+    assert "Casa FC" not in t
+
+    at.radio(key="filtro_partite").set_value("Tutti").run()
+    t = visibile(at)
+    assert "Real Liga" in t and "Casa FC" in t
+    # ogni partita dice il suo campionato
+    assert "Liga" in t and "Serie A" in t
+
+
+def test_filtro_liga_senza_partite(sessione_db):
+    _prepara(sessione_db)
+    at = avvia(PAGINA_PARTITE)
+    at.radio(key="filtro_partite").set_value("Liga").run()
+    assert not at.exception
+    assert "Nessuna partita di Liga nei prossimi 7 giorni" in visibile(at)
+    assert "Casa FC" not in visibile(at)
+
+
+def test_prossime_partite_funzione_predefinito_serie_a(sessione_db):
+    import componenti
+
+    _prepara(sessione_db)
+    _aggiungi_liga(sessione_db)
+    ora = datetime.now(timezone.utc)
+    with sessione_db() as s:
+        assert [p.casa for p in componenti.prossime_partite(s, ora)] == ["Casa FC"]
+        assert [p.casa for p in componenti.prossime_partite(s, ora, campionati=(140,))] == ["Real Liga"]
+        tutte = componenti.prossime_partite(s, ora, campionati=componenti.CAMPIONATI)
+        assert [(p.casa, p.campionato) for p in tutte] == [
+            ("Casa FC", "Serie A"), ("Real Liga", "Liga"),
+        ]
+
+
+def test_partita_di_liga_non_e_calda_per_il_derby_di_serie_a(sessione_db):
+    """Il derby del seed e' fra squadre di Serie A: la partita di Liga non e' "calda"."""
+    _prepara(sessione_db)
+    _aggiungi_liga(sessione_db)
+    at = avvia(PAGINA_PARTITE)
+    at.radio(key="filtro_partite").set_value("Liga").run()
+    assert "Partita calda" not in visibile(at)
 
 
 def test_avviso_dati_parziali_se_job_incompleto(sessione_db):

@@ -202,6 +202,14 @@ class Espn:
             self._slug[partita.id] = slug
         return list(partite.values())
 
+    def indica_competizione(self, partita_id: int, competizione_id: int) -> None:
+        """Competizione di una partita già nel database (ESPN vuole lo slug della competizione
+        anche per il riepilogo): serve in un processo che non ha letto il calendario. Una
+        competizione sconosciuta non cambia nulla."""
+        slug = SLUG_ESPN.get(competizione_id)
+        if slug is not None:
+            self._slug[partita_id] = slug
+
     def partita(self, id: int) -> PartitaDati:
         """Solo per partite già viste con `partite()`: ESPN non permette di leggerne una
         per solo id senza conoscere il campionato."""

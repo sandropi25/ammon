@@ -67,6 +67,31 @@ def test_solo_serie_a_con_probabili(sessione):
     assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [102]
 
 
+def test_anche_la_liga_e_controllata_la_copa_del_rey_no(sessione):
+    prepara(sessione, 100, competizione=140)
+    prepara(sessione, 101, competizione=143)
+    prepara(sessione, 102)  # Serie A
+    adesso = INIZIO - timedelta(minutes=30)
+    assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [100, 102]
+
+
+def test_la_fonte_sa_la_competizione_della_partita(sessione):
+    """In un processo nuovo ESPN non conosce lo slug: gli arriva dal database."""
+    class FonteConCompetizione(FonteFinta):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.indicate = []
+
+        def indica_competizione(self, partita_id, competizione_id):
+            self.indicate.append((partita_id, competizione_id))
+
+    prepara(sessione, 100, competizione=140)
+    fonte = FonteConCompetizione(formazioni_uscite=ufficiali())
+    assert pre_partita.esegui(sessione, fonte, INIZIO - timedelta(minutes=30)) == 1
+    assert fonte.indicate == [(100, 140)]
+    assert fonte.chiamate == [("formazioni", 100)]
+
+
 def test_partita_rinviata_saltata_senza_richieste(sessione):
     prepara(sessione, 100, stato="PST")
     prepara(sessione, 101, stato="CANC")
@@ -338,7 +363,9 @@ def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
 
     assert notte.main([], crea_fonte=crea, controllo=lambda f: []) == 0
     assert len(fonti) == 2
-    assert len(fonti[1].chiamate) == 14  # lo storico ha scaricato i suoi calendari
+    # lo storico ha scaricato i suoi calendari: 7 competizioni x 3 stagioni, meno la Serie A
+    # della stagione corrente (e' del job notturno)
+    assert len(fonti[1].chiamate) == 20
 
     def controlla(s):
         assert s.get(UltimoAggiornamento, "notte").completo is False

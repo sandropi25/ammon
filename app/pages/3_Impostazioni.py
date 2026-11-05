@@ -19,7 +19,7 @@ richiedi_password()
 st.title("Impostazioni")
 
 with apri() as s:
-    squadre = cg.squadre_serie_a(s)
+    squadre = cg.squadre_campionati(s)  # Serie A e Liga, col campionato fra parentesi
     derby = cg.voci_lista(s, "derby")
     campi_caldi = cg.voci_lista(s, "campo_caldo")
     pesi = carica_pesi(s)
@@ -45,7 +45,7 @@ def elenco_con_rimozione(voci: list[cg.VoceLista]) -> None:
 st.header("Derby e rivalità")
 elenco_con_rimozione(derby)
 if len(squadre) < 2:
-    st.info("Servono almeno due squadre di Serie A nei dati per aggiungere un derby.")
+    st.info("Servono almeno due squadre di Serie A o Liga nei dati per aggiungere un derby.")
 else:
     colonne = st.columns(2)
     squadra_a = colonne[0].selectbox(

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import riepilogo_cambi
-from ammonizioni.config import COMPETIZIONI
+from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import (
     DuelloManuale,
@@ -92,6 +92,22 @@ def link_esterni(giocatore) -> list[tuple[str, str]]:
 
 # ---------------------------------------------------------------- pagina Partite
 
+TUTTI = "Tutti"
+# Selettore del campionato delle pagine Partite e Giocate: "Serie A", "Liga", "Tutti"
+FILTRO_CAMPIONATI = (*NOMI_CAMPIONATI.values(), TUTTI)
+FILTRO_PREDEFINITO = NOMI_CAMPIONATI[SERIE_A]
+
+
+def campionati_del_filtro(etichetta: str) -> tuple[int, ...]:
+    """Campionati scelti nel selettore; un valore sconosciuto vale il predefinito (Serie A)."""
+    if etichetta == TUTTI:
+        return CAMPIONATI
+    for campionato, nome in NOMI_CAMPIONATI.items():
+        if nome == etichetta:
+            return (campionato,)
+    return (SERIE_A,)
+
+
 @dataclass(frozen=True)
 class RigaPartita:
     id: int
@@ -102,6 +118,7 @@ class RigaPartita:
     arbitro: str | None
     calda: bool
     formazioni: str
+    campionato: str = ""
 
 
 def stato_aggiornamento(s: Session) -> tuple[str, bool]:
@@ -123,11 +140,17 @@ def e_partita_calda(dati: DatiPartita, pesi) -> bool:
     )
 
 
-def prossime_partite(s: Session, ora: datetime, giorni: int = GIORNI_PROSSIME) -> list[RigaPartita]:
+def prossime_partite(
+    s: Session,
+    ora: datetime,
+    giorni: int = GIORNI_PROSSIME,
+    campionati: tuple[int, ...] = (SERIE_A,),
+) -> list[RigaPartita]:
+    """Partite dei prossimi `giorni` giorni dei campionati dati (la Serie A se non indicati)."""
     partite = s.execute(
         select(Partita)
         .where(
-            Partita.competizione_id == COMPETIZIONI["serie_a"],
+            Partita.competizione_id.in_(campionati),
             Partita.data_utc >= ora,
             Partita.data_utc <= ora + timedelta(days=giorni),
         )
@@ -150,6 +173,7 @@ def prossime_partite(s: Session, ora: datetime, giorni: int = GIORNI_PROSSIME) -
                 arbitro=dati.arbitro.nome if dati.arbitro and dati.arbitro.nome else None,
                 calda=e_partita_calda(dati, pesi),
                 formazioni=p.stato_formazioni,
+                campionato=NOMI_CAMPIONATI.get(p.competizione_id, ""),
             )
         )
     return righe

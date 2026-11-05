@@ -11,7 +11,8 @@ from ammonizioni.db.modelli import Partita, Presenza, UltimoAggiornamento
 from ammonizioni.caricamento.notturno import salva_partita
 
 OGGI = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
-CARICATE = storico._COMPETIZIONI_CARICATE  # Liga e Copa del Rey entrano con il Task 5
+CARICATE = tuple(COMPETIZIONI.values())  # tutte e 7: due campionati, due coppe, tre europee
+CALENDARI = len(CARICATE) * len(STAGIONI) - 1  # tutti tranne la Serie A della stagione corrente
 
 
 def _salva(s, *partite):
@@ -59,9 +60,78 @@ def test_storico_prende_anche_le_partite_finite_ai_supplementari_o_ai_rigori(ses
 
 def test_coda_storico_tutte_le_coppie_tranne_il_calendario_notturno(sessione):
     coda = storico.coda_storico(sessione, OGGI)
-    assert len(coda) == len(CARICATE) * len(STAGIONI) - 1
+    assert len(coda) == CALENDARI
     assert (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE) not in coda
-    assert [st for _, st in coda] == sorted((st for _, st in coda), reverse=True)
+    assert {c for c, _ in coda} == set(CARICATE)
+    # dentro ogni gruppo (Serie A e coppe, poi Liga e Copa del Rey) le stagioni recenti per prime
+    for gruppo in (coda[:CALENDARI - 6], coda[CALENDARI - 6:]):
+        assert [st for _, st in gruppo] == sorted((st for _, st in gruppo), reverse=True)
+
+
+def test_coda_storico_i_calendari_della_liga_dopo_quelli_della_serie_a(sessione):
+    coda = storico.coda_storico(sessione, OGGI)
+    liga = {COMPETIZIONI["liga"], COMPETIZIONI["copa_del_rey"]}
+    posizioni = [i for i, (c, _) in enumerate(coda) if c in liga]
+    altre = [i for i, (c, _) in enumerate(coda) if c not in liga]
+    assert len(posizioni) == 6 and max(altre) < min(posizioni)
+    # la Serie A del 2025 e del 2024 prima di qualsiasi Liga, anche quella della stagione corrente
+    assert (COMPETIZIONI["serie_a"], 2025) in [coda[i] for i in altre]
+    assert coda[min(posizioni)] == (COMPETIZIONI["liga"], STAGIONE_CORRENTE)
+
+
+def test_prossime_da_scaricare_serie_a_prima_della_liga(sessione):
+    """Anche se le partite di Liga sono piu' recenti o di squadre che giocano a breve: prima
+    la Serie A, poi le coppe di squadre di Serie A, poi la Liga; coppe europee tra squadre
+    senza campionato in fondo."""
+    giorno = lambda n: OGGI - timedelta(days=n)  # noqa: E731
+    _salva(
+        sessione,
+        # Serie A: giocano le squadre 3 e 4 tra 2 giorni; Liga: le squadre 53 e 54
+        partita_dati(100, OGGI + timedelta(days=2), casa=(3, "C"), trasferta=(4, "D"), stato="NS"),
+        partita_dati(101, OGGI + timedelta(days=2), competizione_id=140, casa=(53, "R"),
+                     trasferta=(54, "B"), stato="NS"),
+        # da scaricare
+        partita_dati(10, giorno(40), casa=(5, "E"), trasferta=(6, "F")),                  # Serie A
+        partita_dati(11, giorno(1), competizione_id=140, casa=(53, "R"), trasferta=(55, "S")),  # Liga
+        partita_dati(12, giorno(2), competizione_id=140, casa=(56, "T"), trasferta=(57, "U")),  # Liga
+        partita_dati(13, giorno(3), competizione_id=143, casa=(56, "T"), trasferta=(58, "V")),  # Copa
+        partita_dati(14, giorno(30), competizione_id=137, casa=(5, "E"), trasferta=(59, "W")),  # Coppa Italia
+        # europea con una squadra di Serie A (la 7) e una di Liga: vale la Serie A
+        partita_dati(15, giorno(1), competizione_id=2, casa=(7, "G"), trasferta=(55, "S")),
+        # europea tra due squadre di Liga
+        partita_dati(16, OGGI - timedelta(hours=60), competizione_id=2, casa=(56, "T"),
+                     trasferta=(60, "X")),
+        # europea tra squadre di nessun campionato
+        partita_dati(17, giorno(2), competizione_id=3, casa=(70, "P"), trasferta=(71, "Q")),
+    )
+    # la squadra 7 e' di Serie A (ha una partita di campionato), le 55-58 di Liga
+    _salva(
+        sessione,
+        partita_dati(110, giorno(100), casa=(7, "G"), trasferta=(5, "E")),
+        partita_dati(111, giorno(100), competizione_id=140, casa=(55, "S"), trasferta=(56, "T")),
+        partita_dati(112, giorno(100), competizione_id=140, casa=(58, "V"), trasferta=(60, "X")),
+    )
+    for pid in (110, 111, 112):
+        sessione.get(Partita, pid).statistiche_scaricate = True
+    sessione.commit()
+
+    ordine = storico.prossime_da_scaricare(sessione, OGGI)
+    # Serie A: 10, 14 (Coppa Italia), 15 (europea con la 7), nessuna gioca a breve: dalla piu'
+    # recente. Liga: prima chi gioca a breve (11, con la 53), poi 12, 16, 13 per data.
+    # In fondo la 17.
+    assert ordine == [15, 14, 10, 11, 12, 16, 13, 17]
+
+
+def test_prossime_da_scaricare_serie_a_prima_anche_se_la_liga_gioca_a_breve(sessione):
+    giorno = lambda n: OGGI - timedelta(days=n)  # noqa: E731
+    _salva(
+        sessione,
+        partita_dati(101, OGGI + timedelta(days=2), competizione_id=140, casa=(53, "R"),
+                     trasferta=(54, "B"), stato="NS"),
+        partita_dati(10, giorno(60), casa=(5, "E"), trasferta=(6, "F")),
+        partita_dati(11, giorno(1), competizione_id=140, casa=(53, "R"), trasferta=(55, "S")),
+    )
+    assert storico.prossime_da_scaricare(sessione, OGGI) == [10, 11]
 
 
 def test_coda_storico_salta_i_calendari_gia_scaricati(sessione):
@@ -107,9 +177,9 @@ def test_avanza_scarica_calendari_poi_statistiche(sessione):
     assert r.partite_aggiornate == 2
     assert r.richieste_usate == len(CARICATE) * len(STAGIONI) - 1 + 2
     nomi = [c[0] for c in fonte.chiamate]
-    assert nomi == ["partite"] * 14 + ["statistiche"] * 2
+    assert nomi == ["partite"] * CALENDARI + ["statistiche"] * 2
     assert [c[1] for c in fonte.chiamate if c[0] == "statistiche"] == [2, 1]  # più recente prima
-    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == 14
+    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == CALENDARI
     assert repo.ultimo_aggiornamento(sessione, "storico") is not None
 
     # secondo giro: niente da fare
@@ -121,11 +191,11 @@ def test_avanza_scarica_calendari_poi_statistiche(sessione):
 def test_avanza_limite_a_meta_salva_il_parziale(sessione):
     base = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
     calendari = {(135, 2025): [partita_dati(i, base + timedelta(days=i), stagione=2025) for i in (1, 2, 3)]}
-    fonte = FonteFinta(calendari=calendari, limite_dopo=14 + 1)  # 14 calendari + 1 partita
+    fonte = FonteFinta(calendari=calendari, limite_dopo=CALENDARI + 1)  # tutti i calendari + 1 partita
     r = storico.avanza(sessione, fonte)
     assert r.completo is False
     assert r.partite_aggiornate == 1
-    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == 14
+    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == CALENDARI
     assert len({p.partita_id for p in sessione.scalars(select(Presenza))}) == 1
     assert sessione.get(UltimoAggiornamento, "storico").completo is False
 
@@ -151,7 +221,7 @@ def test_avanza_calendario_con_errore_saltato(sessione, caplog):
     r = storico.avanza(sessione, fonte)
     assert r.completo is True
     assert [137, 2025] not in repo.leggi_impostazione(sessione, "calendari_scaricati")
-    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == 13
+    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == CALENDARI - 1
     assert any("137" in x.getMessage() for x in caplog.records)
 
 
@@ -196,7 +266,7 @@ def test_avanza_si_ferma_al_tempo_massimo_e_riprende(sessione):
     assert r.completo is False
     assert r.partite_aggiornate == 2  # una al minuto, poi basta
     assert [c[1] for c in fonte.chiamate if c[0] == "statistiche"] == [5, 4]
-    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == 14  # calendari fatti
+    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == CALENDARI  # calendari fatti
     assert sessione.get(UltimoAggiornamento, "storico").completo is False
     assert {p.partita_id for p in sessione.scalars(select(Presenza))} == {5, 4}
 
@@ -265,6 +335,38 @@ def test_avanza_collega_gli_arbitri_una_volta_per_stagione_intera(sessione):
 
     storico.avanza(sessione, FonteFinta(calendari=cal), fd)  # notte dopo: niente di nuovo
     assert len(fd.chiamate) == 1
+
+
+def test_avanza_collega_gli_arbitri_anche_della_liga_dopo_la_serie_a(sessione):
+    from ammonizioni.db.modelli import Arbitro
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    base = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
+    cal = {
+        (135, 2025): [partita_dati(1, base, stagione=2025, arbitro=None)],
+        (140, 2025): [partita_dati(2, base, competizione_id=140, stagione=2025, arbitro=None,
+                                   casa=(31, "Real Madrid CF"), trasferta=(32, "FC Barcelona"))],
+    }
+
+    class Fd(FonteFdStagioni):
+        def arbitri(self, codice, dal, al):
+            self.chiamate.append((codice, dal, al))
+            if codice == "SA":
+                return [ArbitroPartita(base, "Juventus FC", "FC Internazionale Milano", 1,
+                                       "Davide Massa")]
+            return [ArbitroPartita(base, "Real Madrid CF", "FC Barcelona", 2, "Gil Manzano")]
+
+    fd = Fd([])
+    storico.avanza(sessione, FonteFinta(calendari=cal), fd)
+    stagione = (date(2025, 7, 1), date(2026, 6, 30))
+    assert fd.chiamate == [("SA", *stagione), ("PD", *stagione)]  # Serie A per prima
+    nome = lambda pid: sessione.get(Arbitro, sessione.get(Partita, pid).arbitro_id).nome_normalizzato  # noqa: E731
+    assert (nome(1), nome(2)) == ("massa", "manzano")
+    assert repo.leggi_impostazione(sessione, "arbitri_collegati") == [2025]  # chiave invariata
+    assert repo.leggi_impostazione(sessione, "arbitri_collegati_140") == [2025]
+
+    storico.avanza(sessione, FonteFinta(calendari=cal), fd)  # notte dopo: niente di nuovo
+    assert len(fd.chiamate) == 2
 
 
 def test_avanza_senza_chiave_football_data_non_segna_le_stagioni(sessione):

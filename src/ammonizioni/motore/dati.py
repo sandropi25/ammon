@@ -2,11 +2,11 @@
 Partita.data_utc < prima_di (default: calcio d'inizio), cosi' la prova storica non vede il futuro."""
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import titolare_da, ultimo_xi
-from ammonizioni.config import COMPETIZIONI, STATI_FINITI
+from ammonizioni.config import CAMPIONATI, SERIE_A, STATI_FINITI, campionato_di
 from ammonizioni.db.modelli import (
     DuelloManuale,
     Formazione,
@@ -29,7 +29,6 @@ from ammonizioni.motore.tipi import (
     Titolare,
 )
 
-SERIE_A = COMPETIZIONI["serie_a"]
 PRECEDENTI_MAX = 5
 
 MEDIE_PREDEFINITE = MedieCampionato(
@@ -85,10 +84,35 @@ def _media(valori: list[float]) -> float | None:
     return sum(valori) / len(valori) if valori else None
 
 
-def _medie_campionato(s: Session, stagione: int, prima_di: datetime) -> MedieCampionato:
-    # partite Serie A con statistiche, nelle 3 stagioni, prima di `prima_di`
+def _campionato_partita(s: Session, partita: Partita) -> int:
+    """Il campionato i cui dati valgono per la partita: il suo, o quello della coppa nazionale.
+    Una coppa europea prende il campionato delle squadre (in stagione), la Serie A per prima;
+    senza indicazioni, la Serie A."""
+    campionato = campionato_di(partita.competizione_id)
+    if campionato is not None:
+        return campionato
+    squadre = (partita.casa_id, partita.trasferta_id)
+    for candidato in CAMPIONATI:  # la Serie A prima
+        trovata = s.scalars(
+            select(Partita.id)
+            .where(
+                Partita.competizione_id == candidato,
+                Partita.stagione == partita.stagione,
+                or_(Partita.casa_id.in_(squadre), Partita.trasferta_id.in_(squadre)),
+            )
+            .limit(1)
+        ).first()
+        if trovata is not None:
+            return candidato
+    return SERIE_A
+
+
+def _medie_campionato(
+    s: Session, stagione: int, prima_di: datetime, campionato_id: int = SERIE_A
+) -> MedieCampionato:
+    # partite del campionato con statistiche, nelle 3 stagioni, prima di `prima_di`
     filtro_partite = (
-        Partita.competizione_id == SERIE_A,
+        Partita.competizione_id == campionato_id,
         Partita.statistiche_scaricate.is_(True),
         Partita.data_utc < prima_di,
         Partita.stagione.in_((stagione, stagione - 1, stagione - 2)),
@@ -199,7 +223,11 @@ def _stat_arbitro(s: Session, partita: Partita, prima_di: datetime) -> StatArbit
 
 
 def _contesto(
-    s: Session, partita: Partita, prima_di: datetime, derby: set[frozenset[int]]
+    s: Session,
+    partita: Partita,
+    prima_di: datetime,
+    derby: set[frozenset[int]],
+    campionato_id: int = SERIE_A,
 ) -> ContestoInfo:
     campo_caldo = s.execute(
         select(ListaManuale.id).where(
@@ -213,7 +241,7 @@ def _contesto(
             select(
                 Partita.casa_id, Partita.trasferta_id, Partita.gol_casa, Partita.gol_trasferta
             ).where(
-                Partita.competizione_id == SERIE_A,
+                Partita.competizione_id == campionato_id,
                 Partita.stagione == partita.stagione,
                 Partita.stato.in_(STATI_FINITI),
                 Partita.data_utc < prima_di,
@@ -334,6 +362,7 @@ def carica_dati(
         raise ValueError(f"Partita {partita_id} non trovata")
     prima_di = prima_di or partita.data_utc
     derby = _derby(s)
+    campionato_id = _campionato_partita(s, partita)
 
     if titolari is None:
         titolari = _titolari(s, partita, prima_di)
@@ -361,7 +390,8 @@ def carica_dati(
             s, [t.giocatore_id for t in titolari], partita.stagione, prima_di, partita.id, derby
         ),
         arbitro=_stat_arbitro(s, partita, prima_di),
-        medie=_medie_campionato(s, partita.stagione, prima_di),
-        contesto=_contesto(s, partita, prima_di, derby),
+        medie=_medie_campionato(s, partita.stagione, prima_di, campionato_id),
+        contesto=_contesto(s, partita, prima_di, derby, campionato_id),
         duelli_manuali=duelli,
+        campionato_id=campionato_id,
     )

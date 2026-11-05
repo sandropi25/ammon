@@ -22,9 +22,21 @@ st.title("Giocate")
 partita_richiesta = componenti.id_partita(st.query_params.get("partita"))
 giocatore_richiesto = componenti.id_partita(st.query_params.get("giocatore"))
 
+filtro = st.radio(
+    "Campionato",
+    componenti.FILTRO_CAMPIONATI,
+    index=componenti.FILTRO_CAMPIONATI.index(componenti.FILTRO_PREDEFINITO),
+    horizontal=True,
+    key="filtro_giocate",
+)
+campionati = componenti.campionati_del_filtro(filtro)
+
 with apri() as s:
-    partite = cg.partite_selezionabili(s, datetime.now(timezone.utc), includi=partita_richiesta)
-    registro = cg.righe_registro(s)
+    partite = cg.partite_selezionabili(
+        s, datetime.now(timezone.utc), includi=partita_richiesta, campionati=campionati
+    )
+    # "Tutti": anche le giocate su coppe europee
+    registro = cg.righe_registro(s, None if filtro == componenti.TUTTI else campionati)
     statistiche = cg.righe_statistiche(s)
 
 if st.session_state.pop("giocata_registrata", False):
@@ -32,9 +44,12 @@ if st.session_state.pop("giocata_registrata", False):
 
 st.subheader("Nuova giocata")
 if not partite:
-    st.info("Nessuna partita di Serie A negli ultimi e nei prossimi 7 giorni.")
+    dove = "" if filtro == componenti.TUTTI else f" di {filtro}"
+    st.info(f"Nessuna partita{dove} negli ultimi e nei prossimi 7 giorni.")
 else:
     nomi_partite = dict(partite)
+    if st.session_state.get("giocata_partita") not in nomi_partite:
+        st.session_state.pop("giocata_partita", None)  # la partita scelta e' di un altro campionato
     if partita_richiesta in nomi_partite:
         st.session_state.setdefault("giocata_partita", partita_richiesta)
     partita_id = st.selectbox(

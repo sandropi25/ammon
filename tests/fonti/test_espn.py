@@ -515,6 +515,21 @@ def test_statistiche_usa_lo_slug_noto_dal_calendario(espn):
     assert rotta.call_count == 1
 
 
+@respx.mock
+def test_competizione_indicata_dal_database_vale_per_statistiche_e_formazioni(espn):
+    """Processo nuovo (nessun calendario letto): la competizione della partita, nota dal
+    database, sceglie lo slug del riepilogo. Senza, una partita di Liga andrebbe a ita.1."""
+    liga = rotta_summary(carica("summary_sassuolo_fiorentina.json"), slug="esp.1")
+    serie_a = rotta_summary(carica("summary_sassuolo_fiorentina.json"), slug="ita.1")
+    espn.indica_competizione(736790, 140)
+    espn.statistiche(736790)
+    espn.formazioni(736790)
+    assert (liga.call_count, serie_a.call_count) == (2, 0)
+    espn.indica_competizione(736790, 999)  # sconosciuta: non cambia nulla
+    espn.statistiche(736790)
+    assert (liga.call_count, serie_a.call_count) == (3, 0)
+
+
 # --- formazioni ------------------------------------------------------------
 
 

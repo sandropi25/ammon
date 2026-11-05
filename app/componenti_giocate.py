@@ -10,7 +10,13 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 import componenti
-from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE
+from ammonizioni.config import (
+    CAMPIONATI,
+    COPPE_NAZIONALI,
+    NOMI_CAMPIONATI,
+    SERIE_A,
+    STAGIONE_CORRENTE,
+)
 from ammonizioni.db.modelli import Giocata, Giocatore, ListaManuale, Partita, Squadra
 from ammonizioni.giocate.registro import aggiungi_giocata, statistiche_per_fonte
 from ammonizioni.motore.classifica import converti_quota
@@ -57,15 +63,21 @@ def _nomi_squadre(s: Session) -> dict[int, str]:
 
 
 def partite_selezionabili(
-    s: Session, ora: datetime, giorni: int = GIORNI_FINESTRA, includi: int | None = None
+    s: Session,
+    ora: datetime,
+    giorni: int = GIORNI_FINESTRA,
+    includi: int | None = None,
+    campionati: tuple[int, ...] = (SERIE_A,),
 ) -> list[tuple[int, str]]:
-    """Partite di Serie A degli ultimi e dei prossimi `giorni` giorni, in ordine di data
-    (id, etichetta). `includi` aggiunge una partita richiesta dall'URL anche se fuori finestra."""
+    """Partite dei campionati dati (la Serie A se non indicati) degli ultimi e dei prossimi
+    `giorni` giorni, in ordine di data (id, etichetta; con più campionati l'etichetta comincia
+    col nome del campionato). `includi` aggiunge una partita richiesta dall'URL anche se
+    fuori finestra."""
     partite = list(
         s.execute(
             select(Partita)
             .where(
-                Partita.competizione_id == COMPETIZIONI["serie_a"],
+                Partita.competizione_id.in_(campionati),
                 Partita.data_utc >= ora - timedelta(days=giorni),
                 Partita.data_utc <= ora + timedelta(days=giorni),
             )
@@ -80,7 +92,8 @@ def partite_selezionabili(
     return [
         (
             p.id,
-            f"{componenti.data_breve(p.data_utc)} {nomi.get(p.casa_id, p.casa_id)} – "
+            (f"{NOMI_CAMPIONATI.get(p.competizione_id, '')} · " if len(campionati) > 1 else "")
+            + f"{componenti.data_breve(p.data_utc)} {nomi.get(p.casa_id, p.casa_id)} – "
             f"{nomi.get(p.trasferta_id, p.trasferta_id)}",
         )
         for p in partite
@@ -139,15 +152,23 @@ def registra_giocata(
     return aggiungi_giocata(s, partita_id, giocatore_id, fonte, quota, puntata, giorno)
 
 
-def righe_registro(s: Session) -> list[dict[str, str]]:
-    """Giocate registrate, la più recente per prima."""
+def righe_registro(
+    s: Session, campionati: tuple[int, ...] | None = (SERIE_A,)
+) -> list[dict[str, str]]:
+    """Giocate registrate, la più recente per prima. Solo quelle sulle partite dei campionati
+    dati e delle loro coppe nazionali (la Serie A se non indicati); `None` = tutte, comprese
+    le coppe europee."""
     nomi = _nomi_squadre(s)
-    righe = s.execute(
+    interrogazione = (
         select(Giocata, Partita, Giocatore)
         .join(Partita, Partita.id == Giocata.partita_id)
         .join(Giocatore, Giocatore.id == Giocata.giocatore_id)
         .order_by(Giocata.data.desc(), Giocata.id.desc())
-    ).all()
+    )
+    if campionati is not None:
+        competizioni = {*campionati, *(COPPE_NAZIONALI[c] for c in campionati if c in COPPE_NAZIONALI)}
+        interrogazione = interrogazione.where(Partita.competizione_id.in_(competizioni))
+    righe = s.execute(interrogazione).all()
     return [
         {
             "Data": f"{g.data:%d/%m/%Y}",
@@ -184,14 +205,20 @@ class VoceLista:
     testo: str
 
 
-def squadre_serie_a(s: Session) -> list[tuple[int, str]]:
-    """Squadre che giocano in Serie A nella stagione corrente (id, nome), per nome."""
-    partite = select(Partita.casa_id, Partita.trasferta_id).where(
-        Partita.competizione_id == COMPETIZIONI["serie_a"], Partita.stagione == STAGIONE_CORRENTE
-    )
-    ids = {i for coppia in s.execute(partite).all() for i in coppia}
-    righe = s.execute(select(Squadra.id, Squadra.nome).where(Squadra.id.in_(ids))).all()
-    return sorted(((i, n) for i, n in righe), key=lambda r: r[1])
+def squadre_campionati(s: Session) -> list[tuple[int, str]]:
+    """Squadre dei campionati nella stagione corrente: (id, "Nome (Campionato)"), la Serie A
+    per prima, in ordine alfabetico dentro ciascun campionato."""
+    risultato: list[tuple[int, str]] = []
+    for campionato in CAMPIONATI:
+        partite = select(Partita.casa_id, Partita.trasferta_id).where(
+            Partita.competizione_id == campionato, Partita.stagione == STAGIONE_CORRENTE
+        )
+        ids = {i for coppia in s.execute(partite).all() for i in coppia}
+        righe = s.execute(select(Squadra.id, Squadra.nome).where(Squadra.id.in_(ids))).all()
+        risultato.extend(
+            (i, f"{n} ({NOMI_CAMPIONATI[campionato]})") for i, n in sorted(righe, key=lambda r: r[1])
+        )
+    return risultato
 
 
 def voci_lista(s: Session, tipo: str) -> list[VoceLista]:
