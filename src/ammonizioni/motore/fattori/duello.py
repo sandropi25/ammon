@@ -111,7 +111,7 @@ def _forma(ordinate: list[RigaPresenza]) -> float:
         return 0.0
     ultima_stagione = max(r.stagione for r in ordinate)
     stagione = [r for r in ordinate if r.stagione == ultima_stagione]
-    ultime5 = ordinate[-ULTIME_PER_FORMA:]
+    ultime5 = [r for r in ordinate if r.minuti > 0][-ULTIME_PER_FORMA:]  # solo giocate
 
     def ga90(righe):
         minuti = sum(r.minuti for r in righe)

@@ -131,6 +131,18 @@ def test_dribblatore_in_forma_alza_il_fattore():
     assert f.motivazione == "marca Leao, 3 gol nelle ultime 3"
 
 
+def test_forma_ultime_5_solo_partite_giocate():
+    """Panchine (0 minuti) dopo le ultime partite giocate non contano tra le "ultime 5"."""
+    vecchie = [riga(gol=0, falli_subiti=1, dribbling_tentati=2, voto=6.0) for _ in range(5)]
+    recenti = [riga(gol=1, falli_subiti=1, dribbling_tentati=2, voto=7.0) for _ in range(5)]
+    panchine = [riga(minuti=0, gol=0, falli_subiti=0, dribbling_tentati=0, voto=None) for _ in range(5)]
+    senza = fattore_duello(_avv(), vecchie + recenti, medie_standard(), Pesi(attenuazione_pochi_dati=1))
+    con = fattore_duello(
+        _avv(), vecchie + recenti + panchine, medie_standard(), Pesi(attenuazione_pochi_dati=1)
+    )
+    assert con.valore == pytest.approx(senza.valore)
+
+
 def test_motivazione_falli_subiti_senza_gol_recenti():
     righe = [riga(gol=0, falli_subiti=3 if i % 2 == 0 else 2,
                   dribbling_tentati=2, voto=6.2) for i in range(10)]

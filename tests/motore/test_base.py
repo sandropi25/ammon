@@ -45,6 +45,16 @@ def test_peso_nullo_sull_unica_stagione_giocata_usa_la_media_del_ruolo():
     )
 
 
+def test_ultime_5_solo_partite_giocate():
+    """Le panchine (0 minuti) piu' recenti non tolgono il peso doppio alle ultime 5 giocate."""
+    giocate = _partite(10, 2026, [0] * 5 + [1, 1, 0, 0, 0], INIZIO)
+    panchine = _partite(5, 2026, 0, INIZIO + timedelta(days=20), minuti=0)
+    pesi = Pesi()
+    assert tasso_base90(giocate + panchine, "D", medie_standard(), 2026, pesi) == pytest.approx(
+        tasso_base90(giocate, "D", medie_standard(), 2026, pesi)
+    )
+
+
 def test_ultime_5_pesano_doppio():
     # 10 partite, 2 gialli: nelle ultime 5 oppure nelle prime 5
     in_ultime = [0] * 5 + [1, 1, 0, 0, 0]

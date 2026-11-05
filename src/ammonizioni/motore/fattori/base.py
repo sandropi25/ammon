@@ -15,9 +15,10 @@ def _tasso_e_ritardo(
 ) -> tuple[float, bool]:
     medie_ruolo = medie.per_ruolo[ruolo]
 
-    # 1. gialli/90 per stagione (corrente, -1, -2); ultime 5 della corrente pesano di più
+    # 1. gialli/90 per stagione (corrente, -1, -2); ultime 5 giocate (minuti > 0) della
+    #    corrente pesano di più
     corrente = sorted(
-        (r for r in storico if r.stagione == stagione), key=lambda r: r.data
+        (r for r in storico if r.stagione == stagione and r.minuti > 0), key=lambda r: r.data
     )
     ultime5 = {id(r) for r in corrente[-5:]}
     tassi: list[tuple[float, float]] = []  # (peso stagione, gialli/90)
