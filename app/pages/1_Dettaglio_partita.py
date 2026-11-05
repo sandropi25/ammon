@@ -10,7 +10,6 @@ import streamlit as st  # noqa: E402
 import componenti  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.caricamento.formazioni import salva_probabili  # noqa: E402
-from ammonizioni.db.modelli import Giocatore  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
 from ammonizioni.motore.classifica import converti_quota  # noqa: E402
 
@@ -27,36 +26,19 @@ if st.query_params.get("partita") is None:
 # le quote inserite restano nella sessione (non nel database), per partita
 quote: dict[int, float] = st.session_state.setdefault(f"quote_{partita_id}", {})
 
-with apri() as s:
-    det = componenti.carica_dettaglio(s, partita_id, quote) if partita_id is not None else None
-    if det is not None:
-        dati, partita = det.dati, det.partita
-        cambi = componenti.righe_cambi(s, det)
-        extra = {}
-        for c in det.candidati:
-            avv_id = c.avversario_diretto_id
-            sq_avv = dati.trasferta_id if c.squadra_id == dati.casa_id else dati.casa_id
-            giocatore = s.get(Giocatore, c.giocatore_id)
-            extra[c.giocatore_id] = {
-                "stat": componenti.statistiche_90(s, c.giocatore_id, dati.stagione, dati.data),
-                "stat_avv": componenti.statistiche_90(s, avv_id, dati.stagione, dati.data)
-                if avv_id else {"minuti": 0},
-                "storia": componenti.testo_storia(
-                    *componenti.storia_contro(s, c.giocatore_id, sq_avv, dati.data),
-                    dati.nomi_squadre.get(sq_avv, ""),
-                ),
-                "link": componenti.link_esterni(giocatore),
-                "avversari": componenti.avversari_possibili(dati, c),
-            }
-        rosa = {}
-        if partita.stato_formazioni == "probabili":
-            for sq in (dati.casa_id, dati.trasferta_id):
-                correnti = [t.giocatore_id for t in dati.titolari if t.squadra_id == sq]
-                rosa[sq] = (componenti.giocatori_squadra(s, sq, correnti), correnti)
+pagina = None
+if partita_id is not None:
+    with apri() as s:
+        pagina = componenti.carica_pagina_dettaglio(s, partita_id)
 
-if det is None:
+if pagina is None:
     st.error("Partita non trovata.")
     st.stop()
+
+det = pagina.dettaglio
+dati, partita = det.dati, det.partita
+cambi, extra, rosa = pagina.cambi, pagina.extra, pagina.rosa
+candidati = componenti.applica_quote(det.candidati, quote)
 
 casa, trasf = dati.nomi_squadre.get(dati.casa_id, ""), dati.nomi_squadre.get(dati.trasferta_id, "")
 st.header(f"{casa} – {trasf}")
@@ -72,7 +54,7 @@ if cambi:
         st.markdown(f"- {riga}")
 
 st.subheader("Candidati all'ammonizione")
-righe = componenti.righe_tabella(det.candidati, dati.nomi_squadre, det.tipster)
+righe = componenti.righe_tabella(candidati, dati.nomi_squadre, det.tipster)
 if not righe:
     st.info("Nessun candidato: mancano le formazioni e lo storico dei titolari.")
 else:
@@ -83,9 +65,9 @@ else:
         width="stretch",
     )
 
-nomi = {c.giocatore_id: c.nome for c in det.candidati}
+nomi = {c.giocatore_id: c.nome for c in candidati}
 
-for c in det.candidati:
+for c in candidati:
     info = extra[c.giocatore_id]
     squadra = dati.nomi_squadre.get(c.squadra_id, "")
     with st.expander(f"{c.nome} ({squadra}) · {componenti.percentuale(c.probabilita)}"):
@@ -135,7 +117,7 @@ for c in det.candidati:
             query_params={"partita": partita_id, "giocatore": c.giocatore_id},
         )
 
-if det.candidati:
+if candidati:
     st.subheader("Segnalazione tipster")
     with st.form("form_tipster", clear_on_submit=True):
         nome_tipster = st.text_input("Tipster", key="tipster_nome")

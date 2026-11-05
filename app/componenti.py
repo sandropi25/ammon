@@ -2,12 +2,12 @@
 le pagine si limitano a mostrare quello che restituiscono queste funzioni."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import riepilogo_cambi
@@ -23,10 +23,9 @@ from ammonizioni.db.modelli import (
     Squadra,
     UltimoAggiornamento,
 )
-from ammonizioni.motore.classifica import converti_quota
+from ammonizioni.motore.classifica import classifica, converti_quota
 from ammonizioni.motore.dati import carica_dati, carica_dati_calda
 from ammonizioni.motore.fattori.arbitro import fattore_arbitro
-from ammonizioni.motore.mercati import MercatoAmmonizioni
 from ammonizioni.motore.pesi import carica_pesi
 from ammonizioni.motore.tipi import Candidato, DatiPartita, decimale
 
@@ -222,14 +221,81 @@ def id_partita(valore) -> int | None:
         return None
 
 
+@dataclass(frozen=True)
+class PaginaDettaglio:
+    """Tutto quello che serve alla pagina Dettaglio, caricato con poche query (senza quote)."""
+    dettaglio: Dettaglio
+    cambi: list[str]
+    extra: dict[int, dict]
+    rosa: dict[int, tuple[list[tuple[int, str]], list[int]]]
+
+
+def applica_quote(candidati: list[Candidato], quote: dict[int, float]) -> list[Candidato]:
+    """Candidati con quota, probabilità implicita e valore delle quote inserite (la classifica
+    non dipende dalle quote, quindi basta ricalcolare questi tre campi)."""
+    if not quote:
+        return candidati
+    risultato = []
+    for c in candidati:
+        quota = quote.get(c.giocatore_id)
+        if not quota:
+            risultato.append(c)
+            continue
+        implicita = 1 / quota
+        risultato.append(
+            replace(c, quota=quota, prob_implicita=implicita, valore=c.probabilita - implicita)
+        )
+    return risultato
+
+
+def carica_pagina_dettaglio(s: Session, partita_id: int) -> PaginaDettaglio | None:
+    """Dettaglio, cambi, extra per candidato e rose delle formazioni probabili. Un solo
+    `carica_dati`; statistiche per 90' e storia con l'avversaria in query raggruppate."""
+    det = carica_dettaglio(s, partita_id, {})
+    if det is None:
+        return None
+    dati, partita = det.dati, det.partita
+    cambi = righe_cambi(s, det)
+
+    ids_giocatori = {c.giocatore_id for c in det.candidati}
+    avversari = {c.avversario_diretto_id for c in det.candidati if c.avversario_diretto_id}
+    stat = statistiche_90_batch(s, ids_giocatori | avversari, dati.stagione, dati.data)
+    def sq_avv(c: Candidato) -> int:
+        return dati.trasferta_id if c.squadra_id == dati.casa_id else dati.casa_id
+
+    storie = storia_contro_batch(
+        s, {(c.giocatore_id, sq_avv(c)) for c in det.candidati}, dati.data
+    )
+    giocatori = {
+        g.id: g
+        for g in s.execute(select(Giocatore).where(Giocatore.id.in_(ids_giocatori))).scalars()
+    } if ids_giocatori else {}
+    extra = {}
+    for c in det.candidati:
+        avv_id = c.avversario_diretto_id
+        sq = sq_avv(c)
+        extra[c.giocatore_id] = {
+            "stat": stat[c.giocatore_id],
+            "stat_avv": stat[avv_id] if avv_id else {"minuti": 0},
+            "storia": testo_storia(*storie[(c.giocatore_id, sq)], dati.nomi_squadre.get(sq, "")),
+            "link": link_esterni(giocatori[c.giocatore_id]),
+            "avversari": avversari_possibili(dati, c),
+        }
+    rosa = {}
+    if partita.stato_formazioni == "probabili":
+        for sq in (dati.casa_id, dati.trasferta_id):
+            correnti = [t.giocatore_id for t in dati.titolari if t.squadra_id == sq]
+            rosa[sq] = (giocatori_squadra(s, sq, correnti), correnti)
+    return PaginaDettaglio(dettaglio=det, cambi=cambi, extra=extra, rosa=rosa)
+
+
 def carica_dettaglio(s: Session, partita_id: int, quote: dict[int, float]) -> Dettaglio | None:
     partita = s.get(Partita, partita_id)
     if partita is None:
         return None
     dati = carica_dati(s, partita_id)
-    candidati = MercatoAmmonizioni().classifica(
-        s, partita_id, quote=quote or None, titolari=dati.titolari
-    )
+    # una sola lettura dei dati: la classifica lavora sullo snapshot gia' caricato
+    candidati = classifica(dati, carica_pesi(s), quote or None)
     return Dettaglio(
         partita=InfoPartita(partita.id, partita.data_utc, partita.giornata, partita.stato_formazioni),
         dati=dati,
@@ -331,31 +397,52 @@ def avversari_possibili(dati: DatiPartita, candidato: Candidato) -> list[tuple[i
     ]
 
 
-def statistiche_90(s: Session, giocatore_id: int, stagione: int, prima_di: datetime) -> dict[str, float]:
-    """Medie per 90 minuti (gialli, falli, falli subiti, dribbling) nelle ultime 3 stagioni."""
+def statistiche_90_batch(
+    s: Session, giocatori: set[int], stagione: int, prima_di: datetime
+) -> dict[int, dict[str, float]]:
+    """Medie per 90 minuti (gialli, falli, falli subiti, dribbling) nelle ultime 3 stagioni
+    di più giocatori con una sola query raggruppata."""
+    risultato: dict[int, dict[str, float]] = {g: {"minuti": 0} for g in giocatori}
+    if not giocatori:
+        return risultato
     righe = s.execute(
-        select(Presenza)
+        select(
+            Presenza.giocatore_id,
+            func.sum(Presenza.minuti),
+            func.sum(Presenza.gialli),
+            func.sum(Presenza.falli_commessi),
+            func.sum(Presenza.falli_subiti),
+            func.sum(Presenza.dribbling_tentati),
+        )
         .join(Partita, Partita.id == Presenza.partita_id)
         .where(
-            Presenza.giocatore_id == giocatore_id,
+            Presenza.giocatore_id.in_(giocatori),
             Partita.data_utc < prima_di,
             Partita.stagione.in_((stagione, stagione - 1, stagione - 2)),
         )
-    ).scalars().all()
-    minuti = sum(r.minuti for r in righe)
-    if minuti <= 0:
-        return {"minuti": 0}
+        .group_by(Presenza.giocatore_id)
+    ).all()
+    for gid, minuti, gialli, falli, subiti, dribbling in righe:
+        minuti = int(minuti or 0)
+        if minuti <= 0:
+            continue
 
-    def per90(valore: int) -> float:
-        return valore / minuti * 90
+        def per90(valore) -> float:
+            return int(valore or 0) / minuti * 90
 
-    return {
-        "minuti": minuti,
-        "gialli90": per90(sum(r.gialli for r in righe)),
-        "falli90": per90(sum(r.falli_commessi for r in righe)),
-        "falli_subiti90": per90(sum(r.falli_subiti for r in righe)),
-        "dribbling90": per90(sum(r.dribbling_tentati for r in righe)),
-    }
+        risultato[gid] = {
+            "minuti": minuti,
+            "gialli90": per90(gialli),
+            "falli90": per90(falli),
+            "falli_subiti90": per90(subiti),
+            "dribbling90": per90(dribbling),
+        }
+    return risultato
+
+
+def statistiche_90(s: Session, giocatore_id: int, stagione: int, prima_di: datetime) -> dict[str, float]:
+    """Medie per 90 minuti (gialli, falli, falli subiti, dribbling) nelle ultime 3 stagioni."""
+    return statistiche_90_batch(s, {giocatore_id}, stagione, prima_di)[giocatore_id]
 
 
 def righe_duello(stat_a: dict[str, float], stat_b: dict[str, float]) -> list[dict[str, str]]:
@@ -376,22 +463,42 @@ def righe_duello(stat_a: dict[str, float], stat_b: dict[str, float]) -> list[dic
     ]
 
 
+def storia_contro_batch(
+    s: Session, coppie: set[tuple[int, int]], prima_di: datetime
+) -> dict[tuple[int, int], tuple[int, int]]:
+    """Per ogni (giocatore, squadra avversaria): (partite giocate, gialli presi) contro di
+    essa, con una sola query."""
+    risultato = {c: (0, 0) for c in coppie}
+    if not coppie:
+        return risultato
+    giocatori = {g for g, _ in coppie}
+    squadre = {q for _, q in coppie}
+    righe = s.execute(
+        select(Presenza.giocatore_id, Presenza.squadra_id, Presenza.gialli,
+               Partita.casa_id, Partita.trasferta_id)
+        .join(Partita, Partita.id == Presenza.partita_id)
+        .where(
+            Presenza.giocatore_id.in_(giocatori),
+            Presenza.minuti > 0,
+            Partita.data_utc < prima_di,
+            Partita.casa_id.in_(squadre) | Partita.trasferta_id.in_(squadre),
+        )
+    ).all()
+    for gid, sq_giocatore, gialli, casa, trasf in righe:
+        for avversaria in (casa, trasf):
+            chiave = (gid, avversaria)
+            if chiave in risultato and sq_giocatore != avversaria:
+                giocate, presi = risultato[chiave]
+                risultato[chiave] = (giocate + 1, presi + gialli)
+    return risultato
+
+
 def storia_contro(
     s: Session, giocatore_id: int, squadra_avversaria_id: int, prima_di: datetime
 ) -> tuple[int, int]:
     """(partite giocate, gialli presi) dal giocatore contro la squadra avversaria."""
-    righe = s.execute(
-        select(Presenza)
-        .join(Partita, Partita.id == Presenza.partita_id)
-        .where(
-            Presenza.giocatore_id == giocatore_id,
-            Presenza.minuti > 0,
-            Presenza.squadra_id != squadra_avversaria_id,
-            Partita.data_utc < prima_di,
-            (Partita.casa_id == squadra_avversaria_id) | (Partita.trasferta_id == squadra_avversaria_id),
-        )
-    ).scalars().all()
-    return len(righe), sum(r.gialli for r in righe)
+    chiave = (giocatore_id, squadra_avversaria_id)
+    return storia_contro_batch(s, {chiave}, prima_di)[chiave]
 
 
 def testo_storia(partite: int, gialli: int, squadra: str) -> str:
