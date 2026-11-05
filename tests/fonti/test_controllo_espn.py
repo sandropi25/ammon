@@ -100,6 +100,36 @@ def test_key_events_senza_minuto():
     assert any("keyEvents" in p for p in controlla_struttura(FonteSummary(corpo)))
 
 
+@pytest.mark.parametrize("nodo", ["team", "athlete", "position", "roster_voce"])
+@pytest.mark.parametrize("forma", ["stringa", ["lista"], 42])
+def test_nodo_con_forma_inattesa_diventa_un_problema(nodo, forma):
+    corpo = riepilogo()
+    if nodo == "team":
+        for r in corpo["rosters"]:
+            r["team"] = forma
+    elif nodo == "roster_voce":
+        corpo["rosters"][0]["roster"] = [forma] + corpo["rosters"][0]["roster"]
+    else:
+        for g in giocatori(corpo):
+            g[nodo] = forma
+    problemi = controlla_struttura(FonteSummary(corpo))  # non solleva
+    assert problemi or nodo == "roster_voce"
+    assert all(isinstance(p, str) for p in problemi)
+
+
+def test_eccezione_inattesa_diventa_un_problema():
+    class Rotta:
+        def summary(self, partita_id):
+            raise AttributeError("'str' object has no attribute 'get'")
+
+    problemi = controlla_struttura(Rotta())
+    assert len(problemi) == 1 and problemi[0].startswith("struttura inattesa: AttributeError(")
+
+
+def test_corpo_non_oggetto_e_un_problema():
+    assert controlla_struttura(FonteSummary(["a"])) == ["manca 'rosters'"]
+
+
 def test_lettura_fallita_e_un_problema_non_un_errore():
     problemi = controlla_struttura(FonteSummary(ErroreFonte("HTTP 404")))
     assert len(problemi) == 1 and "HTTP 404" in problemi[0]

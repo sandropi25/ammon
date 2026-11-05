@@ -11,15 +11,27 @@ PARTITA_CONTROLLO = 401874963
 STATISTICHE_USATE = ("foulsCommitted", "foulsSuffered", "yellowCards", "redCards")
 
 
+def _nodo(valore) -> dict:
+    """Il nodo se e' un oggetto JSON, altrimenti un oggetto vuoto (campo mancante)."""
+    return valore if isinstance(valore, dict) else {}
+
+
 def controlla_struttura(fonte) -> list[str]:
     """Scarica la partita di controllo e restituisce i problemi trovati (lista vuota se la
-    struttura e' quella attesa). Non solleva mai ErroreFonte: la lettura fallita e' un problema."""
+    struttura e' quella attesa). Non solleva mai: una lettura fallita o una forma
+    inattesa dei dati e' un problema da riportare."""
     try:
-        corpo = fonte.summary(PARTITA_CONTROLLO)
+        return _controlla(fonte)
     except ErroreFonte as errore:
         return [f"partita di controllo {PARTITA_CONTROLLO} non letta: {errore}"]
+    except Exception as errore:  # noqa: BLE001 - ESPN puo' cambiare forma in qualsiasi punto
+        return [f"struttura inattesa: {errore!r}"]
+
+
+def _controlla(fonte) -> list[str]:
+    corpo = fonte.summary(PARTITA_CONTROLLO)
     problemi: list[str] = []
-    rosters = corpo.get("rosters") if isinstance(corpo, dict) else None
+    rosters = _nodo(corpo).get("rosters")
     if not isinstance(rosters, list) or not rosters:
         return ["manca 'rosters'"]
 
@@ -31,7 +43,7 @@ def controlla_struttura(fonte) -> list[str]:
         if not isinstance(roster, dict):
             senza["roster"] += 1
             continue
-        if not isinstance((roster.get("team") or {}).get("id"), (str, int)):
+        if not isinstance(_nodo(roster.get("team")).get("id"), (str, int)):
             senza["team.id"] += 1
         voci = roster.get("roster")
         if not isinstance(voci, list) or not voci:
@@ -41,14 +53,14 @@ def controlla_struttura(fonte) -> list[str]:
             if not isinstance(voce, dict):
                 continue
             giocatori += 1
-            atleta = voce.get("athlete") or {}
+            atleta = _nodo(voce.get("athlete"))
             if atleta.get("id") in (None, ""):
                 senza["athlete.id"] += 1
             if not atleta.get("displayName"):
                 senza["athlete.displayName"] += 1
             if voce.get("starter"):
                 titolari += 1
-                if not (voce.get("position") or {}).get("abbreviation"):
+                if not _nodo(voce.get("position")).get("abbreviation"):
                     senza["position.abbreviation (titolari)"] += 1
             stats = voce.get("stats")
             if not isinstance(stats, list) or not stats:
@@ -69,12 +81,11 @@ def controlla_struttura(fonte) -> list[str]:
         if n:
             problemi.append(f"statistica '{nome}' mancante ({n} giocatori)")
 
-    eventi = corpo.get("keyEvents")
+    eventi = _nodo(corpo).get("keyEvents")
     if not isinstance(eventi, list) or not eventi:
         problemi.append("manca 'keyEvents'")
     elif not any(
-        isinstance(e, dict)
-        and isinstance(e.get("clock"), dict)
+        isinstance(_nodo(e).get("clock"), dict)
         and isinstance(e["clock"].get("displayValue"), str)
         for e in eventi
     ):

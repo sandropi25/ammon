@@ -139,7 +139,15 @@ def _scarica_calendari(s: Session, fonte: Fonte, oggi: datetime, verifica_tempo)
 def max_minuti_da_env() -> int:
     """Minuti massimi di una esecuzione di `avanza`: STORICO_MAX_MINUTI (default 40)."""
     valore = os.environ.get("STORICO_MAX_MINUTI", "").strip()
-    return int(valore) if valore else MINUTI_MASSIMI_STORICO
+    if not valore:
+        return MINUTI_MASSIMI_STORICO
+    try:
+        return int(valore)
+    except ValueError:
+        log.warning(
+            "STORICO_MAX_MINUTI=%r non e' un numero: uso %s minuti", valore, MINUTI_MASSIMI_STORICO
+        )
+        return MINUTI_MASSIMI_STORICO
 
 
 def _collega_arbitri_stagioni(s: Session, fonte_fd) -> bool:

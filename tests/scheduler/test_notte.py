@@ -132,6 +132,29 @@ def test_controllo_con_problemi_logga_segna_incompleto_e_prosegue(sessione, capl
     ]
 
 
+def test_controllo_che_solleva_non_ferma_il_job(sessione, caplog):
+    """Anche un controllo che esplode: problema nel log, completo=False, statistiche ed esiti fatti."""
+    notturno.aggiorna_calendario(sessione, FonteFinta(calendari={(135, 2026): [partita_senza_arbitro()]}))
+    sessione.add(Giocatore(id=701, nome="Giocatore 7"))
+    giocata = aggiungi_giocata(sessione, 7, 701, "Tipster", 3.0, 10.0, date(2026, 9, 6))
+    sessione.commit()
+
+    def controllo(fonte):
+        raise AttributeError("'str' object has no attribute 'get'")
+
+    fd = FonteFdFinta([voce_ieri()])
+    fonte = FonteFinta(calendari={(135, 2026): [partita_senza_arbitro()]})
+    with caplog.at_level(logging.ERROR, logger="ammonizioni.caricamento.notturno"):
+        r = notturno.esegui(sessione, fonte, adesso=ADESSO, fonte_fd=fd, controllo=controllo)
+    assert r.completo is False
+    assert sessione.get(Partita, 7).statistiche_scaricate is True
+    assert sessione.get(Partita, 7).arbitro_id is not None
+    assert sessione.get(Giocata, giocata.id).esito == "vinta"
+    assert sessione.get(UltimoAggiornamento, "notte").completo is False
+    assert any("struttura dei dati ESPN è cambiata: struttura inattesa" in x.getMessage()
+               for x in caplog.records)
+
+
 def test_controllo_senza_problemi_lascia_completo(sessione):
     fonte = FonteFinta(calendari={(135, 2026): [partita_senza_arbitro()]})
     r = notturno.esegui(sessione, fonte, adesso=ADESSO, controllo=lambda f: [])
@@ -212,6 +235,24 @@ def test_main_notte_controllo_di_salute_solo_con_espn(db_file, monkeypatch):
     monkeypatch.setenv("FONTE_DATI", "api_football")
     notte.main([], crea_fonte=lambda s, p: FonteFinta(), crea_fd=lambda s: None, controllo=controllo)
     assert chiamate == []
+
+
+def test_main_notte_api_football_non_usa_football_data(db_file, monkeypatch):
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    creati = []
+
+    def crea_fd(s):
+        creati.append(s)
+        return FonteFdFinta([voce_ieri()])
+
+    ieri = datetime.now(timezone.utc) - timedelta(days=1)
+    calendari = {(135, 2026): [partita_dati(7, ieri, arbitro=None)]}
+    assert notte.main(
+        [], crea_fonte=lambda s, p: FonteFinta(calendari=calendari), crea_fd=crea_fd
+    ) == 0
+    assert creati == []
+    with leggi_db(db_file) as s:
+        assert s.get(Partita, 7).arbitro_id is None  # nessun collegamento da football-data
 
 
 def test_main_notte_struttura_cambiata_completo_false_e_prosegue(db_file, caplog):

@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta, timezone
 
 from conftest import FonteFinta, partita_dati
@@ -254,7 +255,7 @@ def test_avanza_collega_gli_arbitri_una_volta_per_stagione_intera(sessione):
         ArbitroPartita(p.data_utc, "Juventus FC", "FC Internazionale Milano", 1, "Davide Massa")
         for p in cal[(135, 2025)]
     ]
-    fd =FonteFdStagioni(voci)
+    fd = FonteFdStagioni(voci)
     storico.avanza(sessione, FonteFinta(calendari=cal), fd)
     assert fd.chiamate == [("SA", date(2025, 7, 1), date(2026, 6, 30))]  # una richiesta, 2025
     for partita_id in (1, 2):
@@ -295,3 +296,10 @@ def test_avanza_non_collega_stagioni_senza_calendario(sessione):
     storico.avanza(sessione, FonteFinta(calendari={}), fd)
     assert fd.chiamate == []  # nessuna partita nel database: niente da collegare
     assert not repo.leggi_impostazione(sessione, "arbitri_collegati")
+
+
+def test_max_minuti_non_numerico_usa_il_default_con_avviso(monkeypatch, caplog):
+    monkeypatch.setenv("STORICO_MAX_MINUTI", "quaranta")
+    with caplog.at_level(logging.WARNING, logger="ammonizioni.caricamento.storico"):
+        assert storico.max_minuti_da_env() == 40
+    assert any("STORICO_MAX_MINUTI" in x.getMessage() for x in caplog.records)

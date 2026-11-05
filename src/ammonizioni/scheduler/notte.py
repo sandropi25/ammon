@@ -33,13 +33,12 @@ def main(
         except ErroreConfigurazione as errore:
             log.error("%s", errore)
             return 2
-        fonte_fd = crea_fd(s)
+        espn = config.fonte_dati() == "espn"
+        # con API-Football gli arbitri arrivano gia' dalla fonte: football-data non serve
+        fonte_fd = crea_fd(s) if espn else None
         # il controllo di salute vale solo per ESPN (API non ufficiale)
         riepilogo = notturno.esegui(
-            s,
-            fonte_oggi,
-            fonte_fd=fonte_fd,
-            controllo=controllo if config.fonte_dati() == "espn" else None,
+            s, fonte_oggi, fonte_fd=fonte_fd, controllo=controllo if espn else None
         )
         log.info(
             "Notte: %s richieste, %s partite aggiornate, completo=%s",

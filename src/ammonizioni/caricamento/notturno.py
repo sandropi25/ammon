@@ -229,7 +229,12 @@ def esegui(
     completo = True
     try:
         if controllo is not None:
-            problemi = controllo(fonte)
+            try:
+                problemi = controllo(fonte)
+            except LimiteSuperato:
+                raise
+            except Exception as errore:  # noqa: BLE001 - il controllo non deve fermare il job
+                problemi = [f"struttura inattesa: {errore!r}"]
             if problemi:
                 log.error("La struttura dei dati ESPN è cambiata: %s", "; ".join(problemi))
                 completo = False
