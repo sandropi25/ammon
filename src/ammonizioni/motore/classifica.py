@@ -1,5 +1,6 @@
 import math
 
+from ammonizioni.config import campionato_di
 from ammonizioni.motore.fattori.base import base_giocatore, tasso_base90
 from ammonizioni.motore.fattori.arbitro import fattore_arbitro
 from ammonizioni.motore.fattori.contesto import fattore_contesto
@@ -80,7 +81,14 @@ def classifica(
             avv_id = None
         storico_avv = dati.storico.get(avv_id, []) if avv_id is not None else []
 
-        base = base_giocatore(storico, ruolo, medie, dati.stagione, pesi)
+        # base e situazione: solo campionato della partita, sua coppa ed Europa (un altro
+        # campionato ha un'altra severita'); la storia con l'avversario usa tutto lo storico
+        storico_lega = [
+            r for r in storico
+            if campionato_di(r.competizione_id) in (None, dati.campionato_id)
+        ]
+
+        base = base_giocatore(storico_lega, ruolo, medie, dati.stagione, pesi)
         duello = fattore_duello(avv, storico_avv, medie, pesi)
         arbitro = fattore_arbitro(dati.arbitro, t.squadra_id, medie, pesi)
         contesto = fattore_contesto(dati.contesto, t.squadra_id, medie, pesi)
@@ -89,12 +97,12 @@ def classifica(
             avversario_squadra,
             dati.contesto.rivalita,
             storico_avv,
-            tasso_base90(storico, ruolo, medie, dati.stagione, pesi),
+            tasso_base90(storico_lega, ruolo, medie, dati.stagione, pesi),
             pesi,
             nome_avversario=dati.nomi_squadre.get(avversario_squadra, ""),
             nome_avv_diretto=avv.nome if avv else "",
         )
-        situazione = fattore_situazione(storico, dati.stagione, pesi, dati.campionato_id)
+        situazione = fattore_situazione(storico_lega, dati.stagione, pesi, dati.campionato_id)
         fattori = [base, duello, arbitro, contesto, storia, situazione]
 
         p = base.valore

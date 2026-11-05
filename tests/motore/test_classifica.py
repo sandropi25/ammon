@@ -56,6 +56,45 @@ def test_probabilita_limitata_tra_2_e_70():
     assert next(c for c in classifica(bassi, Pesi()) if c.giocatore_id == 10).probabilita == 0.02
 
 
+def _fattori(dati, giocatore_id=10):
+    c = next(x for x in classifica(dati, Pesi()) if x.giocatore_id == giocatore_id)
+    return {f.nome: f for f in c.fattori}
+
+
+def test_storico_di_altro_campionato_non_cambia_base_e_situazione():
+    """Un giocatore di Serie A con tanti gialli in Liga: base e situazione restano quelli
+    calcolati solo con Serie A, Coppa Italia ed Europa (la Liga non e' il suo campionato)."""
+    serie_a = _righe(10, gialli=0) + _righe(3, gialli=0, competizione_id=137)
+    europa = _righe(3, gialli=0, competizione_id=2)
+    liga = _righe(15, gialli=2, competizione_id=140, titolare=False) + _righe(
+        5, gialli=1, competizione_id=143
+    )
+    senza = _fattori(_dati(storico={10: serie_a + europa}))
+    con = _fattori(_dati(storico={10: serie_a + europa + liga}))
+    assert con["base"].valore == senza["base"].valore
+    assert con["base"].n_dati == senza["base"].n_dati
+    assert con["situazione"].valore == senza["situazione"].valore
+    assert con["situazione"].n_dati == senza["situazione"].n_dati
+
+
+def test_storico_coppa_nazionale_e_europa_contano():
+    """Coppa Italia ed Europa restano nella base di un giocatore di Serie A."""
+    solo_campionato = _fattori(_dati(storico={10: _righe(10, gialli=0)}))
+    con_coppe = _fattori(
+        _dati(storico={10: _righe(10, gialli=0) + _righe(5, gialli=2, competizione_id=137)
+                       + _righe(5, gialli=2, competizione_id=2)})
+    )
+    assert con_coppe["base"].valore > solo_campionato["base"].valore
+
+
+def test_storia_mantiene_tutte_le_competizioni():
+    """Il fattore storia (precedenti con l'avversario) resta trasversale ai campionati."""
+    liga = [riga(competizione_id=140, avversario_id=2, gialli=1) for _ in range(4)]
+    senza = _fattori(_dati(storico={10: _righe(10, gialli=0)}))
+    con = _fattori(_dati(storico={10: _righe(10, gialli=0) + liga}))
+    assert con["storia"].n_dati > senza["storia"].n_dati
+
+
 def test_portieri_esclusi():
     ids = [c.giocatore_id for c in classifica(_dati(), Pesi())]
     assert 11 not in ids and {10, 20} <= set(ids)
