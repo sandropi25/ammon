@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
+import cache_dati  # noqa: E402
 import componenti  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.caricamento.formazioni import salva_probabili  # noqa: E402
@@ -28,8 +29,7 @@ quote: dict[int, float] = st.session_state.setdefault(f"quote_{partita_id}", {})
 
 pagina = None
 if partita_id is not None:
-    with apri() as s:
-        pagina = componenti.carica_pagina_dettaglio(s, partita_id)
+    pagina = cache_dati.pagina_dettaglio(partita_id)
 
 if pagina is None:
     st.error("Partita non trovata.")
@@ -93,10 +93,12 @@ for c in candidati:
         if scelto is not None and scelto != c.avversario_diretto_id:
             with apri() as s:
                 componenti.salva_duello(s, partita_id, c.giocatore_id, scelto)
+            cache_dati.svuota()
             st.rerun()
         if scelto is None and c.giocatore_id in dati.duelli_manuali:
             with apri() as s:
                 componenti.rimuovi_duello(s, partita_id, c.giocatore_id)
+            cache_dati.svuota()
             del st.session_state[f"duello_{c.giocatore_id}"]  # torna l'avversario automatico
             st.rerun()
 
@@ -135,6 +137,7 @@ if candidati:
         except ValueError as errore:
             st.error(str(errore))
         else:
+            cache_dati.svuota()
             st.rerun()
 
 if rosa:
@@ -157,4 +160,5 @@ if rosa:
                 {sq: list(st.session_state[f"probabili_{sq}"]) for sq in rosa},
                 griglie={t.giocatore_id: t.griglia for t in dati.titolari},
             )
+        cache_dati.svuota()
         st.rerun()

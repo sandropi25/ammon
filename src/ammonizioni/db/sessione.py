@@ -23,6 +23,12 @@ def crea_engine(url: str) -> Engine:
         return create_engine(
             url, connect_args={"check_same_thread": False}, poolclass=StaticPool
         )
+    if url.startswith("postgresql"):
+        # Supabase (pooler) chiude le connessioni inattive: pre-ping e riciclo prima della
+        # chiusura; pochi collegamenti per processo (l'app ha pochi utenti contemporanei)
+        return create_engine(
+            url, pool_pre_ping=True, pool_size=3, max_overflow=2, pool_recycle=280
+        )
     return create_engine(url, pool_pre_ping=True)
 
 

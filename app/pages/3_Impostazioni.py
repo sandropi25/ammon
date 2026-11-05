@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st  # noqa: E402
 
+import cache_dati  # noqa: E402
 import componenti_giocate as cg  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.db import repo  # noqa: E402
@@ -38,6 +39,7 @@ def elenco_con_rimozione(voci: list[cg.VoceLista]) -> None:
         if colonne[1].button("Rimuovi", key=f"rimuovi_lista_{voce.id}"):
             with apri() as s:
                 cg.rimuovi_voce(s, voce.id)
+            cache_dati.svuota()  # derby e campi caldi cambiano il badge "partita calda"
             st.rerun()
 
 
@@ -63,6 +65,7 @@ else:
         except ValueError as errore:
             st.error(str(errore))
         else:
+            cache_dati.svuota()
             st.rerun()
 
 st.header("Campi caldi")
@@ -79,6 +82,7 @@ if squadre:
         except ValueError as errore:
             st.error(str(errore))
         else:
+            cache_dati.svuota()
             st.rerun()
 
 # ---------------------------------------------------------------- pesi
@@ -116,10 +120,12 @@ if salva:
     else:
         with apri() as s:
             salva_pesi(s, nuovi)
+        cache_dati.svuota()
         st.rerun()
 if ripristina:
     with apri() as s:
         salva_pesi(s, Pesi())
+    cache_dati.svuota()
     for nome, _ in scalari:
         del st.session_state[f"peso_{nome}"]
     for nome in nomi_tuple:

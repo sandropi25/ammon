@@ -7,9 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import streamlit as st  # noqa: E402
 
+import cache_dati  # noqa: E402
 import componenti  # noqa: E402
 from auth import richiedi_password  # noqa: E402
-from ammonizioni.db.sessione import apri  # noqa: E402
 
 st.set_page_config(page_title="Ammonizioni Serie A e Liga", layout="wide")
 richiedi_password()
@@ -25,11 +25,9 @@ filtro = st.radio(
 )
 
 adesso = datetime.now(timezone.utc)
-with apri() as s:
-    testo_agg, completo = componenti.stato_aggiornamento(s)
-    partite = componenti.prossime_partite(
-        s, adesso, campionati=componenti.campionati_del_filtro(filtro)
-    )
+testo_agg, completo, partite = cache_dati.pagina_partite(
+    adesso, componenti.campionati_del_filtro(filtro)
+)
 
 st.caption(testo_agg)
 if not completo:
