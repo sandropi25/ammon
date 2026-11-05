@@ -1,0 +1,20 @@
+{
+ "rosters": [
+  {
+   "homeAway": "home",
+   "winner": false,
+   "team": {
+    "id": "17530",
+    "displayName": "Venezia"
+   }
+  },
+  {
+   "homeAway": "away",
+   "winner": false,
+   "team": {
+    "id": "118",
+    "displayName": "Udinese"
+   }
+  }
+ ]
+}

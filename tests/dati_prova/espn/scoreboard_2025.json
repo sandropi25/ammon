@@ -1,0 +1,148 @@
+{
+ "events": [
+  {
+   "id": "712297",
+   "date": "2025-01-04T14:00Z",
+   "name": "Empoli at Venezia",
+   "shortName": "EMP @ VEN",
+   "season": {
+    "year": 2024,
+    "type": 12750,
+    "slug": "2024-25-italian-serie-a"
+   },
+   "status": {
+    "type": {
+     "id": "28",
+     "name": "STATUS_FULL_TIME",
+     "state": "post",
+     "completed": true,
+     "detail": "FT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "712297",
+     "date": "2025-01-04T14:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "1",
+       "team": {
+        "id": "17530",
+        "abbreviation": "VEN",
+        "displayName": "Venezia"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": false,
+       "score": "1",
+       "team": {
+        "id": "2574",
+        "abbreviation": "EMP",
+        "displayName": "Empoli"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "736790",
+   "date": "2025-08-23T16:30Z",
+   "name": "Lecce at Genoa",
+   "shortName": "LEC @ GEN",
+   "season": {
+    "year": 2025,
+    "type": 13447,
+    "slug": "2025-26-italian-serie-a"
+   },
+   "status": {
+    "type": {
+     "id": "28",
+     "name": "STATUS_FULL_TIME",
+     "state": "post",
+     "completed": true,
+     "detail": "FT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "736790",
+     "date": "2025-08-23T16:30Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "0",
+       "team": {
+        "id": "3263",
+        "abbreviation": "GEN",
+        "displayName": "Genoa"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": false,
+       "score": "0",
+       "team": {
+        "id": "113",
+        "abbreviation": "LEC",
+        "displayName": "Lecce"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "736938",
+   "date": "2025-12-20T17:00Z",
+   "name": "Cremonese at Lazio",
+   "shortName": "CRE @ LAZ",
+   "season": {
+    "year": 2025,
+    "type": 13447,
+    "slug": "2025-26-italian-serie-a"
+   },
+   "status": {
+    "type": {
+     "id": "28",
+     "name": "STATUS_FULL_TIME",
+     "state": "post",
+     "completed": true,
+     "detail": "FT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "736938",
+     "date": "2025-12-20T17:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "0",
+       "team": {
+        "id": "112",
+        "abbreviation": "LAZ",
+        "displayName": "Lazio"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": false,
+       "score": "0",
+       "team": {
+        "id": "4050",
+        "abbreviation": "CRE",
+        "displayName": "Cremonese"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

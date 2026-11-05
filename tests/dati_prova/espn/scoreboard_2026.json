@@ -1,0 +1,148 @@
+{
+ "events": [
+  {
+   "id": "737051",
+   "date": "2026-03-01T11:30Z",
+   "name": "AC Milan at Cremonese",
+   "shortName": "MIL @ CRE",
+   "season": {
+    "year": 2025,
+    "type": 13447,
+    "slug": "2025-26-italian-serie-a"
+   },
+   "status": {
+    "type": {
+     "id": "28",
+     "name": "STATUS_FULL_TIME",
+     "state": "post",
+     "completed": true,
+     "detail": "FT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "737051",
+     "date": "2026-03-01T11:30Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "0",
+       "team": {
+        "id": "4050",
+        "abbreviation": "CRE",
+        "displayName": "Cremonese"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": true,
+       "score": "2",
+       "team": {
+        "id": "103",
+        "abbreviation": "MIL",
+        "displayName": "AC Milan"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401874744",
+   "date": "2026-09-04T18:45Z",
+   "name": "Como at Genoa",
+   "shortName": "COMO @ GEN",
+   "season": {
+    "year": 2026,
+    "type": 14240,
+    "slug": "2026-27-italian-serie-a"
+   },
+   "status": {
+    "type": {
+     "id": "28",
+     "name": "STATUS_FULL_TIME",
+     "state": "post",
+     "completed": true,
+     "detail": "FT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401874744",
+     "date": "2026-09-04T18:45Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "1",
+       "team": {
+        "id": "3263",
+        "abbreviation": "GEN",
+        "displayName": "Genoa"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": true,
+       "score": "4",
+       "team": {
+        "id": "2572",
+        "abbreviation": "COMO",
+        "displayName": "Como"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401874815",
+   "date": "2026-11-06T19:45Z",
+   "name": "Udinese at Venezia",
+   "shortName": "UDI @ VEN",
+   "season": {
+    "year": 2026,
+    "type": 14240,
+    "slug": "2026-27-italian-serie-a"
+   },
+   "status": {
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "detail": "Fri, November 6th at 2:45 PM EST"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401874815",
+     "date": "2026-11-06T19:45Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "0",
+       "team": {
+        "id": "17530",
+        "abbreviation": "VEN",
+        "displayName": "Venezia"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": false,
+       "score": "0",
+       "team": {
+        "id": "118",
+        "abbreviation": "UDI",
+        "displayName": "Udinese"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
