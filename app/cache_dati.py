@@ -11,6 +11,7 @@ from datetime import datetime
 import streamlit as st
 
 import componenti
+import componenti_cerca
 from ammonizioni import config
 from ammonizioni.db.sessione import apri
 
@@ -65,6 +66,51 @@ def pagina_dettaglio(partita_id: int):
         return _pagina_dettaglio(config.url_database(), partita_id)
     except LookupError:
         return None
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=2, show_spinner=False)
+def _indice_ricerca(db: str):
+    with apri(db) as s:
+        return componenti_cerca.carica_indice(s)
+
+
+def indice_ricerca():
+    """Nomi di giocatori e squadre per la pagina Cerca (caricati una volta, poi in cache)."""
+    return _indice_ricerca(config.url_database())
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=50, show_spinner=False)
+def _scheda_giocatore(db: str, giocatore_id: int, blocco: datetime):
+    with apri(db) as s:
+        scheda = componenti_cerca.scheda_giocatore(s, giocatore_id, blocco)
+    if scheda is None:
+        raise LookupError(giocatore_id)  # le eccezioni non finiscono in cache
+    return scheda
+
+
+def scheda_giocatore(giocatore_id: int, adesso: datetime):
+    """SchedaGiocatore (cache per ora intera), o None se il giocatore non esiste."""
+    blocco = adesso.replace(minute=0, second=0, microsecond=0)
+    try:
+        return _scheda_giocatore(config.url_database(), giocatore_id, blocco)
+    except LookupError:
+        return None
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=50, show_spinner=False)
+def _partite_squadra(db: str, squadra_id: int, blocco: datetime):
+    with apri(db) as s:
+        # un'ora in piu' all'inizio: il filtro esatto su "adesso" si fa fuori dalla cache
+        return componenti_cerca.partite_squadra(
+            s, squadra_id, blocco, giorni=componenti_cerca.GIORNI_SQUADRA + 1
+        )
+
+
+def partite_squadra(squadra_id: int, adesso: datetime):
+    """Partite della squadra nei prossimi 30 giorni (cache per ora intera)."""
+    blocco = adesso.replace(minute=0, second=0, microsecond=0)
+    righe = _partite_squadra(config.url_database(), squadra_id, blocco)
+    return componenti.nella_finestra(righe, adesso, giorni=componenti_cerca.GIORNI_SQUADRA)
 
 
 def svuota() -> None:

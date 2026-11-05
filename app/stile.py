@@ -420,6 +420,31 @@ html, body, .stApp {{
 .cr-voci dt {{ color: var(--cr-testo2); }}
 .cr-voci dd {{ margin: 0; font-weight: 700; text-align: right; color: var(--cr-testo); }}
 
+/* pagina Cerca: tabelle a scorrimento orizzontale e schede dei risultati */
+.cr-tabella-scroll {{
+  overflow-x: auto; background: var(--cr-superficie); border: 1px solid var(--cr-bordo);
+  border-radius: 14px; box-shadow: var(--cr-ombra); margin-bottom: 1rem;
+}}
+.cr-tabella {{ width: 100%; border-collapse: collapse; font-size: .9rem; }}
+.cr-tabella th {{
+  text-align: right; padding: .55rem .7rem; color: var(--cr-testo2); font-weight: 600;
+  font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+  border-bottom: 1px solid var(--cr-bordo);
+}}
+.cr-tabella td {{ text-align: right; padding: .5rem .7rem; color: var(--cr-testo); white-space: nowrap; }}
+.cr-tabella tr + tr td {{ border-top: 1px solid var(--cr-bordo); }}
+.cr-tabella th:first-child, .cr-tabella td:first-child,
+.cr-tabella th:nth-child(2), .cr-tabella td:nth-child(2) {{ text-align: left; }}
+.cr-tabella td.cr-forte {{ font-weight: 700; }}
+.cr-testa-giocatore {{
+  background: var(--cr-superficie); border: 1px solid var(--cr-bordo); border-radius: 14px;
+  box-shadow: var(--cr-ombra); padding: 14px 16px; margin-bottom: .8rem;
+}}
+.cr-testa-nome {{
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 2rem; line-height: 1.05;
+  color: var(--cr-testo);
+}}
+
 /* telefono: una colonna, sfondo più rado, niente tabelle larghe */
 @media (max-width: 640px) {{
   [data-testid="stAppViewContainer"] {{ background-image: url("{sfondo_tel}"); }}
@@ -572,6 +597,46 @@ def riquadro_statistiche(riga: dict) -> str:
         '<div class="cr-tessera">'
         f'<div class="cr-tessera-titolo">{escape(str(riga.get("Fonte", "")))}</div>'
         + _voci(voci) + "</div>"
+    )
+
+
+def tabella(colonne: tuple[str, ...] | list[str], righe: list[list[str]]) -> str:
+    """Tabella HTML che scorre in orizzontale dentro la sua scheda (nessuno scorrimento della
+    pagina); tutte le celle sono testo con escape."""
+    testa = "".join(f"<th>{escape(c)}</th>" for c in colonne)
+    corpo = "".join(
+        "<tr>" + "".join(f"<td>{escape(str(c))}</td>" for c in riga) + "</tr>" for riga in righe
+    )
+    return (
+        '<div class="cr-tabella-scroll"><table class="cr-tabella">'
+        f"<thead><tr>{testa}</tr></thead><tbody>{corpo}</tbody></table></div>"
+    )
+
+
+def tessera(titolo: str, sotto: str, coppie: list[tuple[str, object]]) -> str:
+    """Riquadro con titolo, sottotitolo e voci etichetta/valore (stagioni su telefono)."""
+    return (
+        '<div class="cr-tessera">'
+        f'<div class="cr-tessera-titolo">{escape(titolo)}</div>'
+        f'<div class="cr-tessera-sotto">{escape(sotto)}</div>' + _voci(coppie) + "</div>"
+    )
+
+
+def testa_giocatore(nome: str, sotto: str, badges: list[str]) -> str:
+    """Intestazione della scheda del giocatore; `badges` sono HTML già pronto (da `badge`)."""
+    return (
+        '<div class="cr-testa-giocatore">'
+        f'<div class="cr-testa-nome">{escape(nome)}</div>'
+        f'<div class="cr-tessera-sotto">{escape(sotto)}</div>'
+        f'<div class="cr-badges">{"".join(badges)}</div></div>'
+    )
+
+
+def risultato_ricerca(titolo: str, sotto: str) -> str:
+    """Contenuto di una scheda cliccabile dei risultati di ricerca (giocatore o squadra)."""
+    return (
+        f'<div class="cr-tessera-titolo">{escape(titolo)}</div>'
+        f'<div class="cr-tessera-sotto">{escape(sotto)}</div>'
     )
 
 

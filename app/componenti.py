@@ -203,17 +203,18 @@ def prossime_partite(
     ora: datetime,
     giorni: int = GIORNI_PROSSIME,
     campionati: tuple[int, ...] = (SERIE_A,),
+    squadra_id: int | None = None,
 ) -> list[RigaPartita]:
-    """Partite dei prossimi `giorni` giorni dei campionati dati (la Serie A se non indicati)."""
-    partite = s.execute(
-        select(Partita)
-        .where(
-            Partita.competizione_id.in_(campionati),
-            Partita.data_utc >= ora,
-            Partita.data_utc <= ora + timedelta(days=giorni),
-        )
-        .order_by(Partita.data_utc)
-    ).scalars().all()
+    """Partite dei prossimi `giorni` giorni dei campionati dati (la Serie A se non indicati),
+    se indicata solo quelle della squadra."""
+    filtri = [
+        Partita.competizione_id.in_(campionati),
+        Partita.data_utc >= ora,
+        Partita.data_utc <= ora + timedelta(days=giorni),
+    ]
+    if squadra_id is not None:
+        filtri.append((Partita.casa_id == squadra_id) | (Partita.trasferta_id == squadra_id))
+    partite = s.execute(select(Partita).where(*filtri).order_by(Partita.data_utc)).scalars().all()
     if not partite:
         return []
     pesi = carica_pesi(s)

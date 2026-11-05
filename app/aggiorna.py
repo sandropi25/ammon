@@ -14,7 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 SORGENTI = Path(__file__).resolve().parents[1] / "src" / "ammonizioni"
-MODULI_APP = ("componenti", "componenti_giocate", "cache_dati", "stile", "auth")
+MODULI_APP = ("componenti", "componenti_giocate", "componenti_cerca", "cache_dati", "stile", "auth")
 
 _firma: tuple[int, int] | None = None
 
