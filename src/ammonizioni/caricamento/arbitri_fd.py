@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.arbitri import trova_o_crea
-from ammonizioni.config import CODICE_FOOTBALL_DATA
+from ammonizioni.config import CAMPIONATI, CODICE_FOOTBALL_DATA
 from ammonizioni.db.modelli import Partita, Squadra
 from ammonizioni.fonti.football_data import ArbitroPartita, FootballData
 
@@ -63,6 +63,11 @@ def nome_squadra_normalizzato(nome: str) -> str:
 def stessa_squadra(a: str, b: str) -> bool:
     chiave = nome_squadra_normalizzato(a)
     return bool(chiave) and chiave == nome_squadra_normalizzato(b)
+
+
+def _stagione_di(data: datetime) -> int:
+    """Stagione (anno d'inizio) di una data: dal 1 luglio al 30 giugno."""
+    return data.year if data.month >= 7 else data.year - 1
 
 
 def collega(
@@ -116,6 +121,21 @@ def collega(
         )
         vicine = [v for v in candidate if abs(v.data_utc - partita.data_utc) <= TOLLERANZA]
         if not vicine:
+            # Solo la giornata, mai l'arbitro: ESPN da' per le partite lontane una data
+            # provvisoria, ma nel campionato una coppia casa-trasferta c'e' una volta sola
+            # a stagione.
+            if competizione_id in CAMPIONATI and partita.giornata is None:
+                stessa_stagione = [
+                    v for v in candidate if _stagione_di(v.data_utc) == partita.stagione
+                ]
+                if len(stessa_stagione) == 1 and stessa_stagione[0].giornata is not None:
+                    partita.giornata = stessa_stagione[0].giornata
+                    log.info(
+                        "Partita %s (%s - %s): giornata %s dalla coppia di squadre "
+                        "(data provvisoria), arbitro non assegnato",
+                        partita.id, casa.nome, trasferta.nome, partita.giornata,
+                    )
+                    continue
             log.warning(
                 "Partita %s (%s - %s, %s): nessuna corrispondenza su football-data.org, "
                 "arbitro e giornata non assegnati",

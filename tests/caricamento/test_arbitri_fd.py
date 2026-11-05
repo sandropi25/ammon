@@ -442,3 +442,49 @@ def test_tutto_gia_presente_nessuna_chiamata(sessione):
     fd = FonteFdFinta([])
     assert collega(sessione, fd, 135, GIORNO, GIORNO) == 0
     assert fd.chiamate == []
+
+
+# --- giornata con data provvisoria (ESPN) ----------------------------------------
+
+
+def test_data_provvisoria_la_giornata_arriva_per_coppia_ma_non_l_arbitro(sessione):
+    aggiungi_partita(sessione, 1, T0 + timedelta(days=10), GENOA, LECCE)
+    fd = FonteFdFinta([voce(T0, "Genoa CFC", "US Lecce", giornata=3)])
+    assert collega(sessione, fd, 135, GIORNO, GIORNO + timedelta(days=30)) == 0
+    assert sessione.get(Partita, 1).giornata == 3
+    assert nome_arbitro(sessione, 1) is None
+
+
+def test_coppia_di_un_altra_stagione_ignorata(sessione):
+    aggiungi_partita(sessione, 1, T0 + timedelta(days=10), GENOA, LECCE, stagione=2025)
+    vecchia = T0 - timedelta(days=365)  # stagione 2024
+    fd = FonteFdFinta([voce(vecchia, "Genoa CFC", "US Lecce", giornata=9)])
+    collega(sessione, fd, 135, GIORNO, GIORNO + timedelta(days=30))
+    assert sessione.get(Partita, 1).giornata is None
+
+
+def test_data_provvisoria_non_sovrascrive_la_giornata(sessione):
+    p = aggiungi_partita(sessione, 1, T0 + timedelta(days=10), GENOA, LECCE)
+    p.giornata = 5
+    sessione.flush()
+    fd = FonteFdFinta([voce(T0, "Genoa CFC", "US Lecce", giornata=3)])
+    collega(sessione, fd, 135, GIORNO, GIORNO + timedelta(days=30))
+    assert sessione.get(Partita, 1).giornata == 5
+
+
+def test_le_coppe_non_usano_la_coppia(sessione):
+    aggiungi_partita(sessione, 1, T0 + timedelta(days=10), GENOA, LECCE, competizione_id=137)
+    fd = FonteFdFinta([voce(T0, "Genoa CFC", "US Lecce", giornata=3)])
+    # la Coppa Italia non ha codice football-data: nessun collegamento, nessuna giornata
+    collega(sessione, fd, 137, GIORNO, GIORNO + timedelta(days=30))
+    assert sessione.get(Partita, 1).giornata is None
+
+
+def test_coppia_ripetuta_nella_stagione_e_ambigua(sessione):
+    aggiungi_partita(sessione, 1, T0 + timedelta(days=10), GENOA, LECCE)
+    fd = FonteFdFinta([
+        voce(T0, "Genoa CFC", "US Lecce", giornata=3),
+        voce(T0 + timedelta(days=100), "Genoa CFC", "US Lecce", giornata=22),
+    ])
+    collega(sessione, fd, 135, GIORNO, GIORNO + timedelta(days=200))
+    assert sessione.get(Partita, 1).giornata is None

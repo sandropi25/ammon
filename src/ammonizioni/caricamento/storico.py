@@ -40,6 +40,9 @@ GIORNI_PROSSIMA_GIORNATA = 7
 GIORNI_RISCARICO_CALENDARIO = 7  # calendari della stagione corrente (non Serie A)
 ARBITRI_COLLEGATI = "arbitri_collegati"  # stagioni di Serie A con gli arbitri gia' collegati
 GIORNATE_COLLEGATE = "giornate_collegate"  # stagioni con la giornata gia' cercata (passo una tantum)
+# Stagione corrente: la giornata si cerca anche per coppia di squadre (date provvisorie di
+# ESPN), quindi un secondo passo una tantum con un flag nuovo.
+GIORNATE_COLLEGATE_V2 = "giornate_collegate_v2"
 ARBITRI_RICOLLEGATI_QUANDO = "arbitri_ricollegati_il"  # {"campionato": iso UTC}, stagione corrente
 MINUTI_MASSIMI_STORICO = 40 # con ESPN (30 richieste/min) il primo carico dura piu' di 50 minuti
 
@@ -204,9 +207,11 @@ def _chiave_arbitri(campionato: int) -> str:
     return ARBITRI_COLLEGATI if campionato == SERIE_A else f"{ARBITRI_COLLEGATI}_{campionato}"
 
 
-def _chiave_giornate(campionato: int) -> str:
-    """Impostazione con le stagioni la cui giornata e' gia' stata cercata su football-data."""
-    return GIORNATE_COLLEGATE if campionato == SERIE_A else f"{GIORNATE_COLLEGATE}_{campionato}"
+def _chiave_giornate(campionato: int, v2: bool = False) -> str:
+    """Impostazione con le stagioni la cui giornata e' gia' stata cercata su football-data
+    (`v2`: il secondo passo, solo per la stagione corrente)."""
+    base = GIORNATE_COLLEGATE_V2 if v2 else GIORNATE_COLLEGATE
+    return base if campionato == SERIE_A else f"{base}_{campionato}"
 
 
 def _collega_arbitri_stagioni(s: Session, fonte_fd, oggi: datetime) -> bool:
@@ -233,10 +238,15 @@ def _collega_arbitri_stagioni(s: Session, fonte_fd, oggi: datetime) -> bool:
     for campionato in CAMPIONATI:
         chiave = _chiave_arbitri(campionato)
         fatte = set(repo.leggi_impostazione(s, chiave, []) or [])
-        chiave_g = _chiave_giornate(campionato)
-        con_giornata = set(repo.leggi_impostazione(s, chiave_g, []) or [])
+        chiave_vecchia = _chiave_giornate(campionato)
+        chiave_nuova = _chiave_giornate(campionato, v2=True)
+        con_giornata_vecchia = set(repo.leggi_impostazione(s, chiave_vecchia, []) or [])
+        con_giornata_nuova = set(repo.leggi_impostazione(s, chiave_nuova, []) or [])
         for stagione in STAGIONI:  # dalla piu' recente
             corrente = stagione == STAGIONE_CORRENTE
+            # la stagione corrente usa il flag nuovo, le altre quello di sempre
+            chiave_g = chiave_nuova if corrente else chiave_vecchia
+            con_giornata = con_giornata_nuova if corrente else con_giornata_vecchia
             # stagioni gia' con gli arbitri ma non ancora con le giornate: una richiesta in
             # piu' una volta sola (poi la stagione entra in `con_giornata` e non si ripete)
             giornate_da_fare = stagione not in con_giornata

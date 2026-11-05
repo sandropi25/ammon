@@ -508,3 +508,29 @@ def test_salva_partita_non_cancella_la_giornata_con_none(sessione):
     _salva(sessione, partita_dati(1, data, giornata=9))
     _salva(sessione, partita_dati(1, data, giornata=None))  # ESPN non la da'
     assert sessione.get(Partita, 1).giornata == 9
+
+
+def test_stagione_corrente_con_flag_vecchio_ricerca_la_giornata_una_volta_ancora(sessione):
+    """Il flag `giornate_collegate` era gia' segnato per la stagione corrente: il flag nuovo
+    (`giornate_collegate_v2`) fa ripetere il passo una volta sola."""
+    from ammonizioni.config import STAGIONE_CORRENTE
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    data = datetime(2026, 12, 1, 18, 0, tzinfo=timezone.utc)
+    _salva(sessione, partita_dati(1, data, stagione=STAGIONE_CORRENTE, giornata=None))
+    sessione.get(Partita, 1).statistiche_scaricate = True
+    repo.scrivi_impostazione(sessione, "arbitri_collegati", [STAGIONE_CORRENTE])
+    repo.scrivi_impostazione(sessione, "giornate_collegate", [STAGIONE_CORRENTE])
+    repo.scrivi_impostazione(
+        sessione, "arbitri_ricollegati_il", {"135": datetime.now(timezone.utc).isoformat()}
+    )
+    sessione.commit()
+    fd = FonteFdStagioni([
+        ArbitroPartita(data, "Juventus FC", "FC Internazionale Milano", 1, "Davide Massa", 14)
+    ])
+    storico.avanza(sessione, FonteFinta(), fd)
+    assert len(fd.chiamate) == 1
+    assert sessione.get(Partita, 1).giornata == 14
+    assert repo.leggi_impostazione(sessione, "giornate_collegate_v2") == [STAGIONE_CORRENTE]
+    storico.avanza(sessione, FonteFinta(), fd)
+    assert len(fd.chiamate) == 1
