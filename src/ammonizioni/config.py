@@ -4,10 +4,41 @@ import os
 COMPETIZIONI: dict[str, int] = {
     "serie_a": 135,
     "coppa_italia": 137,
+    "liga": 140,
+    "copa_del_rey": 143,
     "champions": 2,
     "europa": 3,
     "conference": 848,
 }
+
+# Campionati nazionali gestiti (la Serie A per prima).
+CAMPIONATI: tuple[int, ...] = (135, 140)
+
+# Slug ESPN di ogni competizione.
+SLUG_ESPN: dict[int, str] = {
+    135: "ita.1",
+    137: "ita.coppa_italia",
+    140: "esp.1",
+    143: "esp.copa_del_rey",
+    2: "uefa.champions",
+    3: "uefa.europa",
+    848: "uefa.europa.conf",
+}
+
+# Codici football-data.org dei campionati (arbitri).
+CODICE_FOOTBALL_DATA: dict[int, str] = {135: "SA", 140: "PD"}
+
+# Coppa nazionale di ogni campionato.
+COPPE_NAZIONALI: dict[int, int] = {135: 137, 140: 143}
+
+# Ammonizioni che portano alla squalifica (diffida = una prima della soglia).
+# DA VERIFICARE sui regolamenti in vigore.
+SOGLIE_DIFFIDA: dict[int, tuple[int, ...]] = {
+    135: (4, 9, 13, 16, 19),
+    140: (4, 9, 14, 19),
+}
+
+FONTI_DATI = ("espn", "api_football")
 
 STAGIONE_CORRENTE = 2026
 STAGIONI = (2026, 2025, 2024)
@@ -16,6 +47,17 @@ STAGIONI = (2026, 2025, 2024)
 STATI_FINITI = ("FT", "AET", "PEN")
 
 URL_API = "https://v3.football.api-sports.io"
+
+
+def fonte_dati() -> str:
+    """Fonte dati scelta con la variabile d'ambiente FONTE_DATI: "espn" (predefinita)
+    o "api_football"."""
+    valore = os.environ.get("FONTE_DATI") or "espn"
+    if valore not in FONTI_DATI:
+        raise ValueError(
+            f"FONTE_DATI={valore!r} sconosciuta: valori ammessi {' o '.join(FONTI_DATI)}"
+        )
+    return valore
 
 
 def chiave_api(sessione=None) -> str | None:

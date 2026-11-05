@@ -28,6 +28,13 @@ GIORNI_PROSSIMA_GIORNATA = 7
 GIORNI_RISCARICO_CALENDARIO = 7  # calendari della stagione corrente (non Serie A)
 
 
+# Competizioni caricate oggi: Liga e Copa del Rey entrano con il Task 5 (più campionati),
+# finché non è fatto il comportamento resta quello della sola Serie A e coppe europee.
+_COMPETIZIONI_CARICATE = tuple(
+    v for k, v in COMPETIZIONI.items() if k not in ("liga", "copa_del_rey")
+)
+
+
 def _scaricati(s: Session) -> set[tuple[int, int]]:
     coppie = repo.leggi_impostazione(s, CALENDARI_SCARICATI, []) or []
     return {(c, st) for c, st in coppie}
@@ -42,7 +49,7 @@ def coda_storico(s: Session, oggi: datetime) -> list[tuple[int, int]]:
     for stagione in STAGIONI:
         if stagione > oggi.year:
             continue
-        for competizione_id in COMPETIZIONI.values():
+        for competizione_id in _COMPETIZIONI_CARICATE:
             coppia = (competizione_id, stagione)
             if coppia == (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE):
                 continue
@@ -87,7 +94,7 @@ def prossime_da_scaricare(s: Session, oggi: datetime) -> list[int]:
         .where(
             Partita.stato.in_(STATI_FINITI),
             Partita.statistiche_scaricate.is_(False),
-            Partita.competizione_id.in_(COMPETIZIONI.values()),
+            Partita.competizione_id.in_(_COMPETIZIONI_CARICATE),
             Partita.stagione.in_(STAGIONI),
         )
         .order_by(Partita.data_utc.desc())

@@ -10,6 +10,7 @@ from ammonizioni.db.modelli import Partita, Presenza, UltimoAggiornamento
 from ammonizioni.caricamento.notturno import salva_partita
 
 OGGI = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
+CARICATE = storico._COMPETIZIONI_CARICATE  # Liga e Copa del Rey entrano con il Task 5
 
 
 def _salva(s, *partite):
@@ -57,7 +58,7 @@ def test_storico_prende_anche_le_partite_finite_ai_supplementari_o_ai_rigori(ses
 
 def test_coda_storico_tutte_le_coppie_tranne_il_calendario_notturno(sessione):
     coda = storico.coda_storico(sessione, OGGI)
-    assert len(coda) == len(COMPETIZIONI) * len(STAGIONI) - 1
+    assert len(coda) == len(CARICATE) * len(STAGIONI) - 1
     assert (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE) not in coda
     assert [st for _, st in coda] == sorted((st for _, st in coda), reverse=True)
 
@@ -66,12 +67,12 @@ def test_coda_storico_salta_i_calendari_gia_scaricati(sessione):
     repo.scrivi_impostazione(sessione, "calendari_scaricati", [[137, 2025], [2, 2024]])
     coda = storico.coda_storico(sessione, OGGI)
     assert (137, 2025) not in coda and (2, 2024) not in coda
-    assert len(coda) == len(COMPETIZIONI) * len(STAGIONI) - 3
+    assert len(coda) == len(CARICATE) * len(STAGIONI) - 3
 
 
 def test_calendari_stagione_corrente_non_serie_a_riscaricati_dopo_7_giorni(sessione):
     tutti = [
-        [c, st] for st in STAGIONI for c in COMPETIZIONI.values()
+        [c, st] for st in STAGIONI for c in CARICATE
         if (c, st) != (135, STAGIONE_CORRENTE)
     ]
     repo.scrivi_impostazione(sessione, "calendari_scaricati", tutti)
@@ -103,7 +104,7 @@ def test_avanza_scarica_calendari_poi_statistiche(sessione):
     r = storico.avanza(sessione, fonte)
     assert r.completo is True
     assert r.partite_aggiornate == 2
-    assert r.richieste_usate == len(COMPETIZIONI) * len(STAGIONI) - 1 + 2
+    assert r.richieste_usate == len(CARICATE) * len(STAGIONI) - 1 + 2
     nomi = [c[0] for c in fonte.chiamate]
     assert nomi == ["partite"] * 14 + ["statistiche"] * 2
     assert [c[1] for c in fonte.chiamate if c[0] == "statistiche"] == [2, 1]  # più recente prima
