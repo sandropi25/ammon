@@ -9,6 +9,13 @@ from ammonizioni.fonti.limite import LimiteSuperato
 from ammonizioni.fonti.tipi import FormazioneDati, PartitaDati, PresenzaDati
 
 
+@pytest.fixture(autouse=True)
+def _chiudi_engines_in_cache():
+    """Gli engine aperti da `apri()` restano in cache per URL: chiusi dopo ogni test."""
+    yield
+    modulo_sessione.chiudi_engines()
+
+
 @pytest.fixture
 def sessione():
     engine = modulo_sessione.crea_engine("sqlite://")

@@ -1,6 +1,7 @@
 """Engine, creazione tabelle e sessioni."""
 from __future__ import annotations
 
+import threading
 from contextlib import contextmanager
 from typing import Iterator
 
@@ -10,6 +11,10 @@ from sqlalchemy.pool import StaticPool
 
 from ammonizioni import config
 from ammonizioni.db.modelli import Base
+
+# un Engine per URL, creato (con le tabelle) una volta sola per processo
+_engines: dict[str, Engine] = {}
+_lock = threading.Lock()
 
 
 def crea_engine(url: str) -> Engine:
@@ -25,12 +30,29 @@ def crea_tabelle(engine: Engine) -> None:
     Base.metadata.create_all(engine)
 
 
+def engine_per(url: str) -> Engine:
+    """Engine dell'URL dalla cache del modulo; alla prima richiesta lo crea e crea le tabelle."""
+    with _lock:
+        engine = _engines.get(url)
+        if engine is None:
+            engine = crea_engine(url)
+            crea_tabelle(engine)
+            _engines[url] = engine
+        return engine
+
+
+def chiudi_engines() -> None:
+    """Chiude e dimentica tutti gli engine in cache (fine processo o test)."""
+    with _lock:
+        for engine in _engines.values():
+            engine.dispose()
+        _engines.clear()
+
+
 @contextmanager
 def apri(url: str | None = None) -> Iterator[Session]:
     """Sessione che fa commit a fine blocco e rollback in caso di errore."""
-    engine = crea_engine(url or config.url_database())
-    crea_tabelle(engine)
-    sessione = Session(engine)
+    sessione = Session(engine_per(url or config.url_database()))
     try:
         yield sessione
         sessione.commit()
@@ -39,4 +61,3 @@ def apri(url: str | None = None) -> Iterator[Session]:
         raise
     finally:
         sessione.close()
-        engine.dispose()

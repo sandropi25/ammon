@@ -101,6 +101,28 @@ def test_apri_rollback_su_eccezione(tmp_path):
         assert repo.leggi_impostazione(s, "k", None) is None
 
 
+def test_apri_riusa_engine_e_crea_le_tabelle_una_volta_per_url(tmp_path, monkeypatch):
+    creati, tabelle = [], []
+    vero_engine, vere_tabelle = sessione_mod.crea_engine, sessione_mod.crea_tabelle
+    monkeypatch.setattr(
+        sessione_mod, "crea_engine", lambda url: creati.append(url) or vero_engine(url)
+    )
+    monkeypatch.setattr(
+        sessione_mod, "crea_tabelle", lambda e: tabelle.append(e) or vere_tabelle(e)
+    )
+    url_a = f"sqlite:///{tmp_path / 'cache_a.db'}"
+    url_b = f"sqlite:///{tmp_path / 'cache_b.db'}"
+    for _ in range(3):
+        with sessione_mod.apri(url_a) as s:
+            engine_a = s.get_bind()
+    with sessione_mod.apri(url_b) as s:
+        engine_b = s.get_bind()
+    assert creati == [url_a, url_b]
+    assert len(tabelle) == 2
+    assert engine_a is not engine_b
+    assert sessione_mod.engine_per(url_a) is engine_a
+
+
 def test_apri_url_da_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'c.db'}")
     with sessione_mod.apri() as s:
