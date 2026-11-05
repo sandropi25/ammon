@@ -68,8 +68,8 @@ def test_filtro_campionato_predefinito_serie_a(sessione_db):
     _aggiungi_liga(sessione_db)
     at = avvia(PAGINA_PARTITE)
     assert not at.exception
-    assert at.radio(key="filtro_partite").value == "Serie A"
-    assert list(at.radio(key="filtro_partite").options) == ["Serie A", "Liga", "Tutti"]
+    assert at.segmented_control(key="scelta_campionato").value == "Serie A"
+    assert list(at.segmented_control(key="scelta_campionato").options) == ["Serie A", "Liga", "Tutti"]
     t = visibile(at)
     assert "Casa FC" in t and "Real Liga" not in t
 
@@ -79,24 +79,27 @@ def test_filtro_campionato_liga_e_tutti(sessione_db):
     _aggiungi_liga(sessione_db)
     at = avvia(PAGINA_PARTITE)
 
-    at.radio(key="filtro_partite").set_value("Liga").run()
+    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
     assert not at.exception
     t = visibile(at)
     assert "Real Liga – Barca Liga" in t and "Gil Manzano" in t and "Giornata 11" in t
     assert "Casa FC" not in t
 
-    at.radio(key="filtro_partite").set_value("Tutti").run()
+    at.segmented_control(key="scelta_campionato").set_value("Tutti").run()
     t = visibile(at)
     assert "Real Liga" in t and "Casa FC" in t
     # ogni partita dice il suo campionato
-    assert "**Real Liga – Barca Liga** · Liga · Giornata 11" in t
-    assert "**Casa FC – Trasferta FC** · Serie A · Giornata 7" in t
+    schede = [m.value for m in at.markdown if 'class="cr-partita"' in m.value]
+    liga = next(s for s in schede if 'title="Real Liga – Barca Liga"' in s)
+    serie_a = next(s for s in schede if 'title="Casa FC – Trasferta FC"' in s)
+    assert ">Liga · Giornata 11<" in liga
+    assert ">Serie A · Giornata 7<" in serie_a
 
 
 def test_filtro_liga_senza_partite(sessione_db):
     _prepara(sessione_db)
     at = avvia(PAGINA_PARTITE)
-    at.radio(key="filtro_partite").set_value("Liga").run()
+    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
     assert not at.exception
     assert "Nessuna partita di Liga nei prossimi 7 giorni" in visibile(at)
     assert "Casa FC" not in visibile(at)
@@ -122,7 +125,7 @@ def test_partita_di_liga_non_e_calda_per_il_derby_di_serie_a(sessione_db):
     _prepara(sessione_db)
     _aggiungi_liga(sessione_db)
     at = avvia(PAGINA_PARTITE)
-    at.radio(key="filtro_partite").set_value("Liga").run()
+    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
     assert "Partita calda" not in visibile(at)
 
 

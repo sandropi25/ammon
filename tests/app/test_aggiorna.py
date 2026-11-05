@@ -64,10 +64,12 @@ def test_i_valori_predefiniti_puntano_al_motore_vero():
 
 def test_ogni_pagina_lo_chiama_prima_degli_import_dell_app():
     radice = Path(aggiorna.__file__).resolve().parent
-    for pagina in [radice / "Partite.py", *sorted((radice / "pages").glob("*.py"))]:
+    for pagina in [radice / "Partite.py", *sorted((radice / "pagine").glob("*.py"))]:
         testo = pagina.read_text(encoding="utf-8")
         assert "ricarica_se_cambiato(" in testo, pagina.name
         primo_import_app = min(
-            testo.index(f"import {m}") for m in ("componenti", "cache_dati") if f"import {m}" in testo
+            testo.index(f"import {m}")
+            for m in ("componenti", "cache_dati", "stile")  # il router importa solo stile
+            if f"import {m}" in testo
         )
         assert testo.index("ricarica_se_cambiato(") < primo_import_app, pagina.name

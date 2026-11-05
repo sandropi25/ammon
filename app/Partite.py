@@ -1,6 +1,10 @@
-"""Pagina iniziale: prossime partite dei campionati (Serie A predefinita, Liga, Tutti)."""
+"""Punto d'ingresso dell'app (anche su Streamlit Cloud): menu in alto come un sito web.
+
+Le pagine restano file separati in pagine/ (non "pages/": con quella cartella Streamlit
+userebbe il vecchio menu automatico e ignorerebbe st.navigation); la pagina iniziale è
+pagine/0_Partite.py.
+Gli indirizzi delle pagine non cambiano (es. /Dettaglio_partita?partita=123)."""
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -11,52 +15,16 @@ aggiorna.ricarica_se_cambiato(lambda: __import__("streamlit").cache_data.clear()
 
 import streamlit as st  # noqa: E402
 
-import cache_dati  # noqa: E402
-import componenti  # noqa: E402
-from auth import richiedi_password  # noqa: E402
+import stile  # noqa: E402
 
-st.set_page_config(page_title="Ammonizioni Serie A e Liga", layout="wide")
-richiedi_password()
-
-st.title("Prossime partite")
-
-filtro = st.radio(
-    "Campionato",
-    componenti.FILTRO_CAMPIONATI,
-    index=componenti.FILTRO_CAMPIONATI.index(componenti.FILTRO_PREDEFINITO),
-    horizontal=True,
-    key="filtro_partite",
+st.set_page_config(
+    page_title=stile.NOME_APP, page_icon="🟨", layout="wide", initial_sidebar_state="collapsed"
 )
 
-adesso = datetime.now(timezone.utc)
-testo_agg, completo, partite = cache_dati.pagina_partite(
-    adesso, componenti.campionati_del_filtro(filtro)
-)
-
-st.caption(testo_agg)
-if not completo:
-    st.warning("Dati parziali: l'ultimo aggiornamento notturno non è stato completato.")
-
-if not partite:
-    dove = "" if filtro == componenti.TUTTI else f" di {filtro}"
-    st.info(f"Nessuna partita{dove} nei prossimi 7 giorni.")
-
-for titolo_giorno, del_giorno in componenti.raggruppa_per_giorno(partite, adesso):
-    st.subheader(titolo_giorno)
-    for p in del_giorno:
-        with st.container(border=True):
-            colonne = st.columns([5, 2])
-            with colonne[0]:
-                giornata = f" · Giornata {p.giornata}" if p.giornata else ""
-                campionato = f" · {p.campionato}" if p.campionato else ""
-                st.markdown(f"**{p.ora}** · **{p.casa} – {p.trasferta}**{campionato}{giornata}")
-                arbitro = p.arbitro or "da designare"
-                st.caption(f"Arbitro: {arbitro} · Formazioni: {p.formazioni}")
-                if p.calda:
-                    st.markdown(":red[**Partita calda**]")
-            with colonne[1]:
-                st.page_link(
-                    "pages/1_Dettaglio_partita.py",
-                    label="Apri dettaglio",
-                    query_params={"partita": p.id},
-                )
+pagine = [
+    st.Page("pagine/0_Partite.py", title="Partite", icon="📅", default=True),
+    st.Page("pagine/1_Dettaglio_partita.py", title="Dettaglio partita", visibility="hidden"),
+    st.Page("pagine/2_Giocate.py", title="Giocate", icon="🎯"),
+    st.Page("pagine/3_Impostazioni.py", title="Impostazioni", icon="⚙️"),
+]
+st.navigation(pagine, position="top").run()

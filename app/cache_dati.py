@@ -38,6 +38,17 @@ def pagina_partite(adesso: datetime, campionati: tuple[int, ...]):
     return testo, completo, componenti.nella_finestra(righe, adesso)
 
 
+@st.cache_data(ttl=TTL_SECONDI, max_entries=10, show_spinner=False)
+def _stato_aggiornamento(db: str):
+    with apri(db) as s:
+        return componenti.stato_aggiornamento(s)
+
+
+def stato_aggiornamento() -> tuple[str, bool]:
+    """("Dati aggiornati: ...", ultimo job completo?) per l'intestazione di ogni pagina."""
+    return _stato_aggiornamento(config.url_database())
+
+
 @st.cache_data(ttl=TTL_SECONDI, max_entries=50, show_spinner=False)
 def _pagina_dettaglio(db: str, partita_id: int):
     with apri(db) as s:

@@ -1,0 +1,17 @@
+# Grafica "Cartellino": tema scuro di base (il tema chiaro lo applica app/stile.py con il
+# pulsante sole/luna) e font web Barlow / Barlow Condensed.
+[theme]
+base = "dark"
+primaryColor = "#F5C518"
+backgroundColor = "#0F1115"
+secondaryBackgroundColor = "#181B22"
+textColor = "#ECEDEE"
+borderColor = "#2A2E37"
+linkColor = "#F5C518"
+font = "Barlow:https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap"
+headingFont = "'Barlow Condensed':https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap"
+baseRadius = "10px"
+showWidgetBorder = true
+
+[client]
+toolbarMode = "minimal"

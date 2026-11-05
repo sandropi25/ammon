@@ -125,6 +125,8 @@ class RigaPartita:
     campionato: str = ""
     ora: str = ""  # "20:45" in Europe/Rome
     data_utc: datetime | None = None
+    derby: bool = False  # rivalità nelle liste manuali (per il badge)
+    arbitro_severo: bool = False  # fattore arbitro >= soglia per almeno una squadra
 
 
 def ora_italiana(dt_utc: datetime) -> str:
@@ -186,6 +188,10 @@ def e_partita_calda(dati: DatiPartita, pesi) -> bool:
 def _calda(rivalita, campo_caldo, arbitro, medie, casa_id, trasferta_id, pesi) -> bool:
     if rivalita or campo_caldo:
         return True
+    return _arbitro_severo(arbitro, medie, casa_id, trasferta_id, pesi)
+
+
+def _arbitro_severo(arbitro, medie, casa_id, trasferta_id, pesi) -> bool:
     return any(
         fattore_arbitro(arbitro, sq, medie, pesi).valore >= SOGLIA_PARTITA_CALDA
         for sq in (casa_id, trasferta_id)
@@ -237,6 +243,10 @@ def prossime_partite(
                 campionato=NOMI_CAMPIONATI.get(p.competizione_id, ""),
                 ora=ora_italiana(p.data_utc),
                 data_utc=p.data_utc,
+                derby=bool(dc.rivalita),
+                arbitro_severo=_arbitro_severo(
+                    dc.arbitro, dc.medie, dc.casa_id, dc.trasferta_id, pesi
+                ),
             )
         )
     return righe

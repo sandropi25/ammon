@@ -13,13 +13,15 @@ import streamlit as st  # noqa: E402
 
 import cache_dati  # noqa: E402
 import componenti  # noqa: E402
+import stile  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.caricamento.formazioni import salva_probabili  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
 from ammonizioni.motore.classifica import converti_quota  # noqa: E402
 
-st.set_page_config(page_title="Dettaglio partita", layout="wide")
+st.set_page_config(page_title=f"Dettaglio partita · {stile.NOME_APP}", layout="wide")
 richiedi_password()
+stile.applica_stile()
 
 st.title("Dettaglio partita")
 
@@ -49,25 +51,36 @@ st.header(f"{casa} – {trasf}")
 giornata = f" · Giornata {partita.giornata}" if partita.giornata else ""
 st.caption(f"{componenti.data_italiana(partita.data_utc)}{giornata} · formazioni {partita.stato_formazioni}")
 
-for riga in componenti.righe_contesto(dati):
-    st.markdown(f"- {riga}")
+st.markdown(stile.scheda_contesto(componenti.righe_contesto(dati)), unsafe_allow_html=True)
 
 if cambi:
     st.subheader("Cambi rispetto alle formazioni probabili")
-    for riga in cambi:
-        st.markdown(f"- {riga}")
+    st.markdown(stile.scheda_contesto(cambi), unsafe_allow_html=True)
 
 st.subheader("Candidati all'ammonizione")
 righe = componenti.righe_tabella(candidati, dati.nomi_squadre, det.tipster)
 if not righe:
     st.info("Nessun candidato: mancano le formazioni e lo storico dei titolari.")
 else:
-    tabella = pd.DataFrame(righe, columns=list(componenti.COLONNE_TABELLA))
-    st.dataframe(
-        tabella.style.map(componenti.colore_valore, subset=["Valore"]),
-        hide_index=True,
-        width="stretch",
+    # barre di probabilità (anche su telefono); la tabella completa solo su schermi larghi
+    st.markdown(
+        "".join(
+            stile.barra_probabilita(
+                c, dati.nomi_squadre.get(c.squadra_id, ""), det.tipster.get(c.giocatore_id, [])
+            )
+            for c in candidati
+        ),
+        unsafe_allow_html=True,
     )
+    with st.container(key="solo_desktop_tabella_candidati"):
+        with st.expander("Tabella completa"):
+            tabella = pd.DataFrame(righe, columns=list(componenti.COLONNE_TABELLA))
+            st.dataframe(
+                tabella.style.map(componenti.colore_valore, subset=["Valore"]),
+                hide_index=True,
+                width="stretch",
+            )
+    st.subheader("Duelli, storia e quote")
 
 nomi = {c.giocatore_id: c.nome for c in candidati}
 
@@ -118,7 +131,7 @@ for c in candidati:
                 st.rerun()
 
         st.page_link(
-            "pages/2_Giocate.py",
+            "pagine/2_Giocate.py",
             label="Registra giocata",
             query_params={"partita": partita_id, "giocatore": c.giocatore_id},
         )

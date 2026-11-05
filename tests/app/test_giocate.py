@@ -70,6 +70,9 @@ def test_registra_giocata_e_compare_nel_registro(sessione_db):
     assert riga["Quota"] == "2,10"
     assert riga["Puntata"] == "10,50 €"
     assert riga["Esito"] == "in attesa"
+    # su telefono la stessa giocata è una scheda (niente tabella larga)
+    schede = [m.value for m in at.markdown if 'class="cr-tessera"' in m.value]
+    assert any("Terzino Casa" in s and "10,50 €" in s and "in attesa" in s for s in schede)
 
 
 def test_partite_proposte_solo_nella_finestra_di_sette_giorni(sessione_db):
@@ -132,17 +135,17 @@ def test_pagina_giocate_filtro_predefinito_serie_a(sessione_db):
         _aggiungi_liga(s)
     at = avvia(PAGINA_GIOCATE)
     assert not at.exception
-    assert at.radio(key="filtro_giocate").value == "Serie A"
+    assert at.segmented_control(key="scelta_campionato").value == "Serie A"
     # le opzioni sono le etichette "gg/mm hh:mm Casa – Trasferta"
     opzioni = " | ".join(at.selectbox(key="giocata_partita").options)
     assert "Casa FC – Trasferta FC" in opzioni and "Real Liga" not in opzioni
 
-    at.radio(key="filtro_giocate").set_value("Liga").run()
+    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
     assert not at.exception
     opzioni = at.selectbox(key="giocata_partita").options
     assert len(opzioni) == 1 and "Real Liga – Barca Liga" in opzioni[0]
 
-    at.radio(key="filtro_giocate").set_value("Tutti").run()
+    at.segmented_control(key="scelta_campionato").set_value("Tutti").run()
     assert not at.exception
     opzioni = " | ".join(at.selectbox(key="giocata_partita").options)
     assert "Liga · " in opzioni and "Serie A · " in opzioni
@@ -273,7 +276,8 @@ def test_partita_senza_giocatori_niente_form_e_niente_eccezioni(sessione_db):
     at.selectbox(key="giocata_partita").select(210).run()
     assert not at.exception
     assert "Nessun giocatore disponibile per questa partita" in visibile(at)
-    assert len(at.button) == 0
+    # nessun pulsante del form (resta solo il pulsante sole/luna del tema)
+    assert [b.key for b in at.button] == ["cambia_tema"]
     with sessione_db() as s:
         assert s.execute(select(Giocata)).first() is None
 
@@ -319,14 +323,15 @@ def test_statistiche_per_fonte_mostrate(sessione_db):
                       quota=2.5, puntata=10, esito="in_attesa"))
     at = avvia(PAGINA_GIOCATE)
     assert not at.exception
-    df = _tabella(at, "Fonte")
-    assert list(df.columns) == [
-        "Fonte", "Giocate", "Successo", "Prob. implicita media", "Profitto", "Rendimento",
+    # statistiche per fonte come riquadri: una voce (etichetta, valore) per colonna
+    riquadri = [m.value for m in at.markdown if 'class="cr-tessera-titolo">io<' in m.value]
+    assert len(riquadri) == 1
+    voci = riquadri[0]
+    for etichetta, valore in (
+        ("Giocate", "2"), ("Successo", "50%"), ("Prob. implicita media", "40%"),
+        ("Profitto", "5,00 €"), ("Rendimento", "25%"),
+    ):
+        assert f"<dt>{etichetta}</dt><dd>{valore}</dd>" in voci
+    assert [e for e in componenti_giocate.COLONNE_STATISTICHE if f"<dt>{e}</dt>" in voci] == [
+        "Giocate", "Successo", "Prob. implicita media", "Profitto", "Rendimento",
     ]
-    riga = df.iloc[0]
-    assert riga["Fonte"] == "io"
-    assert riga["Giocate"] == 2
-    assert riga["Successo"] == "50%"
-    assert riga["Prob. implicita media"] == "40%"
-    assert riga["Profitto"] == "5,00 €"
-    assert riga["Rendimento"] == "25%"

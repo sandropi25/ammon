@@ -14,25 +14,21 @@ import streamlit as st  # noqa: E402
 
 import componenti  # noqa: E402
 import componenti_giocate as cg  # noqa: E402
+import stile  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
 
-st.set_page_config(page_title="Giocate", layout="wide")
+st.set_page_config(page_title=f"Giocate · {stile.NOME_APP}", layout="wide")
 richiedi_password()
+stile.applica_stile()
 
+filtro = stile.selettore_campionato()
 st.title("Giocate")
 
 # la pagina Dettaglio partita porta qui con ?partita=...&giocatore=...
 partita_richiesta = componenti.id_partita(st.query_params.get("partita"))
 giocatore_richiesto = componenti.id_partita(st.query_params.get("giocatore"))
 
-filtro = st.radio(
-    "Campionato",
-    componenti.FILTRO_CAMPIONATI,
-    index=componenti.FILTRO_CAMPIONATI.index(componenti.FILTRO_PREDEFINITO),
-    horizontal=True,
-    key="filtro_giocate",
-)
 campionati = componenti.campionati_del_filtro(filtro)
 
 with apri() as s:
@@ -109,16 +105,18 @@ st.subheader("Registro")
 if not registro:
     st.info("Nessuna giocata registrata.")
 else:
-    st.dataframe(
-        pd.DataFrame(registro, columns=list(cg.COLONNE_REGISTRO)), hide_index=True, width="stretch"
-    )
+    # su telefono schede, su schermi larghi la tabella
+    with st.container(key="solo_telefono_registro"):
+        st.markdown(stile.griglia([stile.scheda_giocata(r) for r in registro]), unsafe_allow_html=True)
+    with st.container(key="solo_desktop_registro"):
+        st.dataframe(
+            pd.DataFrame(registro, columns=list(cg.COLONNE_REGISTRO)), hide_index=True, width="stretch"
+        )
 
 st.subheader("Statistiche per fonte")
 if not statistiche:
     st.info("Nessuna giocata conclusa: le statistiche compaiono dopo i primi esiti.")
 else:
-    st.dataframe(
-        pd.DataFrame(statistiche, columns=list(cg.COLONNE_STATISTICHE)),
-        hide_index=True,
-        width="stretch",
+    st.markdown(
+        stile.griglia([stile.riquadro_statistiche(r) for r in statistiche]), unsafe_allow_html=True
     )
