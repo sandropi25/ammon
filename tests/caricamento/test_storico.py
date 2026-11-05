@@ -405,12 +405,14 @@ def test_avanza_ricollega_ogni_settimana_gli_arbitri_della_stagione_corrente(ses
     assert len(fd.chiamate) == 2
 
 
-def test_avanza_senza_chiave_football_data_non_segna_le_stagioni(sessione):
+def test_avanza_senza_chiave_football_data_non_segna_le_stagioni(sessione, caplog):
     cal = _calendario_2025(1)
     fd = FonteFdStagioni([], chiave=None)
-    storico.avanza(sessione, FonteFinta(calendari=cal), fd)
+    with caplog.at_level("WARNING"):
+        storico.avanza(sessione, FonteFinta(calendari=cal), fd)
     assert fd.chiamate == []
     assert not repo.leggi_impostazione(sessione, "arbitri_collegati")
+    assert "FOOTBALL_DATA_KEY" in caplog.text
 
 
 def test_avanza_errore_football_data_stagione_da_riprovare(sessione, caplog):

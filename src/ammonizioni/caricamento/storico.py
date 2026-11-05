@@ -211,7 +211,13 @@ def _collega_arbitri_stagioni(s: Session, fonte_fd, oggi: datetime) -> bool:
     dopo; senza partite senza arbitro `collega` non fa richieste): il job notturno collega
     solo le partite da 7 giorni fa a fra 7 giorni. Senza chiave non fa nulla (e non segna
     nulla). True se non ci sono stati errori."""
-    if not getattr(fonte_fd, "chiave", None):
+    if fonte_fd is not None and not getattr(fonte_fd, "chiave", None):
+        log.warning(
+            "Arbitri dello storico non collegati: manca la chiave football-data.org "
+            "(FOOTBALL_DATA_KEY). Le partite restano senza arbitro finché non la imposti."
+        )
+        return True
+    if fonte_fd is None:
         return True
     completo = True
     quando = dict(repo.leggi_impostazione(s, ARBITRI_RICOLLEGATI_QUANDO, {}) or {})
