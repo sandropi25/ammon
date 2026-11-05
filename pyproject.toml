@@ -9,6 +9,7 @@ description = "Previsione ammonizioni Serie A"
 requires-python = ">=3.12"
 dependencies = [
     "httpx",
+    "pandas",  # tabelle dell'app (importato direttamente dalle pagine)
     "sqlalchemy>=2",
     "streamlit",
     "tzdata",
