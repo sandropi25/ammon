@@ -28,8 +28,11 @@ jobs:
       - run: pip install ".[online]"
       - run: python -m ammonizioni.scheduler.pre_partita
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # facoltative (variabili del repository): vuote -> 100 e 30, piano gratuito
+          # facoltativa: la fonte predefinita (variabile vuota) e' ESPN e non vuole chiavi.
+          # API_FOOTBALL_KEY serve solo con FONTE_DATI=api_football
+          FONTE_DATI: ${{ vars.FONTE_DATI }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          # facoltative (variabili del repository), solo per API-Football: vuote -> 100 e 30
           API_RICHIESTE_GIORNO: ${{ vars.API_RICHIESTE_GIORNO }}
           API_RISERVA_OGGI: ${{ vars.API_RISERVA_OGGI }}

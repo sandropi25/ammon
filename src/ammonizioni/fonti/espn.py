@@ -274,6 +274,10 @@ class Espn:
             stato=stato,
         )
 
+    def summary(self, partita_id: int) -> dict:
+        """Risposta grezza di ESPN per una partita (usata dal controllo di salute)."""
+        return self._summary(partita_id)
+
     def _summary(self, partita_id: int) -> dict:
         slug = self._slug.get(partita_id, SLUG_ESPN[COMPETIZIONI["serie_a"]])
         return self._get(f"/{slug}/summary", {"event": partita_id})

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from conftest import FonteFinta, partita_dati
 from sqlalchemy import select
@@ -152,3 +152,146 @@ def test_avanza_calendario_con_errore_saltato(sessione, caplog):
     assert [137, 2025] not in repo.leggi_impostazione(sessione, "calendari_scaricati")
     assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == 13
     assert any("137" in x.getMessage() for x in caplog.records)
+
+
+# --- tempo massimo e arbitri -----------------------------------------------------
+
+
+class Orologio:
+    """Orologio finto: il tempo avanza solo quando la fonte scarica statistiche."""
+
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+class FonteLenta(FonteFinta):
+    def __init__(self, orologio, minuti_a_statistica=1, **kwargs):
+        super().__init__(**kwargs)
+        self.orologio = orologio
+        self.minuti = minuti_a_statistica
+
+    def statistiche(self, partita_id):
+        self.orologio.t += self.minuti * 60
+        return super().statistiche(partita_id)
+
+
+def _calendario_2025(n=5):
+    base = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
+    return {
+        (135, 2025): [
+            partita_dati(i, base + timedelta(days=i), stagione=2025, arbitro=None)  # come ESPN
+            for i in range(1, n + 1)
+        ]
+    }
+
+
+def test_avanza_si_ferma_al_tempo_massimo_e_riprende(sessione):
+    orologio = Orologio()
+    fonte = FonteLenta(orologio, calendari=_calendario_2025())
+    r = storico.avanza(sessione, fonte, orologio=orologio, max_minuti=2)
+    assert r.completo is False
+    assert r.partite_aggiornate == 2  # una al minuto, poi basta
+    assert [c[1] for c in fonte.chiamate if c[0] == "statistiche"] == [5, 4]
+    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == 14  # calendari fatti
+    assert sessione.get(UltimoAggiornamento, "storico").completo is False
+    assert {p.partita_id for p in sessione.scalars(select(Presenza))} == {5, 4}
+
+    # la notte dopo continua dalle rimanenti, senza rifare nulla
+    orologio2 = Orologio()
+    fonte2 = FonteLenta(orologio2, calendari=_calendario_2025())
+    r2 = storico.avanza(sessione, fonte2, orologio=orologio2, max_minuti=40)
+    assert r2.completo is True
+    assert [c[1] for c in fonte2.chiamate if c[0] == "statistiche"] == [3, 2, 1]
+    assert [c for c in fonte2.chiamate if c[0] == "partite"] == []
+
+
+def test_avanza_tempo_esaurito_durante_i_calendari(sessione):
+    class Fonte(FonteFinta):
+        def __init__(self, orologio, **kwargs):
+            super().__init__(**kwargs)
+            self.orologio = orologio
+
+        def partite(self, competizione_id, stagione):
+            self.orologio.t += 60
+            return super().partite(competizione_id, stagione)
+
+    orologio = Orologio()
+    r = storico.avanza(sessione, Fonte(orologio, calendari={}), orologio=orologio, max_minuti=3)
+    assert r.completo is False
+    assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == 3
+
+
+def test_avanza_tempo_massimo_da_env(sessione, monkeypatch):
+    monkeypatch.delenv("STORICO_MAX_MINUTI", raising=False)
+    assert storico.max_minuti_da_env() == 40
+    monkeypatch.setenv("STORICO_MAX_MINUTI", "")
+    assert storico.max_minuti_da_env() == 40
+    monkeypatch.setenv("STORICO_MAX_MINUTI", "2")
+    orologio = Orologio()
+    fonte = FonteLenta(orologio, calendari=_calendario_2025())
+    r = storico.avanza(sessione, fonte, orologio=orologio)  # il tetto viene dall'ambiente
+    assert (r.completo, r.partite_aggiornate) == (False, 2)
+
+
+class FonteFdStagioni:
+    def __init__(self, voci, chiave="k"):
+        self.voci, self.chiave, self.chiamate = voci, chiave, []
+
+    def arbitri(self, codice, dal, al):
+        self.chiamate.append((codice, dal, al))
+        return list(self.voci)
+
+
+def test_avanza_collega_gli_arbitri_una_volta_per_stagione_intera(sessione):
+    from ammonizioni.db.modelli import Arbitro
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    cal = _calendario_2025(2)
+    voci = [
+        ArbitroPartita(p.data_utc, "Juventus FC", "FC Internazionale Milano", 1, "Davide Massa")
+        for p in cal[(135, 2025)]
+    ]
+    fd =FonteFdStagioni(voci)
+    storico.avanza(sessione, FonteFinta(calendari=cal), fd)
+    assert fd.chiamate == [("SA", date(2025, 7, 1), date(2026, 6, 30))]  # una richiesta, 2025
+    for partita_id in (1, 2):
+        arbitro_id = sessione.get(Partita, partita_id).arbitro_id
+        assert sessione.get(Arbitro, arbitro_id).nome_normalizzato == "massa"
+    assert repo.leggi_impostazione(sessione, "arbitri_collegati") == [2025]
+
+    storico.avanza(sessione, FonteFinta(calendari=cal), fd)  # notte dopo: niente di nuovo
+    assert len(fd.chiamate) == 1
+
+
+def test_avanza_senza_chiave_football_data_non_segna_le_stagioni(sessione):
+    cal = _calendario_2025(1)
+    fd = FonteFdStagioni([], chiave=None)
+    storico.avanza(sessione, FonteFinta(calendari=cal), fd)
+    assert fd.chiamate == []
+    assert not repo.leggi_impostazione(sessione, "arbitri_collegati")
+
+
+def test_avanza_errore_football_data_stagione_da_riprovare(sessione, caplog):
+    from ammonizioni.fonti.base import ErroreFonte
+
+    class Rotta(FonteFdStagioni):
+        def arbitri(self, codice, dal, al):
+            super().arbitri(codice, dal, al)
+            raise ErroreFonte("HTTP 403")
+
+    fd = Rotta([])
+    r = storico.avanza(sessione, FonteFinta(calendari=_calendario_2025(1)), fd)
+    assert r.completo is False  # statistiche scaricate comunque
+    assert r.partite_aggiornate == 1
+    assert not repo.leggi_impostazione(sessione, "arbitri_collegati")
+    assert any("2025" in x.getMessage() and "HTTP 403" in x.getMessage() for x in caplog.records)
+
+
+def test_avanza_non_collega_stagioni_senza_calendario(sessione):
+    fd = FonteFdStagioni([])
+    storico.avanza(sessione, FonteFinta(calendari={}), fd)
+    assert fd.chiamate == []  # nessuna partita nel database: niente da collegare
+    assert not repo.leggi_impostazione(sessione, "arbitri_collegati")

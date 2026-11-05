@@ -82,6 +82,12 @@ def test_fonte_dati_predefinita_espn(monkeypatch):
     assert config.fonte_dati() == "espn"
 
 
+def test_fonte_dati_variabile_vuota_vale_espn(monkeypatch):
+    """Su GitHub `${{ vars.FONTE_DATI }}` non definita arriva come stringa vuota."""
+    monkeypatch.setenv("FONTE_DATI", "")
+    assert config.fonte_dati() == "espn"
+
+
 @pytest.mark.parametrize("valore", ["espn", "api_football"])
 def test_fonte_dati_da_env(monkeypatch, valore):
     monkeypatch.setenv("FONTE_DATI", valore)

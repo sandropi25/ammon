@@ -1,7 +1,7 @@
 # Ammonizioni Serie A
 
 App per prevedere quali giocatori hanno più probabilità di essere ammoniti nelle prossime partite di Serie A.
-Scarica da API-Football calendario, arbitri, formazioni e statistiche dei giocatori (Serie A, Coppa Italia,
+Scarica da ESPN (gratuita, senza chiave) calendario, formazioni e statistiche dei giocatori e da football-data.org (gratuita, con chiave) gli arbitri (Serie A, Coppa Italia,
 Champions, Europa League, Conference), le salva in un database e calcola per ogni partita una classifica di
 probabilità di ammonizione, con quote e valore atteso per le giocate. L'interfaccia è un'app Streamlit in italiano.
 
@@ -10,7 +10,28 @@ Due job programmati tengono i dati aggiornati:
 - `python -m ammonizioni.scheduler.notte`: ogni notte aggiorna calendario, risultati e statistiche e fa avanzare il caricamento dello storico (stagioni 2026, 2025, 2024).
 - `python -m ammonizioni.scheduler.pre_partita`: ogni 10 minuti, da 75 minuti prima del calcio d'inizio, controlla se sono uscite le formazioni ufficiali. Fuori finestra esce subito senza fare richieste.
 
-Il piano gratuito di API-Football consente 100 richieste al giorno e 10 al minuto: il caricamento dello storico procede a piccoli passi (circa 2 settimane per le tre stagioni).
+## Fonti dati
+
+- **ESPN (predefinita)**: API pubblica, gratuita e senza chiave, ma non ufficiale: la struttura può cambiare senza preavviso. Il programma fa al massimo 30 richieste al minuto. Fornisce partite, formazioni e statistiche dei giocatori (non ha dribbling, voto e arbitro: il modello usa solo i dati presenti).
+- **football-data.org** (chiave gratuita, 10 richieste al minuto): fornisce gli arbitri della Serie A, collegati alle partite ESPN per data e squadre. Senza chiave tutto funziona ma le partite restano senza arbitro (fattore arbitro neutro) e nel log compare l'avviso sulla chiave mancante.
+- **API-Football** (opzionale, a pagamento per le stagioni recenti): resta nel codice come fonte alternativa. Si attiva con `FONTE_DATI=api_football` (e `API_FOOTBALL_KEY`); con `FONTE_DATI` assente, vuota o `espn` si usa ESPN e `API_FOOTBALL_KEY` non serve.
+
+### Chiave di football-data.org
+
+1. Registrati su <https://www.football-data.org/client/register> (piano gratuito) e copia il token ricevuto per email.
+2. In locale, una volta sola, in PowerShell: `setx FOOTBALL_DATA_KEY "il-tuo-token"` (vale dalle nuove finestre del terminale).
+3. Su GitHub: **Settings > Secrets and variables > Actions > New repository secret**, nome `FOOTBALL_DATA_KEY`.
+4. Su Streamlit Community Cloud: aggiungi `FOOTBALL_DATA_KEY = "il-tuo-token"` ai **Secrets** dell'app (livello principale, come `DATABASE_URL`).
+
+### Controllo di salute di ESPN
+
+Poiché ESPN non è ufficiale, `python scripts/controlla_espn.py` scarica una partita di Serie A nota (1 richiesta) e verifica i campi che il programma usa (roster, titolari, id e posizione dei giocatori, falli e cartellini, minuti degli eventi). Esce con 0 se è tutto a posto, con 1 e l'elenco dei campi mancanti se la struttura è cambiata. Lo stesso controllo gira all'inizio del job notturno: se fallisce, nel log compare "La struttura dei dati ESPN è cambiata: ..." e l'aggiornamento "notte" risulta incompleto (`completo=False`), ma il resto del lavoro viene fatto.
+
+### Primo caricamento dello storico
+
+Con ESPN lo storico delle tre stagioni richiede circa 1500 richieste a 30 al minuto, cioè circa 50 minuti. Il job notturno ferma lo storico dopo `STORICO_MAX_MINUTI` minuti (variabile d'ambiente o variabile del repository GitHub; default 40) e il giorno dopo riprende da dove era arrivato: **il primo caricamento può richiedere 2 notti**. Poi la notte dura pochi minuti. Insieme allo storico vengono collegati gli arbitri di ogni stagione (una richiesta a football-data.org per stagione).
+
+Il vecchio limite di 100 richieste al giorno riguarda solo API-Football (piano gratuito: 100 richieste al giorno e 10 al minuto, storico in circa 2 settimane).
 
 ## Uso in locale
 
@@ -22,10 +43,10 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-Copia `.env.example` in `.env` e imposta la chiave (il file `.env` non viene committato):
+Copia `.env.example` in `.env` e imposta le chiavi (il file `.env` non viene committato). Con ESPN serve solo la chiave di football-data.org (per gli arbitri); `API_FOOTBALL_KEY` serve solo con `FONTE_DATI=api_football`:
 
 ```
-API_FOOTBALL_KEY=la-tua-chiave
+FOOTBALL_DATA_KEY=il-tuo-token
 DATABASE_URL=sqlite:///ammonizioni.db
 ```
 
@@ -47,7 +68,7 @@ python -m pytest tests -v                    # test
 Se `DATABASE_URL` manca, si usa il database SQLite `ammonizioni.db` nella cartella corrente. In locale l'app non chiede la password
 se non esiste `.streamlit/secrets.toml`.
 
-### Verifica delle stagioni (ancora da fare)
+### Verifica delle stagioni di API-Football (solo con `FONTE_DATI=api_football`)
 
 Prima di caricare lo storico va verificato che la chiave API-Football dia accesso alla stagione 2026
 (il piano gratuito potrebbe limitare le stagioni accessibili). Con la chiave impostata:
@@ -58,7 +79,7 @@ python scripts/controlla_stagioni.py
 
 Usa 3 richieste del piano giornaliero. Se la stagione 2026 non risulta accessibile serve il piano Pro (19 $ al mese).
 
-### Limite di richieste (piano gratuito o Pro)
+### Limite di richieste di API-Football (piano gratuito o Pro, solo con `FONTE_DATI=api_football`)
 
 I job usano al massimo 100 richieste al giorno, di cui 30 riservate all'uso di oggi (calendario, statistiche
 recenti, formazioni): lo storico ne usa al massimo 70. I due valori si cambiano con le variabili d'ambiente
@@ -111,14 +132,18 @@ Senza un `DATABASE_URL` Postgres i test marcati `postgres` vengono saltati.
 
 1. Crea su GitHub un repository **privato** e fai il push del progetto (i workflow sono in `.github/workflows/`).
 2. Nel repository: **Settings > Secrets and variables > Actions > New repository secret**. Crea due segreti:
-   - `API_FOOTBALL_KEY`: la chiave API-Football;
+   - `FOOTBALL_DATA_KEY`: il token di football-data.org (arbitri);
    - `DATABASE_URL`: la stringa di Supabase del punto 1.
+
+   `API_FOOTBALL_KEY` (segreto) e `FONTE_DATI` (variabile, in **Variables**) servono solo per tornare ad API-Football: con `FONTE_DATI` vuota o assente si usa ESPN. `STORICO_MAX_MINUTI` (variabile, facoltativa) cambia il tetto di 40 minuti dello storico.
 3. Lancia il caricamento a mano: scheda **Actions > Caricamento notturno > Run workflow**. Nei log del passo `python -m ammonizioni.scheduler.notte` controlla le righe `Notte: ... richieste, ... partite aggiornate, completo=...` e `Storico: ...`: devono comparire il numero di richieste usate e `completo=True` (o `False` se è stato raggiunto il limite giornaliero, caso normale mentre lo storico si carica).
 4. Da quel momento: `notte.yml` parte ogni giorno alle 03:00 UTC; `pre_partita.yml` parte ogni 10 minuti ma solo dalle 10:00 alle 19:50 UTC (cron `*/10 10-19 * * *`). Entrambi si possono lanciare anche a mano (`workflow_dispatch`) e hanno un gruppo di concorrenza che impedisce due esecuzioni sovrapposte.
 
 Nota: GitHub può ritardare l'avvio dei cron di qualche minuto (e a volte saltarne qualcuno nei momenti di carico). Per il controllo delle formazioni, a intervalli di 10 minuti, non è un problema. I cron dei repository senza attività per 60 giorni vengono disattivati da GitHub: basta riattivarli dalla scheda Actions.
 
 #### Minuti di GitHub Actions e orari del cron
+
+Con ESPN il pre-partita pesa circa 1800 minuti al mese (cron `*/10 10-19 * * *`) e le prime due notti di storico fino a 40 minuti ciascuna (poi la notte dura pochi minuti): in totale si sta vicino ai 2000 minuti mensili del piano Free, quindi **si consiglia un repository pubblico** (minuti illimitati; i segreti restano protetti, il codice è visibile). La descrizione seguente, con i numeri del "primo mese", è calcolata sui limiti di API-Football.
 
 Un repository privato sul piano GitHub Free ha 2000 minuti di Actions al mese e ogni esecuzione conta almeno 1 minuto. Un cron ogni 10 minuti tutto il giorno farebbe circa 4320 esecuzioni al mese ed esaurirebbe la quota in circa due settimane, dopo di che i job si fermerebbero. Per questo `pre_partita.yml` gira solo nelle ore in cui un calcio d'inizio può cadere nella finestra di 75 minuti: 10-19 UTC, cioè 6 esecuzioni x 10 ore = 60 al giorno, circa 1800 al mese, più circa 30 della notte: circa 1830 minuti al mese, sotto il limite.
 
@@ -146,8 +171,10 @@ periodo di caricamento hai due strade:
    ```toml
    password = "la-password-condivisa"
    DATABASE_URL = "postgresql://..."
-   API_FOOTBALL_KEY = "la-tua-chiave"
+   FOOTBALL_DATA_KEY = "il-tuo-token"
    ```
+
+   (`API_FOOTBALL_KEY` solo se usi `FONTE_DATI = "api_football"`.)
 
 4. **Deploy**. Le dipendenze vengono installate da `requirements.txt` (una sola riga, `.[online]`: installa il pacchetto `ammonizioni` con le sue dipendenze e il driver Postgres).
 5. Apri l'URL dell'app e verifica: richiesta della password, pagina **Partite** con la data dell'ultimo aggiornamento, e una classifica nel dettaglio di una partita.

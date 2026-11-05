@@ -8,14 +8,17 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from ammonizioni import config
 from ammonizioni.caricamento.formazioni import salva_probabili, ultimo_xi
 from ammonizioni.config import COMPETIZIONI
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
 from ammonizioni.fonti.limite import LimiteSuperato, Priorita
-from ammonizioni.scheduler.comune import configura_log, crea_api_football, crea_limite
+from ammonizioni.scheduler.comune import (
+    ErroreConfigurazione,
+    configura_log,
+    crea_fonte as crea_fonte_predefinita,
+)
 
 log = logging.getLogger(__name__)
 
@@ -125,18 +128,19 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     return diventate_ufficiali
 
 
-def main(argv=None, crea_fonte=crea_api_football) -> int:
+def main(argv=None, crea_fonte=crea_fonte_predefinita) -> int:
     configura_log()
     with modulo_sessione.apri() as s:
-        chiave = config.chiave_api(s)
-        if not chiave:
-            log.error("Chiave API-Football mancante (API_FOOTBALL_KEY o impostazione 'chiave_api')")
+        try:
+            fonte = crea_fonte(s, Priorita.OGGI)
+        except ErroreConfigurazione as errore:
+            log.error("%s", errore)
             return 2
         adesso = datetime.now(timezone.utc)
         if not partite_da_controllare(s, adesso):
             log.info("Nessuna partita nella finestra di controllo")
             return 0
-        n = esegui(s, crea_fonte(chiave, Priorita.OGGI, crea_limite(s)), adesso)
+        n = esegui(s, fonte, adesso)
         log.info("Formazioni ufficiali trovate per %s partite", n)
     return 0
 

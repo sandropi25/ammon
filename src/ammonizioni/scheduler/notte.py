@@ -7,26 +7,45 @@ import logging
 from ammonizioni import config
 from ammonizioni.caricamento import notturno, storico
 from ammonizioni.db import sessione as modulo_sessione
+from ammonizioni.fonti.controllo_espn import controlla_struttura
 from ammonizioni.fonti.limite import Priorita
-from ammonizioni.scheduler.comune import configura_log, crea_api_football, crea_limite
+from ammonizioni.scheduler.comune import (
+    ErroreConfigurazione,
+    configura_log,
+    crea_football_data,
+    crea_fonte as crea_fonte_predefinita,
+)
 
 log = logging.getLogger(__name__)
 
 
-def main(argv=None, crea_fonte=crea_api_football) -> int:
+def main(
+    argv=None,
+    crea_fonte=crea_fonte_predefinita,
+    crea_fd=crea_football_data,
+    controllo=controlla_struttura,
+) -> int:
     configura_log()
     with modulo_sessione.apri() as s:
-        chiave = config.chiave_api(s)
-        if not chiave:
-            log.error("Chiave API-Football mancante (API_FOOTBALL_KEY o impostazione 'chiave_api')")
+        try:
+            fonte_oggi = crea_fonte(s, Priorita.OGGI)
+            fonte_storico = crea_fonte(s, Priorita.STORICO)
+        except ErroreConfigurazione as errore:
+            log.error("%s", errore)
             return 2
-        limite = crea_limite(s)  # uno solo: le due fonti condividono il ritmo al minuto
-        riepilogo = notturno.esegui(s, crea_fonte(chiave, Priorita.OGGI, limite))
+        fonte_fd = crea_fd(s)
+        # il controllo di salute vale solo per ESPN (API non ufficiale)
+        riepilogo = notturno.esegui(
+            s,
+            fonte_oggi,
+            fonte_fd=fonte_fd,
+            controllo=controllo if config.fonte_dati() == "espn" else None,
+        )
         log.info(
             "Notte: %s richieste, %s partite aggiornate, completo=%s",
             riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,
         )
-        riepilogo = storico.avanza(s, crea_fonte(chiave, Priorita.STORICO, limite))
+        riepilogo = storico.avanza(s, fonte_storico, fonte_fd)
         log.info(
             "Storico: %s richieste, %s partite aggiornate, completo=%s",
             riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,

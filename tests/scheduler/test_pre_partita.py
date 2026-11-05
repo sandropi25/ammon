@@ -16,6 +16,8 @@ from ammonizioni.db.modelli import (
     UltimoAggiornamento,
 )
 from ammonizioni.fonti.api_football import ApiFootball
+from ammonizioni.fonti.espn import Espn
+from ammonizioni.fonti.football_data import FootballData
 from ammonizioni.fonti.limite import LimiteRichieste, Priorita
 from ammonizioni.fonti.tipi import FormazioneDati
 from ammonizioni.scheduler import comune, notte, pre_partita
@@ -180,7 +182,8 @@ def test_limite_superato_ferma_il_ciclo_senza_errore(sessione):
 def db_file(tmp_path, monkeypatch):
     url = f"sqlite:///{(tmp_path / 'prova.db').as_posix()}"
     monkeypatch.setenv("DATABASE_URL", url)
-    monkeypatch.delenv("API_FOOTBALL_KEY", raising=False)
+    for nome in ("API_FOOTBALL_KEY", "FOOTBALL_DATA_KEY", "FONTE_DATI", "STORICO_MAX_MINUTI"):
+        monkeypatch.delenv(nome, raising=False)  # mai rete ne' chiavi vere nei test
     engine = modulo_sessione.crea_engine(url)
     modulo_sessione.crea_tabelle(engine)
     engine.dispose()
@@ -195,29 +198,38 @@ def dentro_db(url, funzione):
     engine.dispose()
 
 
-def test_main_senza_chiave_restituisce_2(db_file, caplog):
-    chiamate = []
+def test_main_api_football_senza_chiave_restituisce_2(db_file, monkeypatch, caplog):
+    monkeypatch.setenv("FONTE_DATI", "api_football")
     with caplog.at_level(logging.ERROR):
-        codice = pre_partita.main([], crea_fonte=lambda *a: chiamate.append(a))
-    assert codice == 2 and chiamate == []
+        assert pre_partita.main([]) == 2
     assert any(r.levelno == logging.ERROR for r in caplog.records)
-    assert notte.main([], crea_fonte=lambda *a: chiamate.append(a)) == 2
-    assert chiamate == []
+    assert notte.main([]) == 2
 
 
-def test_main_pre_partita_senza_partite_nessuna_chiamata(db_file, monkeypatch):
-    monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
+def test_main_espn_senza_nessuna_chiave_non_esce_con_2(db_file, monkeypatch):
+    """Con ESPN (default) non serve la chiave API-Football: i job partono (qui con fonti finte)."""
+    monkeypatch.delenv("FONTE_DATI", raising=False)
+    monkeypatch.delenv("FOOTBALL_DATA_KEY", raising=False)
+    dentro_db(db_file, lambda s: prepara(s, data=datetime.now(timezone.utc) + timedelta(minutes=30)))
+    fonte = FonteFinta(formazioni_uscite=ufficiali())
+    assert pre_partita.main([], crea_fonte=lambda s, priorita: fonte) == 0
+    assert fonte.chiamate == [("formazioni", 100)]
+    assert notte.main(
+        [], crea_fonte=lambda s, priorita: FonteFinta(partite_ft=1), controllo=lambda f: []
+    ) == 0
+
+
+def test_main_pre_partita_senza_partite_nessuna_chiamata(db_file):
     dentro_db(db_file, lambda s: prepara(s, data=datetime.now(timezone.utc) + timedelta(hours=5)))
     fonte = FonteFinta()
-    assert pre_partita.main([], crea_fonte=lambda chiave, priorita, limite: fonte) == 0
+    assert pre_partita.main([], crea_fonte=lambda s, priorita: fonte) == 0
     assert fonte.chiamate == []
 
 
-def test_main_pre_partita_salva_ufficiali(db_file, monkeypatch):
-    monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
+def test_main_pre_partita_salva_ufficiali(db_file):
     dentro_db(db_file, lambda s: prepara(s, data=datetime.now(timezone.utc) + timedelta(minutes=30)))
     fonte = FonteFinta(formazioni_uscite=ufficiali())
-    assert pre_partita.main([], crea_fonte=lambda chiave, priorita, limite: fonte) == 0
+    assert pre_partita.main([], crea_fonte=lambda s, priorita: fonte) == 0
     assert fonte.chiamate == [("formazioni", 100)]
 
     def controlla(s):
@@ -226,25 +238,81 @@ def test_main_pre_partita_salva_ufficiali(db_file, monkeypatch):
     dentro_db(db_file, controlla)
 
 
-def test_main_notte_usa_due_fonti_e_restituisce_0(db_file, monkeypatch):
-    monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
+def test_main_notte_usa_due_fonti_e_restituisce_0(db_file):
     richieste = []
 
-    def crea(chiave, priorita, limite):
-        richieste.append((chiave, priorita, limite))
+    def crea(s, priorita):
+        richieste.append(priorita)
         return FonteFinta(partite_ft=2)
 
-    assert notte.main([], crea_fonte=crea) == 0
-    assert [(c, p) for c, p, _ in richieste] == [
-        ("chiave-di-prova", Priorita.OGGI), ("chiave-di-prova", Priorita.STORICO),
-    ]
-    # un solo limite (stesso ritmo al minuto) per le due fonti
-    limite_oggi, limite_storico = (limite for _, _, limite in richieste)
-    assert isinstance(limite_oggi, LimiteRichieste)
-    assert limite_oggi is limite_storico
+    assert notte.main([], crea_fonte=crea, controllo=lambda f: []) == 0
+    assert richieste == [Priorita.OGGI, Priorita.STORICO]
 
 
-def test_crea_api_football_usa_il_limite_dato(sessione):
+def test_main_notte_api_football_usa_la_chiave_e_un_solo_limite(db_file, monkeypatch):
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
+    fonti = []
+
+    def crea(s, priorita):
+        fonte = comune.crea_fonte(s, priorita)
+        fonti.append(fonte)
+        return FonteFinta(partite_ft=1)
+
+    assert notte.main([], crea_fonte=crea) == 0  # niente controllo di salute (non ESPN)
+    assert all(isinstance(f, ApiFootball) for f in fonti)
+    assert [f.priorita for f in fonti] == [Priorita.OGGI, Priorita.STORICO]
+    assert isinstance(fonti[0].limite, LimiteRichieste) and fonti[0].limite is fonti[1].limite
+
+
+def test_crea_fonte_predefinita_espn_senza_chiavi(sessione, monkeypatch):
+    for nome in ("FONTE_DATI", "API_FOOTBALL_KEY"):
+        monkeypatch.delenv(nome, raising=False)
+    fonte = comune.crea_fonte(sessione, Priorita.STORICO)
+    assert isinstance(fonte, Espn)
+    assert fonte.priorita is Priorita.STORICO
+    assert (fonte.limite.max_minuto, fonte.limite.max_giorno) == (30, 5000)
+    # lo stesso limite per tutte le fonti del processo (ritmo al minuto condiviso)
+    assert comune.crea_fonte(sessione, Priorita.OGGI).limite is fonte.limite
+    fonte.client.close()
+
+
+def test_crea_fonte_variabile_vuota_vale_espn(sessione, monkeypatch):
+    monkeypatch.setenv("FONTE_DATI", "")
+    fonte = comune.crea_fonte(sessione, Priorita.OGGI)
+    assert isinstance(fonte, Espn)
+    fonte.client.close()
+
+
+def test_crea_fonte_api_football_con_limite_e_chiave(sessione, monkeypatch):
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    monkeypatch.setenv("API_FOOTBALL_KEY", "k")
+    monkeypatch.setenv("API_RICHIESTE_GIORNO", "7500")
+    fonte = comune.crea_fonte(sessione, Priorita.OGGI)
+    assert isinstance(fonte, ApiFootball)
+    assert fonte.limite.max_giorno == 7500
+    fonte.client.close()
+
+
+def test_crea_fonte_api_football_senza_chiave(sessione, monkeypatch):
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    monkeypatch.delenv("API_FOOTBALL_KEY", raising=False)
+    with pytest.raises(comune.ErroreConfigurazione, match="API-Football"):
+        comune.crea_fonte(sessione, Priorita.OGGI)
+
+
+def test_crea_football_data_con_e_senza_chiave(sessione, monkeypatch):
+    monkeypatch.delenv("FOOTBALL_DATA_KEY", raising=False)
+    senza = comune.crea_football_data(sessione)
+    assert isinstance(senza, FootballData) and not senza.chiave
+    monkeypatch.setenv("FOOTBALL_DATA_KEY", "fd")
+    con = comune.crea_football_data(sessione)
+    assert con.chiave == "fd"
+    assert con.limite is senza.limite  # uno solo per processo: 10 richieste al minuto
+    assert (con.limite.max_minuto, con.limite.sessione) == (10, None)  # non tocca il DB
+
+
+def test_crea_api_football_usa_il_limite_dato(sessione):  # fabbrica usata da crea_fonte
     limite = LimiteRichieste(sessione)
     fonte = comune.crea_api_football("k", Priorita.STORICO, limite)
     assert isinstance(fonte, ApiFootball)
@@ -255,8 +323,6 @@ def test_crea_api_football_usa_il_limite_dato(sessione):
 def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
     from ammonizioni.fonti.base import ErroreFonte
 
-    monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
-
     class CalendarioRotto(FonteFinta):
         def partite(self, competizione_id, stagione):
             if (competizione_id, stagione) == (135, 2026):
@@ -266,11 +332,11 @@ def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
 
     fonti = []
 
-    def crea(chiave, priorita, limite):
+    def crea(s, priorita):
         fonti.append(CalendarioRotto())
         return fonti[-1]
 
-    assert notte.main([], crea_fonte=crea) == 0
+    assert notte.main([], crea_fonte=crea, controllo=lambda f: []) == 0
     assert len(fonti) == 2
     assert len(fonti[1].chiamate) == 14  # lo storico ha scaricato i suoi calendari
 
@@ -281,6 +347,7 @@ def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
     dentro_db(db_file, controlla)
 
 
-def test_main_notte_con_limite_raggiunto_restituisce_0(db_file, monkeypatch):
-    monkeypatch.setenv("API_FOOTBALL_KEY", "chiave-di-prova")
-    assert notte.main([], crea_fonte=lambda c, p, l: FonteFinta(partite_ft=3, limite_dopo=1)) == 0
+def test_main_notte_con_limite_raggiunto_restituisce_0(db_file):
+    assert notte.main(
+        [], crea_fonte=lambda s, p: FonteFinta(partite_ft=3, limite_dopo=1), controllo=lambda f: []
+    ) == 0

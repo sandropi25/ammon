@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ammonizioni.caricamento import arbitri_fd
 from ammonizioni.caricamento.arbitri import trova_o_crea
 from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STATI_FINITI
 from ammonizioni.db import repo
@@ -20,6 +21,7 @@ from ammonizioni.giocate.registro import aggiorna_esiti
 log = logging.getLogger(__name__)
 
 GIORNI_STATISTICHE_NOTTE = 7
+GIORNI_ARBITRI = 7  # arbitri collegati per le partite da 7 giorni fa a fra 7 giorni
 
 
 @dataclass
@@ -188,8 +190,37 @@ def scarica_statistiche_giocate(s: Session, fonte: Fonte, adesso: datetime) -> i
     return scaricate
 
 
-def esegui(s: Session, fonte: Fonte, adesso: datetime | None = None) -> RiepilogoJob:
-    """Calendario, statistiche, esiti delle giocate; poi segna l'aggiornamento "notte".
+def collega_arbitri_serie_a(s: Session, fonte_fd, adesso: datetime) -> bool:
+    """Arbitri da football-data.org per le partite di Serie A tra 7 giorni fa e fra 7 giorni.
+    Senza chiave `collega` salta e lo scrive nel log (esito normale, True). Un errore della
+    fonte viene registrato nel log: le partite restano senza arbitro (fattore neutro) e
+    restituisce False."""
+    try:
+        arbitri_fd.collega(
+            s,
+            fonte_fd,
+            COMPETIZIONI["serie_a"],
+            (adesso - timedelta(days=GIORNI_ARBITRI)).date(),
+            (adesso + timedelta(days=GIORNI_ARBITRI)).date(),
+        )
+    except (ErroreFonte, LimiteSuperato) as errore:
+        s.rollback()
+        log.warning("Arbitri Serie A non collegati: %s", errore)
+        return False
+    return True
+
+
+def esegui(
+    s: Session,
+    fonte: Fonte,
+    adesso: datetime | None = None,
+    fonte_fd=None,
+    controllo=None,
+) -> RiepilogoJob:
+    """Controllo di salute (se dato), calendario, statistiche, arbitri (se c'e' `fonte_fd`),
+    esiti delle giocate; poi segna l'aggiornamento "notte".
+    `controllo(fonte) -> list[str]` restituisce i problemi di struttura della fonte: se ce ne
+    sono il job li scrive nel log e termina con completo=False, ma il resto viene fatto.
     Se il limite di richieste finisce a metà, salva il parziale e restituisce completo=False.
     Un ErroreFonte sul calendario viene registrato nel log: statistiche ed esiti proseguono
     con le partite già note e l'aggiornamento risulta incompleto."""
@@ -197,6 +228,11 @@ def esegui(s: Session, fonte: Fonte, adesso: datetime | None = None) -> Riepilog
     contata = FonteContata(fonte)
     completo = True
     try:
+        if controllo is not None:
+            problemi = controllo(fonte)
+            if problemi:
+                log.error("La struttura dei dati ESPN è cambiata: %s", "; ".join(problemi))
+                completo = False
         try:
             aggiorna_calendario(s, contata)
         except ErroreFonte as errore:
@@ -205,6 +241,8 @@ def esegui(s: Session, fonte: Fonte, adesso: datetime | None = None) -> Riepilog
         scarica_statistiche_giocate(s, contata, adesso)
     except LimiteSuperato:
         s.commit()
+        completo = False
+    if fonte_fd is not None and not collega_arbitri_serie_a(s, fonte_fd, adesso):
         completo = False
     aggiorna_esiti(s)
     repo.segna_aggiornamento(s, "notte", completo)

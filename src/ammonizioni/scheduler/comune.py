@@ -6,9 +6,16 @@ import os
 
 from sqlalchemy.orm import Session
 
+from ammonizioni import config
 from ammonizioni.fonti.api_football import ApiFootball
 from ammonizioni.fonti.base import Fonte
-from ammonizioni.fonti.limite import LimiteRichieste, Priorita
+from ammonizioni.fonti.espn import Espn, crea_limite_espn
+from ammonizioni.fonti.football_data import FootballData
+from ammonizioni.fonti.limite import (
+    LimiteRichieste,
+    Priorita,
+    crea_limite_football_data,
+)
 
 RICHIESTE_GIORNO = 100  # piano gratuito API-Football
 RISERVA_OGGI = 30
@@ -38,3 +45,31 @@ def crea_limite(s: Session) -> LimiteRichieste:
 def crea_api_football(chiave: str, priorita: Priorita, limite: LimiteRichieste) -> Fonte:
     """Client API-Football con il limite (condiviso) dato."""
     return ApiFootball(chiave, limite, priorita=priorita)
+
+
+class ErroreConfigurazione(Exception):
+    """Configurazione mancante o non valida (per esempio la chiave di API-Football)."""
+
+
+def crea_fonte(s: Session, priorita: Priorita) -> Fonte:
+    """Fonte dati scelta da FONTE_DATI: ESPN (predefinita, senza chiave) o API-Football.
+    Il limite di richieste e' uno solo per sessione (e quindi per processo): le fonti create
+    con priorita' diverse condividono il ritmo al minuto. Con API-Football la chiave e'
+    obbligatoria (ErroreConfigurazione se manca)."""
+    if config.fonte_dati() == "api_football":
+        chiave = config.chiave_api(s)
+        if not chiave:
+            raise ErroreConfigurazione(
+                "Chiave API-Football mancante (API_FOOTBALL_KEY o impostazione 'chiave_api')"
+            )
+        limite = s.info.setdefault("limite_api_football", crea_limite(s))
+        return crea_api_football(chiave, priorita, limite)
+    limite = s.info.setdefault("limite_espn", crea_limite_espn(s))
+    return Espn(limite, priorita=priorita)
+
+
+def crea_football_data(s: Session) -> FootballData:
+    """Client football-data.org (arbitri). Senza chiave (FOOTBALL_DATA_KEY o impostazione
+    'chiave_football_data') e' comunque creato: `arbitri_fd.collega` salta e lo scrive nel log."""
+    limite = s.info.setdefault("limite_football_data", crea_limite_football_data())
+    return FootballData(config.chiave_football_data(s), limite)
