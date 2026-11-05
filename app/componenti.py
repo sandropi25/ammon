@@ -3,7 +3,7 @@ le pagine si limitano a mostrare quello che restituiscono queste funzioni."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
@@ -31,6 +31,11 @@ from ammonizioni.motore.tipi import Candidato, DatiPartita, decimale
 
 ROMA = ZoneInfo("Europe/Rome")
 GIORNI = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+GIORNI_ESTESI = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
+MESI = (
+    "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+    "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
+)
 GIORNI_PROSSIME = 7
 SOGLIA_PARTITA_CALDA = 1.1
 FONTI_NON_TIPSTER = ("io", "modello")
@@ -118,6 +123,39 @@ class RigaPartita:
     calda: bool
     formazioni: str
     campionato: str = ""
+    ora: str = ""  # "20:45" in Europe/Rome
+    data_utc: datetime | None = None
+
+
+def ora_italiana(dt_utc: datetime) -> str:
+    """"20:45" in Europe/Rome."""
+    return f"{dt_utc.astimezone(ROMA):%H:%M}"
+
+
+def intestazione_giorno(giorno: date, oggi: date) -> str:
+    """"Oggi · giovedì 6 novembre 2026", "Domani · ..." o solo "sabato 8 novembre 2026"."""
+    testo = f"{GIORNI_ESTESI[giorno.weekday()]} {giorno.day} {MESI[giorno.month - 1]} {giorno.year}"
+    if giorno == oggi:
+        return f"Oggi · {testo}"
+    if giorno == oggi + timedelta(days=1):
+        return f"Domani · {testo}"
+    return testo
+
+
+def raggruppa_per_giorno(
+    righe: list[RigaPartita], adesso_utc: datetime
+) -> list[tuple[str, list[RigaPartita]]]:
+    """Partite raggruppate per giorno di Europe/Rome (giorni in ordine, partite per orario
+    di inizio), con l'intestazione del giorno."""
+    def locale(r: RigaPartita) -> datetime:
+        dt = r.data_utc
+        return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(ROMA)
+
+    oggi = adesso_utc.astimezone(ROMA).date()
+    gruppi: dict[date, list[RigaPartita]] = {}
+    for r in sorted(righe, key=lambda r: (locale(r), r.id)):
+        gruppi.setdefault(locale(r).date(), []).append(r)
+    return [(intestazione_giorno(g, oggi), rr) for g, rr in gruppi.items()]
 
 
 def stato_aggiornamento(s: Session) -> tuple[str, bool]:
@@ -189,6 +227,8 @@ def prossime_partite(
                 ),
                 formazioni=p.stato_formazioni,
                 campionato=NOMI_CAMPIONATI.get(p.competizione_id, ""),
+                ora=ora_italiana(p.data_utc),
+                data_utc=p.data_utc,
             )
         )
     return righe

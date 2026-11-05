@@ -24,10 +24,11 @@ filtro = st.radio(
     key="filtro_partite",
 )
 
+adesso = datetime.now(timezone.utc)
 with apri() as s:
     testo_agg, completo = componenti.stato_aggiornamento(s)
     partite = componenti.prossime_partite(
-        s, datetime.now(timezone.utc), campionati=componenti.campionati_del_filtro(filtro)
+        s, adesso, campionati=componenti.campionati_del_filtro(filtro)
     )
 
 st.caption(testo_agg)
@@ -38,20 +39,22 @@ if not partite:
     dove = "" if filtro == componenti.TUTTI else f" di {filtro}"
     st.info(f"Nessuna partita{dove} nei prossimi 7 giorni.")
 
-for p in partite:
-    with st.container(border=True):
-        colonne = st.columns([5, 2])
-        with colonne[0]:
-            giornata = f" · Giornata {p.giornata}" if p.giornata else ""
-            campionato = f" · {p.campionato}" if p.campionato else ""
-            st.markdown(f"**{p.casa} – {p.trasferta}**{campionato}{giornata} · {p.quando}")
-            arbitro = p.arbitro or "da designare"
-            st.caption(f"Arbitro: {arbitro} · Formazioni: {p.formazioni}")
-            if p.calda:
-                st.markdown(":red[**Partita calda**]")
-        with colonne[1]:
-            st.page_link(
-                "pages/1_Dettaglio_partita.py",
-                label="Apri dettaglio",
-                query_params={"partita": p.id},
-            )
+for titolo_giorno, del_giorno in componenti.raggruppa_per_giorno(partite, adesso):
+    st.subheader(titolo_giorno)
+    for p in del_giorno:
+        with st.container(border=True):
+            colonne = st.columns([5, 2])
+            with colonne[0]:
+                giornata = f" · Giornata {p.giornata}" if p.giornata else ""
+                campionato = f" · {p.campionato}" if p.campionato else ""
+                st.markdown(f"**{p.ora}** · **{p.casa} – {p.trasferta}**{campionato}{giornata}")
+                arbitro = p.arbitro or "da designare"
+                st.caption(f"Arbitro: {arbitro} · Formazioni: {p.formazioni}")
+                if p.calda:
+                    st.markdown(":red[**Partita calda**]")
+            with colonne[1]:
+                st.page_link(
+                    "pages/1_Dettaglio_partita.py",
+                    label="Apri dettaglio",
+                    query_params={"partita": p.id},
+                )
