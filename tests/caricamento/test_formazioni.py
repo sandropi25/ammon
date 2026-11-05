@@ -49,6 +49,14 @@ def ids(tipo, s, partita_id=100, squadra_id=1):
     )
 
 
+def test_ruoli_definiti_una_volta_sola():
+    from ammonizioni.motore import dati, tipi
+
+    assert tipi.RUOLI == ("G", "D", "M", "F")
+    assert formazioni.RUOLI is tipi.RUOLI
+    assert dati.RUOLI is tipi.RUOLI
+
+
 def test_ultimo_xi_anche_da_coppa(sessione):
     prepara(sessione)
     aggiungi_partita(sessione, 1, datetime(2026, 9, 20, tzinfo=timezone.utc))

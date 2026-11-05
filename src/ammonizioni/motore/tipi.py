@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+RUOLI = ("G", "D", "M", "F")  # portiere, difensore, centrocampista, attaccante
+
 
 def decimale(x: float, cifre: int = 1) -> str:
     """Formatta con la virgola decimale all'italiana: 5.4 -> "5,4"."""

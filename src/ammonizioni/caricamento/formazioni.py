@@ -7,9 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita, Presenza
-from ammonizioni.motore.tipi import Titolare
-
-RUOLI = ("G", "D", "M", "F")
+from ammonizioni.motore.tipi import RUOLI, Titolare
 
 
 def titolare_da(g: Giocatore, squadra_id: int, griglia: str | None, ruolo: str | None) -> Titolare:

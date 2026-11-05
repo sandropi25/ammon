@@ -19,6 +19,7 @@ from ammonizioni.db.modelli import (
 )
 from ammonizioni.motore.fattori.contesto import posta_in_classifica
 from ammonizioni.motore.tipi import (
+    RUOLI,
     ContestoInfo,
     DatiPartita,
     MedieCampionato,
@@ -29,7 +30,6 @@ from ammonizioni.motore.tipi import (
 )
 
 SERIE_A = COMPETIZIONI["serie_a"]
-RUOLI = ("G", "D", "M", "F")
 PRECEDENTI_MAX = 5
 
 MEDIE_PREDEFINITE = MedieCampionato(
