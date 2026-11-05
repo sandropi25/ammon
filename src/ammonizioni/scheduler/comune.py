@@ -4,9 +4,12 @@ from __future__ import annotations
 import logging
 import os
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ammonizioni import config
+from ammonizioni.db import repo
+from ammonizioni.db.modelli import Partita
 from ammonizioni.fonti.api_football import ApiFootball
 from ammonizioni.fonti.base import Fonte
 from ammonizioni.fonti.espn import Espn, crea_limite_espn
@@ -51,11 +54,35 @@ class ErroreConfigurazione(Exception):
     """Configurazione mancante o non valida (per esempio la chiave di API-Football)."""
 
 
+CHIAVE_FONTE_DB = "fonte_dati_db"
+
+
+def verifica_fonte_database(s: Session, configurata: str) -> None:
+    """La fonte dati di un database non si cambia: gli id di ESPN e di API-Football si
+    sovrappongono (squadre e giocatori diversi con lo stesso id) e i dati si mescolerebbero.
+    Alla prima volta la fonte configurata e' memorizzata (impostazione 'fonte_dati_db'). Un
+    database con partite ma senza valore memorizzato (creato prima di questo controllo) si
+    considera ESPN. ErroreConfigurazione se la fonte configurata e' diversa."""
+    memorizzata = repo.leggi_impostazione(s, CHIAVE_FONTE_DB, None)
+    if memorizzata is None:
+        ha_partite = s.scalars(select(Partita.id).limit(1)).first() is not None
+        memorizzata = "espn" if ha_partite else configurata
+        if memorizzata == configurata:
+            repo.scrivi_impostazione(s, CHIAVE_FONTE_DB, configurata)
+    if memorizzata != configurata:
+        raise ErroreConfigurazione(
+            f"Il database contiene dati di {memorizzata}: per cambiare fonte serve "
+            "un database nuovo e vuoto"
+        )
+
+
 def crea_fonte(s: Session, priorita: Priorita) -> Fonte:
     """Fonte dati scelta da FONTE_DATI: ESPN (predefinita, senza chiave) o API-Football.
     Il limite di richieste e' uno solo per sessione (e quindi per processo): le fonti create
     con priorita' diverse condividono il ritmo al minuto. Con API-Football la chiave e'
-    obbligatoria (ErroreConfigurazione se manca)."""
+    obbligatoria (ErroreConfigurazione se manca). La fonte deve essere quella dei dati gia'
+    presenti nel database (ErroreConfigurazione altrimenti)."""
+    verifica_fonte_database(s, config.fonte_dati())
     if config.fonte_dati() == "api_football":
         chiave = config.chiave_api(s)
         if not chiave:

@@ -338,6 +338,49 @@ def test_crea_fonte_api_football_senza_chiave(sessione, monkeypatch):
         comune.crea_fonte(sessione, Priorita.OGGI)
 
 
+def test_crea_fonte_memorizza_la_fonte_del_database_vuoto(sessione, monkeypatch):
+    from ammonizioni.db import repo
+
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    monkeypatch.setenv("API_FOOTBALL_KEY", "k")
+    comune.crea_fonte(sessione, Priorita.OGGI).client.close()
+    assert repo.leggi_impostazione(sessione, "fonte_dati_db") == "api_football"
+    monkeypatch.setenv("FONTE_DATI", "espn")
+    with pytest.raises(comune.ErroreConfigurazione, match="contiene dati di api_football"):
+        comune.crea_fonte(sessione, Priorita.OGGI)
+
+
+def test_crea_fonte_espn_poi_api_football_rifiutata(sessione, monkeypatch):
+    monkeypatch.delenv("FONTE_DATI", raising=False)
+    comune.crea_fonte(sessione, Priorita.OGGI).client.close()
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    monkeypatch.setenv("API_FOOTBALL_KEY", "k")
+    with pytest.raises(comune.ErroreConfigurazione, match="database nuovo e vuoto"):
+        comune.crea_fonte(sessione, Priorita.OGGI)
+
+
+def test_crea_fonte_database_con_partite_senza_valore_e_espn(sessione, monkeypatch):
+    """Un database creato prima del controllo (partite, nessun valore) si considera ESPN."""
+    prepara(sessione)
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    monkeypatch.setenv("API_FOOTBALL_KEY", "k")
+    with pytest.raises(comune.ErroreConfigurazione, match="contiene dati di espn"):
+        comune.crea_fonte(sessione, Priorita.OGGI)
+    monkeypatch.delenv("FONTE_DATI")
+    comune.crea_fonte(sessione, Priorita.OGGI).client.close()
+
+
+def test_job_escono_con_2_se_la_fonte_non_e_quella_del_database(db_file, monkeypatch, caplog):
+    from ammonizioni.db import repo
+
+    dentro_db(db_file, lambda s: repo.scrivi_impostazione(s, "fonte_dati_db", "api_football"))
+    monkeypatch.delenv("FONTE_DATI", raising=False)
+    with caplog.at_level(logging.ERROR):
+        assert pre_partita.main([]) == 2
+        assert notte.main([]) == 2
+    assert "database nuovo e vuoto" in caplog.text
+
+
 def test_crea_football_data_con_e_senza_chiave(sessione, monkeypatch):
     monkeypatch.delenv("FOOTBALL_DATA_KEY", raising=False)
     senza = comune.crea_football_data(sessione)
