@@ -372,6 +372,39 @@ def test_avanza_collega_gli_arbitri_anche_della_liga_dopo_la_serie_a(sessione):
     assert len(fd.chiamate) == 2
 
 
+def test_avanza_ricollega_ogni_settimana_gli_arbitri_della_stagione_corrente(sessione):
+    """Una partita della stagione corrente senza arbitro (designato dopo il primo collegamento)
+    viene ricollegata dopo 7 giorni, con una richiesta per campionato; non prima."""
+    from ammonizioni.db.modelli import Arbitro
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    data = datetime.now(timezone.utc) - timedelta(days=10)
+    _salva(sessione, partita_dati(1, data, stagione=STAGIONE_CORRENTE, arbitro=None,
+                                  stato="NS"))
+    voce = ArbitroPartita(data, "Juventus FC", "FC Internazionale Milano", 1, "Davide Massa")
+    fd = FonteFdStagioni([])  # al primo passaggio football-data non ha ancora l'arbitro
+    storico.avanza(sessione, FonteFinta(), fd)
+    intera = (date(STAGIONE_CORRENTE, 7, 1), date(STAGIONE_CORRENTE + 1, 6, 30))
+    assert fd.chiamate == [("SA", *intera)]  # niente richieste per la Liga: nessuna partita
+    assert sessione.get(Partita, 1).arbitro_id is None
+
+    fd.voci = [voce]
+    storico.avanza(sessione, FonteFinta(), fd)  # meno di 7 giorni dopo: non riprova
+    assert len(fd.chiamate) == 1 and sessione.get(Partita, 1).arbitro_id is None
+
+    quando = repo.leggi_impostazione(sessione, "arbitri_ricollegati_il")
+    quando["135"] = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    repo.scrivi_impostazione(sessione, "arbitri_ricollegati_il", quando)
+    sessione.commit()
+    storico.avanza(sessione, FonteFinta(), fd)
+    assert fd.chiamate[1:] == [("SA", *intera)]
+    arbitro_id = sessione.get(Partita, 1).arbitro_id
+    assert sessione.get(Arbitro, arbitro_id).nome_normalizzato == "massa"
+
+    storico.avanza(sessione, FonteFinta(), fd)  # fatto: la settimana riparte
+    assert len(fd.chiamate) == 2
+
+
 def test_avanza_senza_chiave_football_data_non_segna_le_stagioni(sessione):
     cal = _calendario_2025(1)
     fd = FonteFdStagioni([], chiave=None)
