@@ -363,6 +363,9 @@ def test_statistiche_sostituzione_mancante_in_key_events_usa_plays(espn):
         ("RM", "M"), ("LM", "M"), ("AM", "M"), ("AM-R", "M"), ("AM-L", "M"),
         ("F", "F"), ("CF", "F"), ("CF-R", "F"), ("CF-L", "F"), ("RF", "F"), ("LF", "F"),
         ("ST", "F"), ("RW", "F"), ("LW", "F"),
+        # varianti "lato + centro" viste nei dati reali (es. "RCF")
+        ("RCF", "F"), ("LCF", "F"), ("RCB", "D"), ("LCB", "D"),
+        ("RCM", "M"), ("LCM", "M"), ("RDM", "M"), ("LDM", "M"), ("RAM", "M"), ("LAM", "M"),
         ("XYZ", "M"),
     ],
 )
@@ -372,6 +375,15 @@ def test_ruolo_dalla_posizione(espn, abbreviazione, ruolo):
     corpo["rosters"][0]["roster"][0]["position"]["abbreviation"] = abbreviazione  # Turati
     rotta_summary(corpo)
     assert per_id(espn.statistiche(PARTITA_SF))[261399].ruolo == ruolo
+
+
+def test_lato_delle_varianti_centrali():
+    from ammonizioni.fonti.espn import _classifica
+
+    assert _classifica("RCF") == ("F", 5, 1)  # centro-destra
+    assert _classifica("LCF") == ("F", 5, 3)  # centro-sinistra
+    assert _classifica("RCB") == ("D", 2, 1)
+    assert _classifica("LAM") == ("M", 4, 3)
 
 
 @respx.mock

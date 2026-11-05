@@ -53,6 +53,8 @@ _DESTRA, _CENTRO_DESTRA, _CENTRO, _CENTRO_SINISTRA, _SINISTRA = range(5)
 _BASI_A_DESTRA = ("RB", "RWB", "RM", "RF", "RW")
 _BASI_A_SINISTRA = ("LB", "LWB", "LM", "LF", "LW")
 _POSIZIONE_SCONOSCIUTA = ("M", 3, _CENTRO)
+# Basi centrali usate con un lato davanti ("RCF", "LCB", "RDM", "LAM", ...)
+_CENTRALI = {"CF": "CF", "CB": "CD", "CD": "CD", "CM": "CM", "DM": "DM", "AM": "AM"}
 
 
 def _int(valore) -> int:
@@ -90,6 +92,9 @@ def _classifica(abbreviazione: str) -> tuple[str, int, int] | None:
     Posto 0..4 da destra a sinistra: "RB" destra, "CD-R" centro-destra, "CM" centro,
     "CD-L" centro-sinistra, "LB" sinistra."""
     base, _, lato = abbreviazione.strip().upper().partition("-")
+    # varianti "lato + posizione centrale" (es. "RCF", "LCB", "RDM"): come "CF-R", "CB-L"...
+    if not lato and len(base) == 3 and base[0] in "RL" and base[1:] in _CENTRALI:
+        base, lato = _CENTRALI[base[1:]], base[0]
     voce = _POSIZIONI.get(base)
     if voce is None:
         return None
