@@ -151,7 +151,9 @@ def _medie_campionato(
         )
         .join(Partita, Partita.id == Presenza.partita_id)
         .join(Giocatore, Giocatore.id == Presenza.giocatore_id)
-        .where(*filtro_partite, Presenza.minuti > 0)
+        # anche chi ha 0 minuti ma un giallo (ammonito dalla panchina senza entrare): ogni
+        # giallo conta, come nel tasso del giocatore; i minuti sommano solo quelli giocati
+        .where(*filtro_partite, or_(Presenza.minuti > 0, Presenza.gialli > 0))
         .group_by(ruolo_eff)
     ).all()
     # ruoli sconosciuti o None confluiscono in "M"

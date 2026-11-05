@@ -46,7 +46,8 @@ def fattore_storia(
     if tasso_base90 <= 0:
         return Fattore("storia", 1.0, None, 0)
 
-    giocate = [r for r in storico if r.minuti > 0]
+    # un giallo preso dalla panchina (0 minuti) conta: aggiunge il giallo e nessun minuto
+    giocate = [r for r in storico if r.minuti > 0 or r.gialli > 0]
     squadre_diretto: dict[int, set[int]] = {}
     for r in storico_avv_diretto:
         if r.minuti <= 0:
@@ -58,7 +59,8 @@ def fattore_storia(
     c = [
         r
         for r in giocate
-        if any(s != r.squadra_id for s in squadre_diretto.get(r.partita_id, ()))
+        if r.minuti > 0  # un cartellino dalla panchina non e' un duello
+        and any(s != r.squadra_id for s in squadre_diretto.get(r.partita_id, ()))
     ]
 
     valore = 1.0

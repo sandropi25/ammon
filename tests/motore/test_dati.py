@@ -265,3 +265,21 @@ def test_mercato_ammonizioni_senza_arbitro(sessione):
         arbitro = next(f for f in x.fattori if f.nome == "arbitro")
         assert arbitro.valore == 1.0 and arbitro.motivazione is None
         assert x.affidabilita == "medio"
+
+
+def test_gialli_dalla_panchina_contano_nella_media_di_ruolo(sessione):
+    """Un giallo preso da chi non e' mai entrato (minuti 0) conta nei gialli/90 della lega,
+    come conta nel tasso del giocatore; i minuti sommati restano solo quelli giocati."""
+    popola(sessione)
+    sessione.add(Giocatore(id=15, nome="Panchinaro Casa", ruolo="D"))
+    sessione.flush()
+    sessione.add(
+        Presenza(
+            partita_id=1, giocatore_id=15, squadra_id=CASA, titolare=False, ruolo="D",
+            minuti=0, gialli=1,
+        )
+    )
+    sessione.flush()
+    m = carica_dati(sessione, PARTITA_FUTURA).medie
+    assert m.per_ruolo["D"].gialli90 == pytest.approx(7 / (12 * 90) * 90)
+    assert m.per_ruolo["D"].falli90 == pytest.approx(2.0)

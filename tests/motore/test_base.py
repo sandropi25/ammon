@@ -143,3 +143,28 @@ def test_nessun_titolare_assume_90():
     tasso = tasso_base90(righe, "D", medie_standard(), 2026, Pesi())
     f = base_giocatore(righe, "D", medie_standard(), 2026, Pesi())
     assert f.valore == pytest.approx(1 - math.exp(-tasso))
+
+
+def test_giallo_dalla_panchina_alza_il_tasso_base():
+    """Un giallo preso da chi non e' entrato (0 minuti) entra nelle somme di stagione."""
+    base = _partite(5, 2026, 0, INIZIO)
+    senza = tasso_base90(base, "D", medie_standard(), 2026, Pesi())
+    panchina = riga(
+        stagione=2026, gialli=1, minuti=0, titolare=False, data=INIZIO + timedelta(days=10)
+    )
+    con = tasso_base90(base + [panchina], "D", medie_standard(), 2026, Pesi())
+    assert con > senza
+    # l'unico giallo sui 450 minuti giocati: gialli/90 = 0,2 prima del restringimento al ruolo
+    assert base_giocatore(base + [panchina], "D", medie_standard(), 2026, Pesi()).n_dati == 450
+
+
+def test_ultime5_restano_sulle_partite_giocate():
+    """La panchina non occupa un posto fra le ultime 5 giocate."""
+    p = Pesi()
+    giocate = _partite(5, 2026, [1, 0, 0, 0, 0], INIZIO)
+    panchina = riga(
+        stagione=2026, gialli=0, minuti=0, titolare=False, data=INIZIO + timedelta(days=10)
+    )
+    a = tasso_base90(giocate, "D", medie_standard(), 2026, p)
+    b = tasso_base90(giocate + [panchina], "D", medie_standard(), 2026, p)
+    assert b == pytest.approx(a)

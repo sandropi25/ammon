@@ -126,3 +126,39 @@ def test_n_dati_conta_partite_distinte_nell_unione():
     ]
     f = fattore_storia(storico, 7, True, [], 0.2, Pesi())
     assert f.n_dati == 3
+
+
+def test_giallo_dalla_panchina_in_un_derby_conta():
+    """Ammonito dalla panchina (0 minuti) in un derby: il giallo conta, i minuti no."""
+    storico = [
+        riga(avversario_id=50, rivalita=True, gialli=0, minuti=90),
+        riga(avversario_id=51, rivalita=True, gialli=1, minuti=0, titolare=False),
+    ]
+    f = fattore_storia(storico, 99, True, [], tasso_base90=0.2, pesi=Pesi())
+    # 1 giallo in 90 minuti: r = 5,5 -> sopra 1 (senza il giallo della panchina sarebbe sotto 1)
+    assert f.valore > 1
+    assert f.n_dati == 2
+
+
+def test_giallo_dalla_panchina_contro_l_avversario_di_oggi_conta():
+    storico = [
+        riga(avversario_id=7, gialli=0, minuti=90),
+        riga(avversario_id=7, gialli=1, minuti=0, titolare=False),
+    ]
+    f = fattore_storia(storico, 7, False, [], tasso_base90=0.2, pesi=Pesi())
+    assert f.valore > 1
+    assert f.motivazione == "1 giallo in 2 partite contro "
+
+
+def test_panchina_non_e_un_duello():
+    """Il duello con l'avversario diretto richiede che entrambi abbiano giocato: un giallo
+    dalla panchina nella partita in cui l'avversario ha giocato non lo costituisce."""
+    mio = riga(partita_id=900, squadra_id=1, avversario_id=2, gialli=1, minuti=0, titolare=False)
+    avv = riga(partita_id=900, squadra_id=2, avversario_id=1, minuti=90)
+    f = fattore_storia([mio], 99, False, [avv], tasso_base90=0.2, pesi=Pesi())
+    assert (f.valore, f.motivazione, f.n_dati) == (1.0, None, 0)
+    # avversario in panchina, io in campo: nemmeno
+    mio2 = riga(partita_id=901, squadra_id=1, avversario_id=2, gialli=1, minuti=90)
+    avv2 = riga(partita_id=901, squadra_id=2, avversario_id=1, minuti=0, gialli=1, titolare=False)
+    f = fattore_storia([mio2], 99, False, [avv2], tasso_base90=0.2, pesi=Pesi())
+    assert (f.valore, f.n_dati) == (1.0, 0)
