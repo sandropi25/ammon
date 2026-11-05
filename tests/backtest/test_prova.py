@@ -189,6 +189,9 @@ def test_copertura_conta_arbitro_e_griglia(sessione):
     aggiungi_partita(sessione, 3, 14)
     aggiungi_partita(sessione, 4, 21, statistiche=False)  # non finita con statistiche: fuori
     aggiungi_partita(sessione, 5, 28, competizione=LIGA)  # altro campionato: fuori
+    aggiungi_partita(sessione, 6, 35, squadre=(1,))  # manca la trasferta: non valutata, fuori
+    sessione.get(Partita, 6).arbitro_id = 1
+    sessione.get(Presenza, (6, 12)).griglia = "3:2"
     sessione.get(Partita, 2).arbitro_id = 1
     sessione.get(Partita, 3).arbitro_id = 1
     sessione.get(Presenza, (3, 12)).griglia = "3:2"

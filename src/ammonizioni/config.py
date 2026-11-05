@@ -14,6 +14,9 @@ COMPETIZIONI: dict[str, int] = {
 # Campionati nazionali gestiti (la Serie A per prima).
 CAMPIONATI: tuple[int, ...] = (135, 140)
 
+# Nome visualizzato di ogni campionato.
+NOMI_CAMPIONATI: dict[int, str] = {135: "Serie A", 140: "Liga"}
+
 # Slug ESPN di ogni competizione.
 SLUG_ESPN: dict[int, str] = {
     135: "ita.1",

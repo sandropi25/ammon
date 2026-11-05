@@ -7,10 +7,8 @@ import argparse
 import sys
 
 from ammonizioni.backtest.prova import Copertura, RisultatoProva, copertura, prova_stagione
-from ammonizioni.config import CAMPIONATI
+from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI
 from ammonizioni.db.sessione import apri
-
-NOMI_CAMPIONATI = {135: "Serie A", 140: "Liga"}
 
 
 def percentuale(x: float) -> str:

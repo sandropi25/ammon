@@ -99,9 +99,11 @@ def _partite_prova(stagione: int, competizione_id: int):
 
 
 def copertura(s: Session, stagione: int, competizione_id: int = SERIE_A) -> Copertura:
-    """Delle partite della prova: quante hanno l'arbitro e quante hanno la griglia
-    (non nulla) per almeno un titolare. Dice se i fattori arbitro e duello erano attivi."""
-    partite = s.execute(_partite_prova(stagione, competizione_id)).scalars().all()
+    """Delle partite effettivamente valutate dalla prova (stesso filtro di `prova_stagione`,
+    quindi con almeno 2 titolari per squadra): quante hanno l'arbitro e quante hanno la
+    griglia (non nulla) per almeno un titolare. Dice se i fattori arbitro e duello erano attivi."""
+    tutte = s.execute(_partite_prova(stagione, competizione_id)).scalars().all()
+    partite = [p for p in tutte if _abbastanza_titolari(_titolari_reali(s, p)[0], p)]
     ids_con_griglia = set(
         s.execute(
             select(Presenza.partita_id)
