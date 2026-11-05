@@ -19,6 +19,10 @@
 - Ruoli titolari osservati: `G`, `RB`, `CD-R`, `CD-L`, `LB`, `CM`, `CM-R`, `CM-L`, `RM`, `LM`, `AM`, `AM-R`, `AM-L`, `RF`, `LF`, `F`.
 - football-data.org: Serie A e Liga nel piano gratuito ("free forever"); la risorsa Match ha `referees[]` con `id`, `name`, `type` ("REFEREE", ...). **Da verificare con una chiave:** che `referees` sia valorizzato nel piano gratuito.
 
+## Priorità: la Serie A prima di tutto
+
+La Serie A è la competizione fondamentale (richiesta dell'utente, 2026-11-05). Ordine di lavoro: **Task 0–4 e 6–7 solo per la Serie A** (fonte ESPN, arbitri, motore, job, prova sul 2025): l'app deve essere completa e verificata sulla Serie A prima di toccare la Liga. **Task 5 (più campionati) si fa per ultimo** e non deve cambiare alcun risultato della Serie A (tutti i test esistenti verdi, stessa classifica sulla stessa partita). Ovunque serva un valore predefinito: Serie A (filtro dell'app, script, caricamento). Nel caricamento dello storico e nei job, le partite di Serie A hanno sempre la precedenza su quelle di Liga.
+
 ## Global Constraints
 
 - Nessuna lettura automatica di Sofascore, FotMob, WhoScored, Diretta, FBref, Transfermarkt (solo link).
@@ -76,8 +80,9 @@
 
 **Files:** Modify `caricamento/notturno.py`, `caricamento/storico.py`, `motore/dati.py` (medie, posta, diffide per campionato), `motore/fattori/situazione.py` (soglie per campionato), `app/componenti.py` e pagine (filtro campionato), `scheduler/pre_partita.py`, tests.
 - Ogni uso di `135` come "il campionato" diventa `CAMPIONATI` / il `competizione_id` della partita. Medie di campionato calcolate sul campionato della partita. Posta sulla classifica di quel campionato. Diffida: gialli nel campionato della partita, soglie di `SOGLIE_DIFFIDA`. Storico: competizioni = campionati + coppe nazionali + coppe europee.
-- App: selettore "Serie A / Liga / Tutti" nella pagina Partite e nel registro; liste derby e campi caldi con le squadre di entrambi i campionati.
-- [ ] Test: due partite lo stesso giorno, una per campionato → medie e posta separate; diffida in Liga con 4 gialli in Liga e 3 in Copa del Rey → diffidato; filtro app.
+- App: selettore "Serie A / Liga / Tutti" nella pagina Partite e nel registro, **predefinito Serie A**; liste derby e campi caldi con le squadre di entrambi i campionati.
+- Storico e job: le partite di Serie A (e delle squadre di Serie A nelle coppe) vengono scaricate prima di quelle di Liga.
+- [ ] Test: due partite lo stesso giorno, una per campionato → medie e posta separate; diffida in Liga con 4 gialli in Liga e 3 in Copa del Rey → diffidato; filtro app predefinito Serie A; aggiungere la Liga non cambia la classifica di una partita di Serie A già calcolata.
 
 ### Task 6: Scheduler e job con la nuova fonte
 
