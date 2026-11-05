@@ -286,6 +286,46 @@ def test_scarica_statistiche_partita_vuote_restituisce_false(sessione):
     assert sessione.get(Partita, 1).statistiche_scaricate is False
 
 
+def test_statistiche_vuote_dopo_3_tentativi_partita_non_serie_a_segnata_scaricata(sessione):
+    """Una partita di Liga con statistiche sempre vuote dopo 3 tentativi viene segnata come
+    scaricata (senza presenze) e non e' piu' richiesta; una di Serie A si richiede sempre."""
+    base = datetime(2026, 9, 3, 18, 0, tzinfo=timezone.utc)
+    calendari = {
+        (135, 2026): [partita_dati(1, base)],
+        (140, 2026): [partita_dati(2, base, competizione_id=140,
+                                    casa=(31, "Real Madrid CF"), trasferta=(32, "FC Barcelona"))],
+    }
+    for competizione_id in (135, 140):
+        notturno.aggiorna_calendario(
+            sessione, FonteFinta(calendari=calendari), competizione_id=competizione_id
+        )
+    fonte = FonteFinta(calendari=calendari, statistiche_vuote={1, 2})
+    for tentativo in (1, 2):
+        assert notturno.scarica_statistiche_partita(sessione, fonte, 2) is False
+        assert sessione.get(Partita, 2).statistiche_scaricate is False, tentativo
+    assert notturno.scarica_statistiche_partita(sessione, fonte, 2) is False  # terzo tentativo
+    assert sessione.get(Partita, 2).statistiche_scaricate is True
+    assert sessione.scalars(select(Presenza).where(Presenza.partita_id == 2)).first() is None
+
+    for _ in range(5):  # la Serie A resta da riprovare
+        assert notturno.scarica_statistiche_partita(sessione, fonte, 1) is False
+    assert sessione.get(Partita, 1).statistiche_scaricate is False
+
+
+def test_statistiche_vuote_poi_arrivate_azzerano_i_tentativi(sessione):
+    base = datetime(2026, 9, 3, 18, 0, tzinfo=timezone.utc)
+    calendari = {(140, 2026): [partita_dati(2, base, competizione_id=140,
+                                             casa=(31, "Real Madrid CF"),
+                                             trasferta=(32, "FC Barcelona"))]}
+    notturno.aggiorna_calendario(sessione, FonteFinta(calendari=calendari), competizione_id=140)
+    vuota = FonteFinta(calendari=calendari, statistiche_vuote={2})
+    notturno.scarica_statistiche_partita(sessione, vuota, 2)
+    notturno.scarica_statistiche_partita(sessione, vuota, 2)
+    assert notturno.scarica_statistiche_partita(sessione, FonteFinta(calendari=calendari), 2) is True
+    assert sessione.scalars(select(Presenza).where(Presenza.partita_id == 2)).first() is not None
+    assert not repo.leggi_impostazione(sessione, "statistiche_vuote_tentativi")
+
+
 def test_calendario_crea_squadre_arbitro_e_non_resetta_le_statistiche(sessione):
     fonte = FonteFinta(partite_ft=1)
     notturno.aggiorna_calendario(sessione, fonte)

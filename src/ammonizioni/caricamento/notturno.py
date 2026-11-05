@@ -29,7 +29,9 @@ from ammonizioni.giocate.registro import aggiorna_esiti
 log = logging.getLogger(__name__)
 
 GIORNI_STATISTICHE_NOTTE = 7
-GIORNI_ARBITRI = 7  # arbitri collegati per le partite da 7 giorni fa a fra 7 giorni
+TENTATIVI_VUOTI = "statistiche_vuote_tentativi"  # {partita_id: risposte vuote ricevute}
+TENTATIVI_VUOTI_MAX = 3  # dopo tanti tentativi vuoti una partita non-Serie A non si richiede piu'
+GIORNI_ARBITRI = 7 # arbitri collegati per le partite da 7 giorni fa a fra 7 giorni
 
 
 @dataclass
@@ -170,12 +172,28 @@ def scarica_statistiche_partita(s: Session, fonte: Fonte, partita_id: int) -> bo
     except ErroreFonte as errore:
         log.warning("Statistiche della partita %s non scaricate: %s", partita_id, errore)
         return False
+    tentativi = dict(repo.leggi_impostazione(s, TENTATIVI_VUOTI, {}) or {})
     if not presenze:
-        log.warning("Statistiche della partita %s vuote: riprovo la prossima volta", partita_id)
+        n = tentativi.get(str(partita_id), 0) + 1
+        if n >= TENTATIVI_VUOTI_MAX and campionato_di(partita.competizione_id) != SERIE_A:
+            # fuori dalla Serie A non si insiste: la partita resta senza presenze
+            log.warning(
+                "Statistiche della partita %s vuote per %s volte: segnata come scaricata, "
+                "senza presenze", partita_id, n,
+            )
+            partita.statistiche_scaricate = True
+            tentativi.pop(str(partita_id), None)
+        else:
+            log.warning("Statistiche della partita %s vuote: riprovo la prossima volta", partita_id)
+            tentativi[str(partita_id)] = n
+        repo.scrivi_impostazione(s, TENTATIVI_VUOTI, tentativi)
+        s.commit()
         return False
     for dati in presenze:
         _salva_presenza(s, dati)
     partita.statistiche_scaricate = True
+    if tentativi.pop(str(partita_id), None) is not None:
+        repo.scrivi_impostazione(s, TENTATIVI_VUOTI, tentativi)
     s.commit()
     return True
 
