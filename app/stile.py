@@ -194,7 +194,8 @@ html, body, .stApp {{
 [data-testid="stHeader"] a[aria-current="page"], [data-testid="stHeader"] a[aria-selected="true"] {{
   background: var(--cr-giallo-tenue) !important; box-shadow: inset 0 -2px 0 var(--cr-giallo);
 }}
-[data-baseweb="popover"] > div, [data-baseweb="popover"] ul, [data-baseweb="menu"], [role="listbox"] {{
+[data-baseweb="popover"] > div, [data-baseweb="popover"] ul, [data-baseweb="menu"], [role="listbox"],
+[data-testid="stSelectboxVirtualDropdown"], [data-testid="stMultiSelectVirtualDropdown"] {{
   background-color: var(--cr-superficie) !important; color: var(--cr-testo) !important;
   border-color: var(--cr-bordo) !important;
 }}
@@ -217,7 +218,10 @@ html, body, .stApp {{
 
 /* campi, menu a tendina, date */
 [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="textarea"],
-[data-baseweb="select"] > div, [data-testid="stNumberInputContainer"], [data-testid="stDateInputField"] {{
+[data-baseweb="select"] > div, [data-testid="stNumberInputContainer"], [data-testid="stDateInputField"],
+[data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
+[data-testid="stSelectbox"] [role="group"], [data-testid="stMultiSelect"] [role="group"],
+[data-testid="stDateInput"] [role="group"], [data-testid="stTimeInput"] [role="group"] {{
   background-color: var(--cr-superficie) !important; border-color: var(--cr-bordo) !important;
   color: var(--cr-testo) !important; border-radius: 10px !important;
 }}
@@ -229,7 +233,10 @@ html, body, .stApp {{
 .stApp input::placeholder, .stApp textarea::placeholder {{
   color: var(--cr-testo2) !important; -webkit-text-fill-color: var(--cr-testo2) !important;
 }}
-[data-baseweb="select"] *, [data-baseweb="select"] svg {{ color: var(--cr-testo) !important; }}
+[data-baseweb="select"] *, [data-baseweb="select"] svg,
+[data-testid="stSelectbox"] [role="group"] *, [data-testid="stMultiSelect"] [role="group"] *,
+[data-testid="stDateInput"] [role="group"] *, [data-testid="stTimeInput"] [role="group"] *,
+[data-testid="stTextInputRootElement"] *, [data-testid="stNumberInputContainer"] * {{ color: var(--cr-testo) !important; }}
 [data-baseweb="tag"] {{ background-color: var(--cr-giallo-tenue) !important; }}
 [data-baseweb="tag"] * {{ color: var(--cr-testo) !important; }}
 [data-testid="stNumberInputContainer"] button {{
@@ -261,6 +268,7 @@ html, body, .stApp {{
   border-color: var(--cr-bordo) !important;
 }}
 [data-testid="stButtonGroup"] button * {{ color: inherit !important; }}
+[data-testid="stButtonGroup"] button[aria-checked="true"],
 [data-testid="stButtonGroup"] [data-testid="stBaseButton-segmented_controlActive"] {{
   background: var(--cr-giallo) !important; color: var(--cr-su-giallo) !important;
   border-color: var(--cr-giallo) !important;
@@ -280,8 +288,11 @@ html, body, .stApp {{
 }}
 [data-baseweb="tab-list"] {{ gap: .25rem; }}
 [data-baseweb="tab"] {{ min-height: 44px; }}
-[data-baseweb="tab"], [data-baseweb="tab"] * {{ color: var(--cr-testo2) !important; font-weight: 600; }}
-[data-baseweb="tab"][aria-selected="true"], [data-baseweb="tab"][aria-selected="true"] * {{ color: var(--cr-testo) !important; }}
+[data-baseweb="tab"], [data-baseweb="tab"] *, [data-testid="stTab"], [data-testid="stTab"] * {{
+  color: var(--cr-testo2) !important; font-weight: 600;
+}}
+[data-baseweb="tab"][aria-selected="true"], [data-baseweb="tab"][aria-selected="true"] *,
+[data-testid="stTab"][aria-selected="true"], [data-testid="stTab"][aria-selected="true"] * {{ color: var(--cr-testo) !important; }}
 [data-baseweb="tab-highlight"] {{ background-color: var(--cr-giallo) !important; }}
 [data-baseweb="tab-border"] {{ background-color: var(--cr-bordo) !important; }}
 [data-testid="stTable"] table {{ background: var(--cr-superficie); border-radius: 10px; }}
@@ -338,6 +349,7 @@ html, body, .stApp {{
 [class*="st-key-scheda_partita_"] [data-testid="stPageLink"],
 [class*="st-key-scheda_partita_"] [data-testid="stPageLink"] div,
 [class*="st-key-scheda_partita_"] [data-testid="stPageLink"] a {{ position: static !important; }}
+[class*="st-key-scheda_partita_"] > [data-testid="stElementContainer"]:last-child {{ margin: .5rem 0 0 !important; }}
 [class*="st-key-scheda_partita_"] [data-testid="stPageLink"] a {{
   justify-content: flex-end; background: transparent !important; padding: 0 !important;
 }}

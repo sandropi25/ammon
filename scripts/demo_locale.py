@@ -1,0 +1,177 @@
+"""Database SQLite di prova con dati dimostrativi (inventati) per vedere la grafica in locale.
+
+Uso:
+    python scripts/demo_locale.py [percorso.db]
+
+Senza argomento crea il file nella cartella temporanea del sistema (mai ammonizioni.db
+nella radice del progetto). Stampa i comandi PowerShell per avviare l'app su quel DB.
+Squadre e arbitri hanno nomi veri o verosimili, i giocatori sono inventati."""
+from __future__ import annotations
+
+import random
+import sys
+import tempfile
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+RADICE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(RADICE / "src"))
+
+from ammonizioni.config import STAGIONE_CORRENTE  # noqa: E402
+from ammonizioni.db.modelli import (  # noqa: E402
+    Arbitro, Formazione, Giocata, Giocatore, ListaManuale, Partita, Presenza, Squadra,
+    UltimoAggiornamento,
+)
+from ammonizioni.db.sessione import apri  # noqa: E402
+
+SERIE_A, LIGA = 135, 140
+SQUADRE = {
+    SERIE_A: ["Inter", "Milan", "Juventus", "Napoli", "Roma", "Lazio", "Atalanta", "Fiorentina"],
+    LIGA: ["Real Madrid", "Barcelona", "Atlético de Madrid", "Sevilla"],
+}
+ARBITRI = {
+    SERIE_A: ["Marco Severi", "Luca Bianchi", "Paolo Mariani", "Andrea Colombo"],
+    LIGA: ["Jorge Martínez Ruiz", "Pablo Ortega"],
+}
+NOMI = ["Marco", "Luca", "Davide", "Simone", "Matteo", "Andrea", "Nicolò", "Federico", "Lorenzo",
+        "Alessio", "Pablo", "Iker", "Sergio", "Álvaro", "Hugo", "Raúl"]
+COGNOMI = ["Rinaldi", "Ferraro", "Galli", "Conti", "Marchetti", "Barbieri", "Fontana", "Sala",
+           "Moretti", "D'Angelo", "Caruso", "Lombardi", "García", "Navarro", "Romero", "Iglesias",
+           "Serrano", "Vidal", "Castro", "Ortiz"]
+# ruolo e posizione nella griglia (riga:colonna) degli 11 titolari
+SCHIERAMENTO = [("G", "1:1"), ("D", "2:1"), ("D", "2:2"), ("D", "2:3"), ("D", "2:4"),
+                ("M", "3:1"), ("M", "3:2"), ("M", "3:3"), ("F", "4:1"), ("F", "4:2"), ("F", "4:3")]
+PROB_GIALLO = {"G": 0.02, "D": 0.16, "M": 0.2, "F": 0.08}
+
+
+def popola_demo(url: str, adesso: datetime | None = None) -> None:
+    rnd = random.Random(2026)
+    adesso = (adesso or datetime.now(timezone.utc)).replace(second=0, microsecond=0)
+    with apri(url) as s:
+        squadre: dict[int, list[int]] = {}
+        rose: dict[int, list[tuple[int, str, str]]] = {}
+        sid, gid = 1, 1000
+        for camp, nomi in SQUADRE.items():
+            squadre[camp] = []
+            for nome in nomi:
+                s.add(Squadra(id=sid, nome=nome))
+                squadre[camp].append(sid)
+                rose[sid] = []
+                for ruolo, griglia in SCHIERAMENTO:
+                    s.add(Giocatore(id=gid, nome=f"{rnd.choice(NOMI)} {rnd.choice(COGNOMI)}", ruolo=ruolo))
+                    rose[sid].append((gid, ruolo, griglia))
+                    gid += 1
+                sid += 1
+        arbitri: dict[int, list[int]] = {}
+        aid = 1
+        for camp, nomi in ARBITRI.items():
+            arbitri[camp] = []
+            for nome in nomi:
+                s.add(Arbitro(id=aid, nome_normalizzato=nome.lower(), nome_visualizzato=nome))
+                arbitri[camp].append(aid)
+                aid += 1
+        inter, milan, roma, lazio = (squadre[SERIE_A][i] for i in (0, 1, 4, 5))
+        s.add(ListaManuale(tipo="derby", squadra_a_id=inter, squadra_b_id=milan))
+        s.add(ListaManuale(tipo="derby", squadra_a_id=roma, squadra_b_id=lazio))
+        s.add(ListaManuale(tipo="campo_caldo", squadra_a_id=squadre[SERIE_A][3]))
+        s.flush()
+
+        # storico: 8 giornate già giocate per campionato (tutti contro tutti, a rotazione)
+        pid = 1
+        passate: list[int] = []  # di Serie A, per le giocate dimostrative
+        for camp, ids in squadre.items():
+            for giornata in range(1, 9):
+                quando = adesso - timedelta(days=7 * (9 - giornata), hours=rnd.randint(0, 30))
+                ordine = ids[:]
+                rnd.shuffle(ordine)
+                for casa, trasf in zip(ordine[::2], ordine[1::2]):
+                    severo = rnd.random() < 0.3
+                    s.add(Partita(
+                        id=pid, data_utc=quando, competizione_id=camp, stagione=STAGIONE_CORRENTE,
+                        giornata=giornata, casa_id=casa, trasferta_id=trasf,
+                        arbitro_id=arbitri[camp][0] if severo else rnd.choice(arbitri[camp]),
+                        gol_casa=rnd.randint(0, 3), gol_trasferta=rnd.randint(0, 3), stato="FT",
+                        stato_formazioni="ufficiali", statistiche_scaricate=True,
+                    ))
+                    s.flush()
+                    for sq in (casa, trasf):
+                        for g, ruolo, griglia in rose[sq]:
+                            spinta = 1.8 if severo else 1.0
+                            s.add(Presenza(
+                                partita_id=pid, giocatore_id=g, squadra_id=sq, titolare=True,
+                                ruolo=ruolo, griglia=griglia, minuti=rnd.choice((90, 90, 90, 75, 62)),
+                                gialli=int(rnd.random() < PROB_GIALLO[ruolo] * spinta),
+                                falli_commessi=rnd.randint(0, 4 if ruolo in "DM" else 2),
+                                falli_subiti=rnd.randint(0, 3), dribbling_tentati=rnd.randint(0, 4),
+                            ))
+                    if camp == SERIE_A:
+                        passate.append(pid)
+                    pid += 1
+
+        # prossime partite: Serie A in 4 giorni, Liga in 2, alcune con formazioni ufficiali
+        future = [
+            (SERIE_A, inter, milan, 1, 19, 45, True), (SERIE_A, roma, lazio, 1, 17, 0, False),
+            (SERIE_A, squadre[SERIE_A][2], squadre[SERIE_A][3], 2, 19, 45, True),
+            (SERIE_A, squadre[SERIE_A][6], squadre[SERIE_A][7], 2, 14, 0, False),
+            (SERIE_A, milan, squadre[SERIE_A][2], 4, 19, 45, False),
+            (SERIE_A, squadre[SERIE_A][3], roma, 4, 11, 30, False),
+            (LIGA, squadre[LIGA][0], squadre[LIGA][1], 2, 20, 0, True),
+            (LIGA, squadre[LIGA][2], squadre[LIGA][3], 3, 18, 30, False),
+        ]
+        oggi = adesso.date()
+        prime: list[int] = []
+        for camp, casa, trasf, giorni, ora, minuti, ufficiali in future:
+            giorno = oggi + timedelta(days=giorni)
+            quando = datetime(giorno.year, giorno.month, giorno.day, ora, minuti, tzinfo=timezone.utc)
+            s.add(Partita(
+                id=pid, data_utc=quando, competizione_id=camp, stagione=STAGIONE_CORRENTE,
+                giornata=9 if giorni < 4 else 10, casa_id=casa, trasferta_id=trasf,
+                arbitro_id=None if giorni == 4 else rnd.choice(arbitri[camp]), stato="NS",
+                stato_formazioni="ufficiali" if ufficiali else "probabili",
+            ))
+            s.flush()
+            for sq in (casa, trasf):
+                for g, _, griglia in rose[sq]:
+                    tipi = ("probabile", "ufficiale") if ufficiali else ("probabile",)
+                    for tipo in tipi:
+                        s.add(Formazione(partita_id=pid, squadra_id=sq, giocatore_id=g,
+                                         tipo=tipo, griglia=griglia))
+            prime.append(pid)
+            pid += 1
+
+        # qualche giocata registrata
+        esiti = ["vinta", "persa", "vinta", "rimborsata", "persa", "vinta"]
+        for i, partita in enumerate(passate[-6:]):
+            p = s.get(Partita, partita)
+            g = rose[p.casa_id][5 + i % 3][0]
+            s.add(Giocata(data=p.data_utc.date(), partita_id=partita, giocatore_id=g,
+                          fonte=("io", "modello", "Luca")[i % 3], quota=round(2.2 + 0.35 * i, 2),
+                          puntata=10.0, esito=esiti[i]))
+        s.add(Giocata(data=oggi, partita_id=prime[0], giocatore_id=rose[inter][6][0], fonte="io",
+                      quota=2.6, puntata=5.0, esito="in_attesa"))
+        s.add(UltimoAggiornamento(job="notte", quando_utc=adesso - timedelta(hours=7), completo=True))
+
+
+def main() -> None:
+    if len(sys.argv) > 1:
+        percorso = Path(sys.argv[1]).resolve()
+    else:
+        percorso = Path(tempfile.gettempdir()) / "cartellino_demo.db"
+    if percorso.resolve() == (RADICE / "ammonizioni.db").resolve():
+        sys.exit("Non uso il database del progetto: scegli un altro percorso.")
+    if percorso.exists():
+        percorso.unlink()
+    url = f"sqlite:///{percorso.as_posix()}"
+    popola_demo(url)
+    python = Path(sys.executable)
+    print(f"Database dimostrativo creato: {percorso}")
+    print()
+    print("Avvio (PowerShell, dalla cartella del progetto):")
+    print(f'  $env:DATABASE_URL = "{url}"')
+    print(f'  & "{python}" -m streamlit run app/Partite.py --server.headless true --server.port 8599')
+    print()
+    print("Poi apri http://localhost:8599  (tema chiaro: http://localhost:8599/?tema=chiaro)")
+
+
+if __name__ == "__main__":
+    main()
