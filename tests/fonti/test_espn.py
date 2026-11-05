@@ -325,7 +325,7 @@ def test_statistiche_recuperi_contano_come_90(espn):
     sostituzioni[-2]["clock"]["displayValue"] = "45'+2'"  # Kulla per Esposito
     rotta_summary(corpo)
     p = per_id(espn.statistiche(PARTITA_SF))
-    assert p[401558].minuti == 0  # entrato al 90'+3: nessun minuto
+    assert p[401558].minuti == 1  # entrato al 90'+3: e' entrato davvero, 1 minuto
     assert p[376473].minuti == 90  # Mastantuono, uscito al 90'+3
     assert p[3129533].minuti == 45  # Kulla, entrato al 45'+2
     assert p[286929].minuti == 45  # Esposito, uscito al 45'+2
@@ -338,7 +338,7 @@ def test_statistiche_supplementari_si_fermano_a_90(espn):
     sostituzione["clock"]["displayValue"] = "105'"
     rotta_summary(corpo)
     p = per_id(espn.statistiche(PARTITA_SF))
-    assert p[376473].minuti == 90 and p[401558].minuti == 0
+    assert p[376473].minuti == 90 and p[401558].minuti == 1
 
 
 @respx.mock

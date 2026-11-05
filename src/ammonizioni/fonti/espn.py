@@ -427,7 +427,9 @@ class Espn:
             uscita = MINUTI_PARTITA
         # recuperi e supplementari contano come 90
         entrata, uscita = min(entrata, MINUTI_PARTITA), min(uscita, MINUTI_PARTITA)
-        return max(0, uscita - entrata)
+        minuti = max(0, uscita - entrata)
+        # un subentrato entrato nei recuperi (o nei supplementari) ha giocato: almeno 1 minuto
+        return max(1, minuti) if not g.titolare else minuti
 
     # --- HTTP con limite e retry ---------------------------------------
 
