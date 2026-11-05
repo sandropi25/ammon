@@ -16,7 +16,7 @@ Due job programmati tengono i dati aggiornati:
 
 - **ESPN (predefinita)**: API pubblica, gratuita e senza chiave, ma non ufficiale: la struttura può cambiare senza preavviso. Il programma fa al massimo 30 richieste al minuto. Fornisce partite, formazioni e statistiche dei giocatori (non ha dribbling, voto e arbitro: il modello usa solo i dati presenti).
 - **football-data.org** (chiave gratuita, 10 richieste al minuto): fornisce gli arbitri di Serie A e Liga, collegati alle partite ESPN per data e squadre. Senza chiave tutto funziona ma le partite restano senza arbitro (fattore arbitro neutro) e nel log compare l'avviso sulla chiave mancante.
-- **API-Football** (opzionale, a pagamento per le stagioni recenti): resta nel codice come fonte alternativa. Si attiva con `FONTE_DATI=api_football` (e `API_FOOTBALL_KEY`); con `FONTE_DATI` assente, vuota o `espn` si usa ESPN e `API_FOOTBALL_KEY` non serve.
+- **API-Football** (opzionale; per la stagione corrente serve il piano Pro, 19 $ al mese): resta nel codice come fonte alternativa, con dribbling, voto e arbitro. Si torna a lei con `FONTE_DATI=api_football` (e `API_FOOTBALL_KEY`, anche dalla pagina Impostazioni); con `FONTE_DATI` assente, vuota o `espn` si usa ESPN e `API_FOOTBALL_KEY` non serve.
 
 ### Chiave di football-data.org
 
@@ -24,6 +24,7 @@ Due job programmati tengono i dati aggiornati:
 2. In locale, una volta sola, in PowerShell: `setx FOOTBALL_DATA_KEY "il-tuo-token"` (vale dalle nuove finestre del terminale).
 3. Su GitHub: **Settings > Secrets and variables > Actions > New repository secret**, nome `FOOTBALL_DATA_KEY`.
 4. Su Streamlit Community Cloud: aggiungi `FOOTBALL_DATA_KEY = "il-tuo-token"` ai **Secrets** dell'app (livello principale, come `DATABASE_URL`).
+5. In alternativa, dalla pagina **Impostazioni** dell'app (campo "Chiave football-data.org", mostrata mascherata): la chiave viene salvata nel database e la usano anche i job. Se è impostata la variabile d'ambiente `FOOTBALL_DATA_KEY`, ha la precedenza su quella salvata.
 
 ### Controllo di salute di ESPN
 
@@ -154,20 +155,9 @@ Con Serie A e Liga il pre-partita gira dalle 10:00 alle 20:50 UTC (la Liga arriv
 
 Se non fai nessuna delle due, negli ultimi giorni del mese i job si fermano.
 
-La descrizione seguente, con i numeri del "primo mese", è calcolata sui limiti di API-Football e sulla sola Serie A (cron `*/10 10-19 * * *`, circa 1830 minuti al mese): per Serie A e Liga aggiungi circa 180 minuti.
+Un repository privato sul piano GitHub Free ha 2000 minuti di Actions al mese e ogni esecuzione conta almeno 1 minuto. Un cron ogni 10 minuti tutto il giorno farebbe circa 4320 esecuzioni al mese ed esaurirebbe la quota in circa due settimane, dopo di che i job si fermerebbero. Per questo `pre_partita.yml` gira solo nelle ore in cui un calcio d'inizio può cadere nella finestra di 75 minuti.
 
-Un repository privato sul piano GitHub Free ha 2000 minuti di Actions al mese e ogni esecuzione conta almeno 1 minuto. Un cron ogni 10 minuti tutto il giorno farebbe circa 4320 esecuzioni al mese ed esaurirebbe la quota in circa due settimane, dopo di che i job si fermerebbero. Per questo `pre_partita.yml` gira solo nelle ore in cui un calcio d'inizio può cadere nella finestra di 75 minuti: 10-20 UTC, cioè 6 esecuzioni x 11 ore = 66 al giorno, circa 1980 al mese, più la notte.
-
-Attenzione al primo mese: finché lo storico si carica, il job notturno usa tutte le 100 richieste al ritmo di 10
-al minuto e dura circa 10-12 minuti, non 1. Sono circa 300-360 minuti al mese invece di 30: con il pre-partita si
-arriva a circa 2100-2200 minuti, sopra i 2000 del piano Free, e negli ultimi giorni del mese i job si fermerebbero.
-Quando lo storico è completo (`Storico: ... completo=True` per più notti) la notte torna a 1-2 minuti. Per il
-periodo di caricamento hai due strade:
-
-- rendere pubblico il repository (minuti illimitati, vedi sotto);
-- oppure ridurre temporaneamente le ore del cron pre-partita in `.github/workflows/pre_partita.yml` (per esempio
-  `*/10 15-19 * * *` nei giorni feriali senza anticipi), tenendo conto che ogni ora in meno risparmia circa
-  180 minuti al mese ma lascia scoperti i calci d'inizio in quella fascia.
+Attenzione al primo caricamento dello storico: finché non è completo, il job notturno dura fino a 40 minuti (`STORICO_MAX_MINUTI`) per le prime 3 notti, poi torna a pochi minuti (`Storico: ... completo=True`). Per questo periodo, se resti su un repository privato, puoi ridurre temporaneamente le ore del cron pre-partita in `.github/workflows/pre_partita.yml` (per esempio `*/10 15-20 * * *` nei giorni senza anticipi): ogni ora in meno risparmia circa 180 minuti al mese ma lascia scoperti i calci d'inizio in quella fascia. Con un repository pubblico il problema non esiste.
 
 - Copertura: calci d'inizio della Serie A dalle 12:30 alle 20:45 ora italiana e della Liga fino alle 21:00 ora spagnola, sia con ora solare (CET) sia con ora legale (CEST).
 - Se una partita è mai fuori da questo intervallo (per esempio un anticipo alle 12:00 o un orario tardivo), allarga le ore del cron in `.github/workflows/pre_partita.yml`, tenendo d'occhio la quota (ogni ora in più costa circa 180 minuti al mese).

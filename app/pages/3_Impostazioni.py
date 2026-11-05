@@ -1,4 +1,4 @@
-"""Impostazioni: derby e campi caldi, pesi del modello e chiave API."""
+"""Impostazioni: derby e campi caldi, pesi del modello e chiavi API."""
 import os
 import sys
 from pathlib import Path
@@ -24,6 +24,7 @@ with apri() as s:
     campi_caldi = cg.voci_lista(s, "campo_caldo")
     pesi = carica_pesi(s)
     chiave_salvata = repo.leggi_impostazione(s, "chiave_api", None)
+    chiave_football_data = repo.leggi_impostazione(s, "chiave_football_data", None)
 
 nomi_squadre = dict(squadre)
 
@@ -127,7 +128,27 @@ if ripristina:
 
 # ---------------------------------------------------------------- chiave API
 
-st.header("Chiave API-Football")
+st.header("Chiave football-data.org")
+st.caption("Serve per gli arbitri di Serie A e Liga (fonte ESPN predefinita).")
+st.markdown(f"Chiave salvata: **{cg.maschera_chiave(chiave_football_data)}**")
+if os.environ.get("FOOTBALL_DATA_KEY"):
+    st.info(
+        "È impostata la variabile d'ambiente FOOTBALL_DATA_KEY: "
+        "ha la precedenza sulla chiave salvata qui."
+    )
+with st.form("form_chiave_football_data", clear_on_submit=True):
+    nuova_fd = st.text_input("Nuova chiave", type="password", key="chiave_football_data_nuova")
+    invia_fd = st.form_submit_button("Salva chiave", key="salva_chiave_football_data")
+if invia_fd:
+    if not nuova_fd.strip():
+        st.error("Inserisci la chiave di football-data.org")
+    else:
+        with apri() as s:
+            repo.scrivi_impostazione(s, "chiave_football_data", nuova_fd.strip())
+        del st.session_state["chiave_football_data_nuova"]  # la chiave non resta nel campo
+        st.rerun()
+
+st.header("Chiave API-Football (solo se usi API-Football, FONTE_DATI=api_football)")
 st.markdown(f"Chiave salvata: **{cg.maschera_chiave(chiave_salvata)}**")
 if os.environ.get("API_FOOTBALL_KEY"):
     st.info(

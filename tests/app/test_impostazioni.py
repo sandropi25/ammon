@@ -308,6 +308,48 @@ def test_chiave_api_variabile_ambiente_ha_precedenza(sessione_db, monkeypatch):
     assert "da-ambiente" not in visibile(at)
 
 
+def test_chiave_football_data_mascherata(sessione_db, monkeypatch):
+    monkeypatch.delenv("FOOTBALL_DATA_KEY", raising=False)
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert "Chiave football-data.org" in "".join(h.value for h in at.header)
+    at.text_input(key="chiave_football_data_nuova").set_value("fd-segreto-9876")
+    at.button(key="salva_chiave_football_data").click().run()
+    assert not at.exception
+    assert not at.error
+    with sessione_db() as s:
+        assert repo.leggi_impostazione(s, "chiave_football_data") == "fd-segreto-9876"
+        assert repo.leggi_impostazione(s, "chiave_api") is None
+    t = visibile(at)
+    assert "••••9876" in t
+    assert "segreto" not in t
+    assert "fd-segreto-9876" not in "".join(str(w.value) for w in at.text_input)
+
+
+def test_chiave_football_data_vuota_rifiutata(sessione_db, monkeypatch):
+    monkeypatch.delenv("FOOTBALL_DATA_KEY", raising=False)
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    at.button(key="salva_chiave_football_data").click().run()
+    assert any("chiave" in e.value.lower() for e in at.error)
+    with sessione_db() as s:
+        assert repo.leggi_impostazione(s, "chiave_football_data") is None
+
+
+def test_chiave_football_data_variabile_ambiente_ha_precedenza(sessione_db, monkeypatch):
+    monkeypatch.setenv("FOOTBALL_DATA_KEY", "da-ambiente")
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert "FOOTBALL_DATA_KEY" in visibile(at)
+    assert "da-ambiente" not in visibile(at)
+
+
+def test_chiave_api_football_etichettata_solo_se_fonte_api_football(sessione_db):
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert any("FONTE_DATI=api_football" in h.value for h in at.header)
+
+
 def test_maschera_chiave_corta():
     assert componenti_giocate.maschera_chiave("ab") == "••••"
     assert componenti_giocate.maschera_chiave("") == "non impostata"
