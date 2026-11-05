@@ -90,3 +90,38 @@ class LimiteRichieste:
     def _scarta_vecchie(self, adesso: float) -> None:
         while self._recenti and adesso - self._recenti[0] >= FINESTRA_SECONDI:
             self._recenti.popleft()
+
+
+class LimiteRichiesteLocale(LimiteRichieste):
+    """Come `LimiteRichieste`, ma il contatore giornaliero sta in memoria e non nel database.
+
+    La tabella `contatore_richieste` ha una sola riga per giorno, condivisa da ESPN e
+    API-Football: contarci anche football-data ne consumerebbe il budget (o viceversa).
+    Per football-data conta soprattutto il ritmo al minuto (10), tenuto comunque; il tetto
+    giornaliero in memoria è solo una rete di sicurezza e riparte a ogni nuovo processo."""
+
+    def __init__(self, max_giorno: int = 1000, max_minuto: int = 10, **kwargs):
+        super().__init__(
+            None, max_giorno=max_giorno, max_minuto=max_minuto, riserva_oggi=0, **kwargs
+        )
+        self._giorno: date | None = None
+        self._conteggio = 0
+
+    def _usate(self) -> int:
+        return self._conteggio if self._giorno == self.oggi() else 0
+
+    def prendi(self, priorita: Priorita) -> None:
+        if self.rimanenti(priorita) <= 0:
+            raise LimiteSuperato(
+                f"Limite giornaliero di richieste raggiunto ({self._tetto(priorita)})"
+            )
+        self._attendi_ritmo()
+        giorno = self.oggi()
+        if self._giorno != giorno:
+            self._giorno, self._conteggio = giorno, 0
+        self._conteggio += 1
+
+
+def crea_limite_football_data() -> LimiteRichiesteLocale:
+    """Limite per football-data.org (piano gratuito): 10 richieste al minuto, 1000 al giorno."""
+    return LimiteRichiesteLocale(max_giorno=1000, max_minuto=10)

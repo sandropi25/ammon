@@ -1,0 +1,123 @@
+{
+ "filters": {
+  "season": "2025"
+ },
+ "resultSet": {
+  "count": 6
+ },
+ "matches": [
+  {
+   "utcDate": "2025-08-23T16:30:00Z",
+   "status": "FINISHED",
+   "homeTeam": {
+    "id": 107,
+    "name": "Genoa CFC"
+   },
+   "awayTeam": {
+    "id": 5890,
+    "name": "US Lecce"
+   },
+   "referees": [
+    {
+     "id": 11029,
+     "name": "Davide Massa",
+     "type": "REFEREE"
+    }
+   ]
+  },
+  {
+   "utcDate": "2025-08-23T16:30:00Z",
+   "status": "FINISHED",
+   "homeTeam": {
+    "id": 471,
+    "name": "US Sassuolo Calcio"
+   },
+   "awayTeam": {
+    "id": 113,
+    "name": "SSC Napoli"
+   },
+   "referees": [
+    {
+     "id": 57842,
+     "name": "Giovanni Ayroldi",
+     "type": "REFEREE"
+    }
+   ]
+  },
+  {
+   "utcDate": "2025-08-23T18:45:00Z",
+   "status": "FINISHED",
+   "homeTeam": {
+    "id": 98,
+    "name": "AC Milan"
+   },
+   "awayTeam": {
+    "id": 457,
+    "name": "US Cremonese"
+   },
+   "referees": [
+    {
+     "id": 97848,
+     "name": "Giuseppe Collu",
+     "type": "REFEREE"
+    }
+   ]
+  },
+  {
+   "utcDate": "2025-08-23T18:45:00Z",
+   "status": "FINISHED",
+   "homeTeam": {
+    "id": 100,
+    "name": "AS Roma"
+   },
+   "awayTeam": {
+    "id": 103,
+    "name": "Bologna FC 1909"
+   },
+   "referees": [
+    {
+     "id": 57764,
+     "name": "Luca Zufferli",
+     "type": "REFEREE"
+    }
+   ]
+  },
+  {
+   "utcDate": "2025-01-12T19:45:00Z",
+   "status": "FINISHED",
+   "homeTeam": {
+    "id": 113,
+    "name": "SSC Napoli"
+   },
+   "awayTeam": {
+    "id": 450,
+    "name": "Hellas Verona FC"
+   },
+   "referees": [
+    {
+     "id": 57764,
+     "name": "Luca Zufferli",
+     "type": "REFEREE"
+    },
+    {
+     "id": 57764,
+     "name": "Luca Zufferli",
+     "type": "REFEREE"
+    }
+   ]
+  },
+  {
+   "utcDate": "2026-11-06T19:45:00Z",
+   "status": "TIMED",
+   "homeTeam": {
+    "id": 454,
+    "name": "Venezia FC"
+   },
+   "awayTeam": {
+    "id": 115,
+    "name": "Udinese Calcio"
+   },
+   "referees": []
+  }
+ ]
+}

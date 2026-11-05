@@ -73,6 +73,19 @@ def chiave_api(sessione=None) -> str | None:
     return None
 
 
+def chiave_football_data(sessione=None) -> str | None:
+    """Chiave football-data.org: prima la variabile d'ambiente FOOTBALL_DATA_KEY,
+    poi (se data una sessione) l'impostazione 'chiave_football_data' nel database."""
+    valore = os.environ.get("FOOTBALL_DATA_KEY")
+    if valore:
+        return valore
+    if sessione is not None:
+        from ammonizioni.db import repo  # import locale: evita import circolari
+
+        return repo.leggi_impostazione(sessione, "chiave_football_data", None) or None
+    return None
+
+
 def url_database() -> str:
     """URL del database. Gli URL Postgres di Supabase (`postgres://` o `postgresql://`)
     vengono portati a `postgresql+psycopg://`, il driver psycopg 3 usato da SQLAlchemy."""
