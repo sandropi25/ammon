@@ -71,6 +71,56 @@ def _id(valore) -> int | None:
         return None
 
 
+def _probabilita_moneyline(valore) -> float | None:
+    """Probabilità implicita (non normalizzata) di una quota americana ("+150", "-120",
+    "EVEN", 150) o None se illeggibile."""
+    if isinstance(valore, bool):
+        return None
+    if isinstance(valore, str):
+        testo = valore.strip().upper()
+        if testo in ("EVEN", "EV", "PK"):
+            return 0.5
+        try:
+            valore = float(testo)
+        except ValueError:
+            return None
+    if not isinstance(valore, (int, float)) or valore == 0 or valore != valore:
+        return None
+    return 100 / (valore + 100) if valore > 0 else -valore / (-valore + 100)
+
+
+def _moneyline(voce, lato: str):
+    """Quota americana di un lato ("home", "draw", "away") da una voce `odds` di ESPN, nei
+    due formati noti: `homeTeamOdds.moneyLine` oppure `moneyline.home.close.odds`."""
+    chiavi = {"home": "homeTeamOdds", "away": "awayTeamOdds", "draw": "drawOdds"}
+    blocco = voce.get(chiavi[lato])
+    if isinstance(blocco, dict) and blocco.get("moneyLine") is not None:
+        return blocco["moneyLine"]
+    nuovo = (voce.get("moneyline") or {}).get(lato)
+    if isinstance(nuovo, dict):
+        for momento in ("close", "open"):
+            quota = (nuovo.get(momento) or {}).get("odds")
+            if quota is not None:
+                return quota
+    return None
+
+
+def probabilita_1x2(corpo: dict) -> tuple[float, float, float] | None:
+    """Probabilità implicite (casa, pareggio, trasferta), normalizzate a somma 1, dalle quote
+    1X2 del summary ESPN (`odds`). None se mancano o sono illeggibili."""
+    odds = corpo.get("odds") if isinstance(corpo, dict) else None
+    if not isinstance(odds, list):
+        return None
+    for voce in odds:
+        if not isinstance(voce, dict):
+            continue
+        probabilita = [_probabilita_moneyline(_moneyline(voce, l)) for l in ("home", "draw", "away")]
+        if all(p is not None for p in probabilita):
+            totale = sum(probabilita)
+            return tuple(p / totale for p in probabilita)
+    return None
+
+
 def _minuto(clock) -> int | None:
     """Minuto di gioco da un `clock` ESPN: "57'" -> 57, "45'+2'" -> 45, "90'+3'" -> 90
     (i recuperi non contano). Senza testo valido si usa il valore in secondi."""
@@ -175,6 +225,7 @@ class Espn:
         self.dormi = dormi
         self._partite: dict[int, PartitaDati] = {}
         self._slug: dict[int, str] = {}
+        self._quote: dict[int, tuple[float, float, float]] = {}
 
     # --- Fonte ---------------------------------------------------------
 
@@ -238,8 +289,16 @@ class Espn:
                     presenze.append(presenza)
         return presenze
 
+    def quote_1x2(self, partita_id: int) -> tuple[float, float, float] | None:
+        """Probabilità implicite (casa, pareggio, trasferta) lette dall'ultima chiamata a
+        `formazioni` per la partita (stesso summary, nessuna richiesta in più)."""
+        return self._quote.get(partita_id)
+
     def formazioni(self, partita_id: int) -> list[FormazioneDati]:
         corpo = self._summary(partita_id)
+        quote = probabilita_1x2(corpo)
+        if quote is not None:
+            self._quote[partita_id] = quote
         formazioni = []
         for squadra in self._rosters(corpo, partita_id):
             squadra_id = _id((squadra.get("team") or {}).get("id"))

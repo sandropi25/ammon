@@ -15,7 +15,6 @@ import cache_dati  # noqa: E402
 import componenti  # noqa: E402
 import stile  # noqa: E402
 from auth import richiedi_password  # noqa: E402
-from ammonizioni.caricamento.formazioni import salva_probabili  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
 from ammonizioni.motore.classifica import converti_quota  # noqa: E402
 
@@ -43,13 +42,13 @@ if pagina is None:
 
 det = pagina.dettaglio
 dati, partita = det.dati, det.partita
-cambi, extra, rosa = pagina.cambi, pagina.extra, pagina.rosa
+cambi, extra = pagina.cambi, pagina.extra
 candidati = componenti.applica_quote(det.candidati, quote)
 
 casa, trasf = dati.nomi_squadre.get(dati.casa_id, ""), dati.nomi_squadre.get(dati.trasferta_id, "")
 st.header(f"{casa} – {trasf}")
 giornata = f" · Giornata {partita.giornata}" if partita.giornata else ""
-st.caption(f"{componenti.data_italiana(partita.data_utc)}{giornata} · formazioni {partita.stato_formazioni}")
+st.caption(f"{componenti.data_italiana(partita.data_utc)}{giornata} · {componenti.etichetta_formazioni(partita.stato_formazioni)}")
 
 st.markdown(stile.scheda_contesto(componenti.righe_contesto(dati)), unsafe_allow_html=True)
 
@@ -157,25 +156,3 @@ if candidati:
             cache_dati.svuota()
             st.rerun()
 
-if rosa:
-    st.subheader("Formazioni probabili")
-    st.caption("Correggi gli 11 di ciascuna squadra; la classifica si aggiorna al salvataggio.")
-    for sq, (giocatori, correnti) in rosa.items():
-        nomi_rosa = dict(giocatori)
-        st.multiselect(
-            dati.nomi_squadre.get(sq, str(sq)),
-            [i for i, _ in giocatori],
-            default=correnti,
-            format_func=lambda i, n=nomi_rosa: n.get(i, str(i)),
-            key=f"probabili_{sq}",
-        )
-    if st.button("Salva formazioni probabili", key="salva_probabili"):
-        with apri() as s:
-            salva_probabili(
-                s,
-                partita_id,
-                {sq: list(st.session_state[f"probabili_{sq}"]) for sq in rosa},
-                griglie={t.giocatore_id: t.griglia for t in dati.titolari},
-            )
-        cache_dati.svuota()
-        st.rerun()

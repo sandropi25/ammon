@@ -67,6 +67,11 @@ class Partita(Base):
     stato: Mapped[str] = mapped_column(String, default="NS")  # NS, FT, PST, CANC, ...
     stato_formazioni: Mapped[str] = mapped_column(String, default="probabili")  # probabili | ufficiali
     statistiche_scaricate: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Probabilità implicite 1X2 prima della partita (quote ESPN, normalizzate a somma 1):
+    # per ora solo salvate (servono a capire quale squadra è sfavorita).
+    prob_casa: Mapped[float | None] = mapped_column(Float, nullable=True)
+    prob_pareggio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    prob_trasferta: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class Presenza(Base):

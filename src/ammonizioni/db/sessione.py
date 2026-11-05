@@ -5,7 +5,7 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -32,8 +32,32 @@ def crea_engine(url: str) -> Engine:
     return create_engine(url, pool_pre_ping=True)
 
 
+# Colonne aggiunte dopo la prima versione: (tabella, colonna, tipo SQL). `create_all` non
+# modifica le tabelle già esistenti, quindi si aggiungono qui, in modo idempotente.
+COLONNE_AGGIUNTE: tuple[tuple[str, str, str], ...] = (
+    ("partite", "prob_casa", "DOUBLE PRECISION"),
+    ("partite", "prob_pareggio", "DOUBLE PRECISION"),
+    ("partite", "prob_trasferta", "DOUBLE PRECISION"),
+)
+
+
+def _aggiungi_colonne_mancanti(engine: Engine) -> None:
+    dialetto = engine.dialect.name
+    with engine.begin() as conn:
+        for tabella, colonna, tipo in COLONNE_AGGIUNTE:
+            if dialetto == "postgresql":
+                conn.execute(
+                    text(f"ALTER TABLE {tabella} ADD COLUMN IF NOT EXISTS {colonna} {tipo}")
+                )
+            elif dialetto == "sqlite":
+                presenti = {r[1] for r in conn.execute(text(f"PRAGMA table_info({tabella})"))}
+                if colonna not in presenti:
+                    conn.execute(text(f"ALTER TABLE {tabella} ADD COLUMN {colonna} {tipo}"))
+
+
 def crea_tabelle(engine: Engine) -> None:
     Base.metadata.create_all(engine)
+    _aggiungi_colonne_mancanti(engine)
 
 
 def engine_per(url: str) -> Engine:

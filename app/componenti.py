@@ -426,7 +426,11 @@ class PaginaDettaglio:
     dettaglio: Dettaglio
     cambi: list[str]
     extra: dict[int, dict]
-    rosa: dict[int, tuple[list[tuple[int, str]], list[int]]]
+
+
+def etichetta_formazioni(stato: str) -> str:
+    """Scritta sulle formazioni usate: ufficiali oppure calcolate dall'app."""
+    return "formazioni ufficiali" if stato == "ufficiali" else "formazioni probabili (calcolate)"
 
 
 def applica_quote(candidati: list[Candidato], quote: dict[int, float]) -> list[Candidato]:
@@ -448,7 +452,7 @@ def applica_quote(candidati: list[Candidato], quote: dict[int, float]) -> list[C
 
 
 def carica_pagina_dettaglio(s: Session, partita_id: int) -> PaginaDettaglio | None:
-    """Dettaglio, cambi, extra per candidato e rose delle formazioni probabili. Un solo
+    """Dettaglio, cambi ed extra per candidato. Un solo
     `carica_dati`; statistiche per 90' e storia con l'avversaria in query raggruppate."""
     det = carica_dettaglio(s, partita_id, {})
     if det is None:
@@ -480,12 +484,7 @@ def carica_pagina_dettaglio(s: Session, partita_id: int) -> PaginaDettaglio | No
             "link": link_esterni(giocatori[c.giocatore_id]),
             "avversari": avversari_possibili(dati, c),
         }
-    rosa = {}
-    if partita.stato_formazioni == "probabili":
-        for sq in (dati.casa_id, dati.trasferta_id):
-            correnti = [t.giocatore_id for t in dati.titolari if t.squadra_id == sq]
-            rosa[sq] = (giocatori_squadra(s, sq, correnti), correnti)
-    return PaginaDettaglio(dettaglio=det, cambi=cambi, extra=extra, rosa=rosa)
+    return PaginaDettaglio(dettaglio=det, cambi=cambi, extra=extra)
 
 
 def carica_dettaglio(s: Session, partita_id: int, quote: dict[int, float]) -> Dettaglio | None:

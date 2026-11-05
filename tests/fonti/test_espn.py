@@ -758,6 +758,21 @@ def test_risposta_non_json_errore_fonte(espn):
 
 
 @respx.mock
+def test_quote_1x2_dal_summary_delle_formazioni(espn):
+    corpo = carica("summary_sassuolo_fiorentina.json")
+    assert espn.quote_1x2(PARTITA_SF) is None
+    rotta_summary(corpo)
+    espn.formazioni(PARTITA_SF)
+    assert espn.quote_1x2(PARTITA_SF) is None  # il riepilogo non ha le quote
+    corpo["odds"] = [{"homeTeamOdds": {"moneyLine": 100}, "drawOdds": {"moneyLine": 200},
+                      "awayTeamOdds": {"moneyLine": 300}}]
+    rotta_summary(corpo)
+    espn.formazioni(PARTITA_SF)
+    casa, pareggio, trasferta = espn.quote_1x2(PARTITA_SF)
+    assert casa + pareggio + trasferta == pytest.approx(1) and casa > pareggio > trasferta
+
+
+@respx.mock
 def test_risposta_json_non_oggetto_errore_fonte(espn):
     respx.get(f"{URL_ESPN}/ita.1/summary").mock(return_value=httpx.Response(200, json=[1, 2]))
     with pytest.raises(ErroreFonte, match="non valida"):

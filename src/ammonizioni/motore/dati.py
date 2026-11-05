@@ -6,7 +6,11 @@ from datetime import datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from ammonizioni.caricamento.formazioni import titolare_da, ultimo_xi
+from ammonizioni.caricamento.formazioni import (
+    probabili_automatiche,
+    titolare_da,
+    ultimo_xi,
+)
 from ammonizioni.config import CAMPIONATI, SERIE_A, STATI_FINITI, campionato_di
 from ammonizioni.db.modelli import (
     DuelloManuale,
@@ -390,6 +394,8 @@ def _titolari(s: Session, partita: Partita, prima_di: datetime) -> list[Titolare
         scelti = (
             _da_formazione(s, partita.id, squadra, "ufficiale")
             or _da_formazione(s, partita.id, squadra, "probabile")
+            # senza ufficiali né probabili salvate: probabili calcolate, poi l'ultimo XI
+            or probabili_automatiche(s, squadra, prima_di)
             or ultimo_xi(s, squadra, prima_di)
         )
         risultato.extend(scelti)

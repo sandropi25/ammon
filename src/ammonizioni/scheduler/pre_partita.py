@@ -8,7 +8,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from ammonizioni.caricamento.formazioni import salva_probabili, ultimo_xi
+from ammonizioni.caricamento.formazioni import (
+    probabili_automatiche,
+    salva_probabili,
+    ultimo_xi,
+)
 from ammonizioni.caricamento.notturno import indica_competizione
 from ammonizioni.config import CAMPIONATI, SERIE_A
 from ammonizioni.db import sessione as modulo_sessione
@@ -93,6 +97,15 @@ def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> bool:
     return True
 
 
+def _salva_quote(s: Session, partita: Partita, fonte) -> None:
+    """Probabilità implicite 1X2 prima della partita, se la fonte le ha lette (ESPN: stesso
+    summary delle formazioni). Per ora solo salvate."""
+    leggi = getattr(fonte, "quote_1x2", None)
+    quote = leggi(partita.id) if callable(leggi) else None
+    if quote:
+        partita.prob_casa, partita.prob_pareggio, partita.prob_trasferta = quote
+
+
 def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     """Per ogni partita nella finestra: probabili dall'ultimo XI se mancano, poi cerca le
     ufficiali. Restituisce quante partite sono passate a "ufficiali"."""
@@ -102,7 +115,8 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
         try:
             if not _ha_probabili(s, partita_id):
                 xi = {
-                    squadra: ultimo_xi(s, squadra, partita.data_utc)
+                    squadra: probabili_automatiche(s, squadra, partita.data_utc)
+                    or ultimo_xi(s, squadra, partita.data_utc)
                     for squadra in (partita.casa_id, partita.trasferta_id)
                 }
                 salva_probabili(
@@ -121,6 +135,7 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
         except ErroreFonte as errore:
             log.warning("Formazioni della partita %s non lette: %s", partita_id, errore)
             continue
+        _salva_quote(s, partita, fonte)
         if not formazioni:
             continue
         complete = _salva_ufficiali(s, partita, formazioni)
