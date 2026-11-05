@@ -122,6 +122,17 @@ Nota: GitHub può ritardare l'avvio dei cron di qualche minuto (e a volte saltar
 
 Un repository privato sul piano GitHub Free ha 2000 minuti di Actions al mese e ogni esecuzione conta almeno 1 minuto. Un cron ogni 10 minuti tutto il giorno farebbe circa 4320 esecuzioni al mese ed esaurirebbe la quota in circa due settimane, dopo di che i job si fermerebbero. Per questo `pre_partita.yml` gira solo nelle ore in cui un calcio d'inizio può cadere nella finestra di 75 minuti: 10-19 UTC, cioè 6 esecuzioni x 10 ore = 60 al giorno, circa 1800 al mese, più circa 30 della notte: circa 1830 minuti al mese, sotto il limite.
 
+Attenzione al primo mese: finché lo storico si carica, il job notturno usa tutte le 100 richieste al ritmo di 10
+al minuto e dura circa 10-12 minuti, non 1. Sono circa 300-360 minuti al mese invece di 30: con il pre-partita si
+arriva a circa 2100-2200 minuti, sopra i 2000 del piano Free, e negli ultimi giorni del mese i job si fermerebbero.
+Quando lo storico è completo (`Storico: ... completo=True` per più notti) la notte torna a 1-2 minuti. Per il
+periodo di caricamento hai due strade:
+
+- rendere pubblico il repository (minuti illimitati, vedi sotto);
+- oppure ridurre temporaneamente le ore del cron pre-partita in `.github/workflows/pre_partita.yml` (per esempio
+  `*/10 15-19 * * *` nei giorni feriali senza anticipi), tenendo conto che ogni ora in meno risparmia circa
+  180 minuti al mese ma lascia scoperti i calci d'inizio in quella fascia.
+
 - Copertura: calci d'inizio dalle 12:30 alle 20:45 ora italiana, sia con ora solare (CET) sia con ora legale (CEST).
 - Se una partita è mai fuori da questo intervallo (per esempio un anticipo alle 12:00 o un orario tardivo), allarga le ore del cron in `.github/workflows/pre_partita.yml`, tenendo d'occhio la quota (ogni ora in più costa circa 180 minuti al mese).
 - Un repository pubblico ha minuti illimitati, quindi il cron potrebbe girare tutto il giorno. I segreti restano protetti, ma il codice sarebbe visibile a tutti.
