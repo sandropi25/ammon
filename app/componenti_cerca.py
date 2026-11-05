@@ -23,11 +23,11 @@ from ammonizioni.config import (
 from ammonizioni.db.modelli import (
     Arbitro,
     Giocatore,
-    ListaManuale,
     Partita,
     Presenza,
     Squadra,
 )
+from ammonizioni.motore import rivalita
 from ammonizioni.motore.fattori.situazione import _soglie_diffida
 from ammonizioni.motore.mercati import MercatoAmmonizioni
 from ammonizioni.motore.pesi import carica_pesi
@@ -358,14 +358,9 @@ def _prossima(
         con_arbitro = _con_arbitro(s, giocatore.id, partita.arbitro_id, adesso)
 
     rivali = {
-        b if a == squadra_id else a
-        for a, b in s.execute(
-            select(ListaManuale.squadra_a_id, ListaManuale.squadra_b_id).where(
-                ListaManuale.tipo == "derby",
-                ListaManuale.squadra_b_id.is_not(None),
-                (ListaManuale.squadra_a_id == squadra_id) | (ListaManuale.squadra_b_id == squadra_id),
-            )
-        )
+        d.squadra_b if d.squadra_a == squadra_id else d.squadra_a
+        for d in rivalita.elenco_derby(s)
+        if squadra_id in (d.squadra_a, d.squadra_b)
     }
     coppie = {(giocatore.id, avv_id)} | {(giocatore.id, r) for r in rivali}
     storie = componenti.storia_contro_batch(s, coppie, adesso)

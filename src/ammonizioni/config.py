@@ -43,6 +43,47 @@ SOGLIE_DIFFIDA: dict[int, tuple[int, ...]] = {
 
 SERIE_A = COMPETIZIONI["serie_a"]
 
+# Derby e rivalità vere, per nome di squadra (campionato -> coppie). I nomi si confrontano
+# con quelli del database dopo la normalizzazione di `caricamento.arbitri_fd`
+# (maiuscole, accenti, "FC", alias): le squadre assenti dal database vengono ignorate.
+DERBY_PREDEFINITI: dict[int, tuple[tuple[str, str], ...]] = {
+    135: (
+        ("Inter", "Milan"),
+        ("Roma", "Lazio"),
+        ("Juventus", "Torino"),
+        ("Genoa", "Sampdoria"),
+        ("Juventus", "Inter"),
+        ("Napoli", "Roma"),
+        ("Fiorentina", "Juventus"),
+        ("Juventus", "Napoli"),
+        ("Atalanta", "Brescia"),
+        ("Verona", "Chievo"),
+        ("Lazio", "Napoli"),
+    ),
+    140: (
+        ("Real Madrid", "Barcelona"),
+        ("Real Madrid", "Atlético Madrid"),
+        ("Barcelona", "Espanyol"),
+        ("Sevilla", "Real Betis"),
+        ("Athletic Club", "Real Sociedad"),
+        ("Valencia", "Levante"),
+        ("Celta Vigo", "Deportivo La Coruña"),
+        ("Atlético Madrid", "Barcelona"),
+        ("Osasuna", "Athletic Club"),
+    ),
+}
+
+# Campo caldo automatico: nelle partite casalinghe di campionato delle ultime
+# CAMPO_CALDO_STAGIONI stagioni (quella della partita compresa) la media di cartellini
+# (gialli + rossi, entrambe le squadre) supera di almeno il 20% quella del campionato,
+# con almeno CAMPO_CALDO_PARTITE_MINIME partite casalinghe.
+CAMPO_CALDO_STAGIONI = 2
+CAMPO_CALDO_SOGLIA = 1.20
+CAMPO_CALDO_PARTITE_MINIME = 15
+
+# Partita calda: cartellini attesi (gialli + rossi) pari o sopra questa soglia, oppure derby.
+SOGLIA_CARTELLINI_ATTESI = 5.5
+
 
 def campionato_di(competizione_id: int) -> int | None:
     """Il campionato a cui appartiene una competizione: il campionato stesso, la sua coppa

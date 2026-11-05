@@ -12,12 +12,12 @@ from ammonizioni.db.modelli import (
     DuelloManuale,
     Formazione,
     Giocatore,
-    ListaManuale,
     Partita,
     Presenza,
     Squadra,
     Arbitro,
 )
+from ammonizioni.motore import rivalita
 from ammonizioni.motore.fattori.contesto import posta_in_classifica
 from ammonizioni.motore.tipi import (
     RUOLI,
@@ -57,12 +57,8 @@ def _coppia(a: int, b: int) -> frozenset[int]:
 
 
 def _derby(s: Session) -> set[frozenset[int]]:
-    righe = s.execute(
-        select(ListaManuale.squadra_a_id, ListaManuale.squadra_b_id).where(
-            ListaManuale.tipo == "derby", ListaManuale.squadra_b_id.is_not(None)
-        )
-    ).all()
-    return {_coppia(a, b) for a, b in righe}
+    """Derby riconosciuti: elenco predefinito (per nome) e righe manuali già nel database."""
+    return rivalita.derby_noti(s)
 
 
 def _totali_partite(s: Session, partita_ids: list[int]) -> dict[int, tuple[int, int]]:
@@ -250,13 +246,7 @@ def carica_dati_calda(s: Session, partite: list[Partita]) -> dict[int, DatiCalda
     `carica_dati` per ogni partita."""
     if not partite:
         return {}
-    liste = s.execute(
-        select(ListaManuale.tipo, ListaManuale.squadra_a_id, ListaManuale.squadra_b_id).where(
-            ListaManuale.tipo.in_(("derby", "campo_caldo"))
-        )
-    ).all()
-    derby = {_coppia(a, b) for t, a, b in liste if t == "derby" and b is not None}
-    campi_caldi = {a for t, a, _ in liste if t == "campo_caldo"}
+    derby = _derby(s)
 
     # statistiche degli arbitri coinvolti: una query raggruppata per partita arbitrata
     arbitri_ids = {p.arbitro_id for p in partite if p.arbitro_id is not None}
@@ -298,8 +288,13 @@ def carica_dati_calda(s: Session, partite: list[Partita]) -> dict[int, DatiCalda
     ) == 0
 
     medie: dict[tuple, MedieCampionato] = {}
+    caldi: dict[tuple, set[int]] = {}  # campi caldi per (stagione, "prima di"), come le medie
     risultato: dict[int, DatiCalda] = {}
     for p in partite:
+        chiave_caldi = (p.stagione, primo if condivise else p.data_utc)
+        if chiave_caldi not in caldi:
+            caldi[chiave_caldi] = rivalita.campi_caldi_noti(s, p.stagione, chiave_caldi[1])
+        campi_caldi = caldi[chiave_caldi]
         campionato = _campionato_partita(s, p)
         chiave = (campionato, p.stagione) if condivise else (campionato, p.stagione, p.data_utc)
         if chiave not in medie:
@@ -333,11 +328,7 @@ def _contesto(
     derby: set[frozenset[int]],
     campionato_id: int = SERIE_A,
 ) -> ContestoInfo:
-    campo_caldo = s.execute(
-        select(ListaManuale.id).where(
-            ListaManuale.tipo == "campo_caldo", ListaManuale.squadra_a_id == partita.casa_id
-        )
-    ).first() is not None
+    campo_caldo = partita.casa_id in rivalita.campi_caldi_noti(s, partita.stagione, prima_di)
 
     giocate = [
         (c, t, gc, gt)
