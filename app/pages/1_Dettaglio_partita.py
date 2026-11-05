@@ -4,6 +4,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import aggiorna  # noqa: E402
+
+aggiorna.ricarica_se_cambiato(lambda: __import__("streamlit").cache_data.clear())
+
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
