@@ -29,6 +29,7 @@ class ArbitroPartita:
     trasferta: str
     arbitro_id: int | None  # id football-data
     arbitro_nome: str | None  # None se l'arbitro non è ancora designato
+    giornata: int | None = None  # "matchday" di football-data (numero di giornata)
 
 
 def stagione_intera(dal: date, al: date) -> int | None:
@@ -102,12 +103,16 @@ class FootballData:
                 arbitro_id = r.get("id")
                 arbitro_nome = r["name"]
                 break
+        giornata = partita.get("matchday")
+        if isinstance(giornata, bool) or not isinstance(giornata, int) or giornata < 1:
+            giornata = None
         return ArbitroPartita(
             data_utc=data.astimezone(timezone.utc),
             casa=casa,
             trasferta=trasferta,
             arbitro_id=arbitro_id,
             arbitro_nome=arbitro_nome,
+            giornata=giornata,
         )
 
     def _get(self, percorso: str, parametri: dict) -> dict:

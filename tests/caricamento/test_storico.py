@@ -443,3 +443,68 @@ def test_max_minuti_non_numerico_usa_il_default_con_avviso(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING, logger="ammonizioni.caricamento.storico"):
         assert storico.max_minuti_da_env() == 40
     assert any("STORICO_MAX_MINUTI" in x.getMessage() for x in caplog.records)
+
+
+def test_stagioni_gia_collegate_ricevono_la_giornata_una_volta_sola(sessione):
+    """Stagione con gli arbitri gia' collegati prima delle giornate: una richiesta per campionato
+    e stagione, poi il flag `giornate_collegate` evita di ripeterla ogni notte."""
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    data = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
+    _salva(sessione, partita_dati(1, data, stagione=2025, giornata=None))
+    sessione.get(Partita, 1).statistiche_scaricate = True
+    repo.scrivi_impostazione(sessione, "arbitri_collegati", [2025])  # gia' collegata in passato
+    sessione.commit()
+    fd = FonteFdStagioni([
+        ArbitroPartita(data, "Juventus FC", "FC Internazionale Milano", 1, "Davide Massa", 22)
+    ])
+    storico.avanza(sessione, FonteFinta(), fd)
+    assert fd.chiamate == [("SA", date(2025, 7, 1), date(2026, 6, 30))]  # una sola richiesta
+    assert sessione.get(Partita, 1).giornata == 22
+    assert repo.leggi_impostazione(sessione, "giornate_collegate") == [2025]
+
+    storico.avanza(sessione, FonteFinta(), fd)
+    storico.avanza(sessione, FonteFinta(), fd)  # notti dopo: niente di nuovo
+    assert len(fd.chiamate) == 1
+
+
+def test_giornata_non_trovata_non_si_richiede_ogni_notte(sessione):
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    data = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
+    _salva(sessione, partita_dati(1, data, stagione=2025, giornata=None))
+    sessione.get(Partita, 1).statistiche_scaricate = True
+    repo.scrivi_impostazione(sessione, "arbitri_collegati", [2025])
+    sessione.commit()
+    fd = FonteFdStagioni([ArbitroPartita(data, "Torino FC", "Udinese Calcio", 1, "X Y", 3)])
+    storico.avanza(sessione, FonteFinta(), fd)
+    storico.avanza(sessione, FonteFinta(), fd)
+    assert len(fd.chiamate) == 1
+    assert sessione.get(Partita, 1).giornata is None
+
+
+def test_errore_football_data_la_giornata_si_riprova(sessione):
+    from ammonizioni.fonti.base import ErroreFonte
+
+    data = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
+    _salva(sessione, partita_dati(1, data, stagione=2025, giornata=None))
+    sessione.get(Partita, 1).statistiche_scaricate = True
+    repo.scrivi_impostazione(sessione, "arbitri_collegati", [2025])
+    sessione.commit()
+
+    class Rotto(FonteFdStagioni):
+        def arbitri(self, codice, dal, al):
+            self.chiamate.append(codice)
+            raise ErroreFonte("giu'")
+
+    fd = Rotto([])
+    r = storico.avanza(sessione, FonteFinta(), fd)
+    assert r.completo is False
+    assert not repo.leggi_impostazione(sessione, "giornate_collegate")
+
+
+def test_salva_partita_non_cancella_la_giornata_con_none(sessione):
+    data = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
+    _salva(sessione, partita_dati(1, data, giornata=9))
+    _salva(sessione, partita_dati(1, data, giornata=None))  # ESPN non la da'
+    assert sessione.get(Partita, 1).giornata == 9

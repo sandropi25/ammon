@@ -39,6 +39,7 @@ CALENDARI_QUANDO = "calendari_scaricati_il"  # {"competizione-stagione": iso UTC
 GIORNI_PROSSIMA_GIORNATA = 7
 GIORNI_RISCARICO_CALENDARIO = 7  # calendari della stagione corrente (non Serie A)
 ARBITRI_COLLEGATI = "arbitri_collegati"  # stagioni di Serie A con gli arbitri gia' collegati
+GIORNATE_COLLEGATE = "giornate_collegate"  # stagioni con la giornata gia' cercata (passo una tantum)
 ARBITRI_RICOLLEGATI_QUANDO = "arbitri_ricollegati_il"  # {"campionato": iso UTC}, stagione corrente
 MINUTI_MASSIMI_STORICO = 40 # con ESPN (30 richieste/min) il primo carico dura piu' di 50 minuti
 
@@ -203,6 +204,11 @@ def _chiave_arbitri(campionato: int) -> str:
     return ARBITRI_COLLEGATI if campionato == SERIE_A else f"{ARBITRI_COLLEGATI}_{campionato}"
 
 
+def _chiave_giornate(campionato: int) -> str:
+    """Impostazione con le stagioni la cui giornata e' gia' stata cercata su football-data."""
+    return GIORNATE_COLLEGATE if campionato == SERIE_A else f"{GIORNATE_COLLEGATE}_{campionato}"
+
+
 def _collega_arbitri_stagioni(s: Session, fonte_fd, oggi: datetime) -> bool:
     """Arbitri di ogni campionato (la Serie A per prima) per ogni stagione dello storico, una
     volta sola per stagione (una richiesta a football-data.org per campionato e stagione:
@@ -210,7 +216,10 @@ def _collega_arbitri_stagioni(s: Session, fonte_fd, oggi: datetime) -> bool:
     ripete ogni 7 giorni (le partite ancora senza arbitro, che football-data ha designato
     dopo; senza partite senza arbitro `collega` non fa richieste): il job notturno collega
     solo le partite da 7 giorni fa a fra 7 giorni. Senza chiave non fa nulla (e non segna
-    nulla). True se non ci sono stati errori."""
+    nulla). Lo stesso passaggio assegna anche la giornata (`matchday`): le stagioni già
+    collegate prima di questa funzione hanno un passo una tantum (flag `giornate_collegate`
+    in Impostazione): al massimo una richiesta per campionato e stagione, poi mai più.
+    True se non ci sono stati errori."""
     if fonte_fd is not None and not getattr(fonte_fd, "chiave", None):
         log.warning(
             "Arbitri dello storico non collegati: manca la chiave football-data.org "
@@ -224,12 +233,17 @@ def _collega_arbitri_stagioni(s: Session, fonte_fd, oggi: datetime) -> bool:
     for campionato in CAMPIONATI:
         chiave = _chiave_arbitri(campionato)
         fatte = set(repo.leggi_impostazione(s, chiave, []) or [])
+        chiave_g = _chiave_giornate(campionato)
+        con_giornata = set(repo.leggi_impostazione(s, chiave_g, []) or [])
         for stagione in STAGIONI:  # dalla piu' recente
             corrente = stagione == STAGIONE_CORRENTE
+            # stagioni gia' con gli arbitri ma non ancora con le giornate: una richiesta in
+            # piu' una volta sola (poi la stagione entra in `con_giornata` e non si ripete)
+            giornate_da_fare = stagione not in con_giornata
             if corrente:
-                if not _scaduto(quando.get(str(campionato)), oggi):
+                if not _scaduto(quando.get(str(campionato)), oggi) and not giornate_da_fare:
                     continue
-            elif stagione in fatte:
+            elif stagione in fatte and not giornate_da_fare:
                 continue
             # calendario non ancora scaricato (o fallito): niente da collegare, si riprova
             if s.scalars(
@@ -251,6 +265,8 @@ def _collega_arbitri_stagioni(s: Session, fonte_fd, oggi: datetime) -> bool:
                 continue
             fatte.add(stagione)
             repo.scrivi_impostazione(s, chiave, sorted(fatte, reverse=True))
+            con_giornata.add(stagione)
+            repo.scrivi_impostazione(s, chiave_g, sorted(con_giornata, reverse=True))
             if corrente:
                 quando[str(campionato)] = oggi.isoformat()
                 repo.scrivi_impostazione(s, ARBITRI_RICOLLEGATI_QUANDO, quando)

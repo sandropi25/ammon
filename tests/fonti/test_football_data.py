@@ -267,3 +267,17 @@ def test_chiave_football_data_da_ambiente_poi_da_database(sessione, monkeypatch)
     assert config.chiave_football_data(sessione) == "dal-db"
     monkeypatch.setenv("FOOTBALL_DATA_KEY", "da-env")
     assert config.chiave_football_data(sessione) == "da-env"
+
+
+@respx.mock
+def test_giornata_letta_dal_matchday(fd):
+    def partita(matchday):
+        p = {"utcDate": "2025-08-23T16:30:00Z", "homeTeam": {"name": "A"}, "awayTeam": {"name": "B"}}
+        if matchday is not None:
+            p["matchday"] = matchday
+        return p
+
+    dati = {"matches": [partita(12), partita(None), partita(0), partita("3"), partita(True)]}
+    respx.get(URL_SA).mock(return_value=httpx.Response(200, json=dati))
+    risultato = fd.arbitri("SA", date(2025, 7, 1), date(2026, 6, 30))
+    assert [r.giornata for r in risultato] == [12, None, None, None, None]

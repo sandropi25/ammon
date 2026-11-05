@@ -103,7 +103,8 @@ def salva_partita(s: Session, dati: PartitaDati) -> Partita:
     partita.data_utc = dati.data_utc
     partita.competizione_id = dati.competizione_id
     partita.stagione = dati.stagione
-    partita.giornata = dati.giornata
+    if dati.giornata is not None:  # la giornata di football-data non va persa se la fonte non la da'
+        partita.giornata = dati.giornata
     partita.casa_id = dati.casa_id
     partita.trasferta_id = dati.trasferta_id
     if arbitro is not None:

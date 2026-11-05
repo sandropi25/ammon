@@ -152,9 +152,9 @@ class FonteFdFinta:
         return list(self.voci)
 
 
-def voce(data, casa, trasferta, arbitro=("Davide Massa", 11029)):
+def voce(data, casa, trasferta, arbitro=("Davide Massa", 11029), giornata=None):
     nome, id_ = arbitro if arbitro else (None, None)
-    return ArbitroPartita(data, casa, trasferta, id_, nome)
+    return ArbitroPartita(data, casa, trasferta, id_, nome, giornata)
 
 
 def aggiungi_partita(
@@ -383,3 +383,62 @@ def test_integrazione_con_risposta_reale_ridotta(sessione):
     assert [nome_arbitro(sessione, i) for i in (1, 2, 3, 4)] == [
         "Davide Massa", "Giovanni Ayroldi", "Giuseppe Collu", "Luca Zufferli",
     ]
+
+
+# --- numero di giornata --------------------------------------------------------
+
+
+def test_giornata_salvata_dal_matchday(sessione):
+    aggiungi_partita(sessione, 1, T0, GENOA, LECCE)
+    fd = FonteFdFinta([voce(T0, "Genoa CFC", "US Lecce", giornata=2)])
+    assert collega(sessione, fd, 135, GIORNO, GIORNO) == 1
+    assert sessione.get(Partita, 1).giornata == 2
+
+
+def test_giornata_non_sovrascrive_quella_presente(sessione):
+    p = aggiungi_partita(sessione, 1, T0, GENOA, LECCE)
+    p.giornata = 5
+    sessione.flush()
+    fd = FonteFdFinta([voce(T0, "Genoa CFC", "US Lecce", giornata=2)])
+    collega(sessione, fd, 135, GIORNO, GIORNO)
+    assert sessione.get(Partita, 1).giornata == 5
+    assert nome_arbitro(sessione, 1) == "Davide Massa"
+
+
+def test_giornata_none_senza_corrispondenza(sessione):
+    aggiungi_partita(sessione, 1, T0, GENOA, LECCE)
+    fd = FonteFdFinta([voce(T0, "Torino FC", "Udinese Calcio", giornata=3)])
+    collega(sessione, fd, 135, GIORNO, GIORNO)
+    assert sessione.get(Partita, 1).giornata is None
+
+
+def test_partita_con_arbitro_ma_senza_giornata_riceve_la_giornata(sessione):
+    """Le partite collegate prima dell'arrivo delle giornate: l'arbitro resta, arriva la giornata."""
+    esistente = Arbitro(nome_normalizzato="doveri", nome_visualizzato="Daniele Doveri")
+    sessione.add(esistente)
+    sessione.flush()
+    aggiungi_partita(sessione, 1, T0, GENOA, LECCE, arbitro_id=esistente.id)
+    fd = FonteFdFinta([voce(T0, "Genoa CFC", "US Lecce", giornata=7)])
+    assert collega(sessione, fd, 135, GIORNO, GIORNO) == 0  # nessun nuovo arbitro collegato
+    assert nome_arbitro(sessione, 1) == "Daniele Doveri"
+    assert sessione.get(Partita, 1).giornata == 7
+
+
+def test_giornata_assegnata_anche_se_arbitro_non_designato(sessione):
+    aggiungi_partita(sessione, 1, T0, GENOA, LECCE)
+    fd = FonteFdFinta([voce(T0, "Genoa CFC", "US Lecce", arbitro=None, giornata=4)])
+    assert collega(sessione, fd, 135, GIORNO, GIORNO) == 0
+    assert nome_arbitro(sessione, 1) is None
+    assert sessione.get(Partita, 1).giornata == 4
+
+
+def test_tutto_gia_presente_nessuna_chiamata(sessione):
+    esistente = Arbitro(nome_normalizzato="doveri", nome_visualizzato="Daniele Doveri")
+    sessione.add(esistente)
+    sessione.flush()
+    p = aggiungi_partita(sessione, 1, T0, GENOA, LECCE, arbitro_id=esistente.id)
+    p.giornata = 1
+    sessione.flush()
+    fd = FonteFdFinta([])
+    assert collega(sessione, fd, 135, GIORNO, GIORNO) == 0
+    assert fd.chiamate == []

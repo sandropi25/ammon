@@ -68,10 +68,13 @@ def stessa_squadra(a: str, b: str) -> bool:
 def collega(
     s: Session, fonte_fd: FootballData, competizione_id: int, dal: date, al: date
 ) -> int:
-    """Assegna l'arbitro alle partite del database senza arbitro, tra le date `dal` e `al`
-    (comprese), per la competizione data. Una sola lettura di football-data (una richiesta
-    se l'intervallo è una stagione intera). Restituisce i collegamenti fatti; le partite non
-    collegate restano senza arbitro (fattore arbitro neutro) e sono scritte nel log.
+    """Assegna l'arbitro alle partite del database senza arbitro e il numero di giornata a
+    quelle senza giornata (campo `matchday` di football-data, mai sovrascritto se già
+    presente), tra le date `dal` e `al` (comprese), per la competizione data. Una sola lettura
+    di football-data (una richiesta se l'intervallo è una stagione intera); se tutte le
+    partite hanno già arbitro e giornata non fa nessuna richiesta. Restituisce i
+    collegamenti di arbitri fatti; le partite non collegate restano senza arbitro (fattore
+    arbitro neutro) e sono scritte nel log.
     Senza chiave non fa nulla. Gli errori della fonte (ErroreFonte, LimiteSuperato) salgono."""
     if not getattr(fonte_fd, "chiave", None):
         log.warning(
@@ -90,7 +93,7 @@ def collega(
         select(Partita)
         .where(
             Partita.competizione_id == competizione_id,
-            Partita.arbitro_id.is_(None),
+            Partita.arbitro_id.is_(None) | Partita.giornata.is_(None),
             Partita.data_utc >= inizio,
             Partita.data_utc < fine,
         )
@@ -115,11 +118,16 @@ def collega(
         if not vicine:
             log.warning(
                 "Partita %s (%s - %s, %s): nessuna corrispondenza su football-data.org, "
-                "arbitro non assegnato",
+                "arbitro e giornata non assegnati",
                 partita.id, casa.nome, trasferta.nome, partita.data_utc.isoformat(),
             )
             continue
         voce = min(vicine, key=lambda v: abs(v.data_utc - partita.data_utc))
+        # la giornata arriva solo da qui (ESPN non la da'): mai sovrascritta se gia' presente
+        if partita.giornata is None and voce.giornata is not None:
+            partita.giornata = voce.giornata
+        if partita.arbitro_id is not None:
+            continue
         arbitro = trova_o_crea(s, voce.arbitro_nome, competizione_id)
         if arbitro is None:
             log.info(
