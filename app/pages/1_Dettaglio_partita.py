@@ -36,7 +36,7 @@ with apri() as s:
         for c in det.candidati:
             avv_id = c.avversario_diretto_id
             sq_avv = dati.trasferta_id if c.squadra_id == dati.casa_id else dati.casa_id
-            sofascore = s.get(Giocatore, c.giocatore_id)
+            giocatore = s.get(Giocatore, c.giocatore_id)
             extra[c.giocatore_id] = {
                 "stat": componenti.statistiche_90(s, c.giocatore_id, dati.stagione, dati.data),
                 "stat_avv": componenti.statistiche_90(s, avv_id, dati.stagione, dati.data)
@@ -45,7 +45,7 @@ with apri() as s:
                     *componenti.storia_contro(s, c.giocatore_id, sq_avv, dati.data),
                     dati.nomi_squadre.get(sq_avv, ""),
                 ),
-                "link": componenti.link_sofascore(sofascore),
+                "link": componenti.link_esterni(giocatore),
                 "avversari": componenti.avversari_possibili(dati, c),
             }
         rosa = {}
@@ -96,7 +96,7 @@ for c in det.candidati:
         st.table(pd.DataFrame(componenti.righe_duello(info["stat"], info["stat_avv"])).set_index("Statistica")
                  .rename(columns={"Giocatore": c.nome, "Avversario": avv_nome}))
         st.caption(info["storia"])
-        st.markdown(f"[Sofascore]({info['link']})")
+        st.markdown(" · ".join(f"[{nome}]({url})" for nome, url in info["link"]))
 
         opzioni = [None] + [i for i, _ in info["avversari"]]
         nomi_avv = dict(info["avversari"])

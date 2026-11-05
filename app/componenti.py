@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -67,6 +68,26 @@ def link_sofascore(giocatore) -> str:
     if giocatore.sofascore_url:
         return giocatore.sofascore_url
     return "https://www.google.com/search?q=sofascore+" + "+".join(giocatore.nome.split())
+
+
+def _ricerca_google_sito(sito: str, nome: str) -> str:
+    return "https://www.google.com/search?q=" + quote_plus(f"site:{sito} {nome}")
+
+
+def link_esterni(giocatore) -> list[tuple[str, str]]:
+    """Link per il controllo visivo del giocatore sulle app più usate (nessuna viene letta
+    in automatico). FBref e Transfermarkt hanno una ricerca propria; per le altre si usa
+    una ricerca Google limitata al sito."""
+    nome = " ".join(giocatore.nome.split())
+    return [
+        ("Sofascore", link_sofascore(giocatore)),
+        ("FBref", "https://fbref.com/search/search.fcgi?search=" + quote_plus(nome)),
+        ("FotMob", _ricerca_google_sito("fotmob.com", nome)),
+        ("WhoScored", _ricerca_google_sito("whoscored.com", nome)),
+        ("Transfermarkt",
+         "https://www.transfermarkt.it/schnellsuche/ergebnis/schnellsuche?query=" + quote_plus(nome)),
+        ("Diretta", _ricerca_google_sito("diretta.it", nome)),
+    ]
 
 
 # ---------------------------------------------------------------- pagina Partite

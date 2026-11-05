@@ -53,6 +53,17 @@ def test_dettaglio_mostra_classifica_ordinata(sessione_db):
     assert "Rivalità" in t
 
 
+def test_dettaglio_mostra_i_link_alle_app(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+    at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
+    assert not at.exception
+    testi = [m.value for m in at.markdown]
+    riga = next(v for v in testi if v.startswith("[Sofascore]("))
+    for app in ("FBref", "FotMob", "WhoScored", "Transfermarkt", "Diretta"):
+        assert f"[{app}](" in riga
+
+
 def test_quota_con_virgola_accettata_e_valore_mostrato(sessione_db):
     with sessione_db() as s:
         popola(s)

@@ -22,3 +22,27 @@ def test_link_sofascore():
     senza = SimpleNamespace(nome="Mario Rossi", sofascore_url=None)
     assert componenti.link_sofascore(con) == "https://www.sofascore.com/x"
     assert componenti.link_sofascore(senza) == "https://www.google.com/search?q=sofascore+Mario+Rossi"
+
+
+def test_link_esterni_tutte_le_app_in_ordine():
+    g = SimpleNamespace(nome="Mario Rossi", sofascore_url=None)
+    link = componenti.link_esterni(g)
+    assert [nome for nome, _ in link] == [
+        "Sofascore", "FBref", "FotMob", "WhoScored", "Transfermarkt", "Diretta",
+    ]
+    url = dict(link)
+    assert url["Sofascore"] == "https://www.google.com/search?q=sofascore+Mario+Rossi"
+    assert url["FBref"] == "https://fbref.com/search/search.fcgi?search=Mario+Rossi"
+    assert url["Transfermarkt"] == (
+        "https://www.transfermarkt.it/schnellsuche/ergebnis/schnellsuche?query=Mario+Rossi"
+    )
+    assert url["FotMob"] == "https://www.google.com/search?q=site%3Afotmob.com+Mario+Rossi"
+    assert url["WhoScored"] == "https://www.google.com/search?q=site%3Awhoscored.com+Mario+Rossi"
+    assert url["Diretta"] == "https://www.google.com/search?q=site%3Adiretta.it+Mario+Rossi"
+
+
+def test_link_esterni_codifica_nomi_con_accenti():
+    g = SimpleNamespace(nome="Hakan Çalhanoğlu", sofascore_url="https://www.sofascore.com/x")
+    url = dict(componenti.link_esterni(g))
+    assert url["Sofascore"] == "https://www.sofascore.com/x"
+    assert url["FBref"] == "https://fbref.com/search/search.fcgi?search=Hakan+%C3%87alhano%C4%9Flu"
