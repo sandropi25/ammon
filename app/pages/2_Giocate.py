@@ -35,9 +35,11 @@ with apri() as s:
     partite = cg.partite_selezionabili(
         s, datetime.now(timezone.utc), includi=partita_richiesta, campionati=campionati
     )
-    # "Tutti": anche le giocate su coppe europee
-    registro = cg.righe_registro(s, None if filtro == componenti.TUTTI else campionati)
-    statistiche = cg.righe_statistiche(s)
+    # registro e statistiche: il campionato, la sua coppa nazionale e le europee con le sue
+    # squadre; "Tutti" = senza filtro
+    campionati_giocate = None if filtro == componenti.TUTTI else campionati
+    registro = cg.righe_registro(s, campionati_giocate)
+    statistiche = cg.righe_statistiche(s, campionati_giocate)
 
 if st.session_state.pop("giocata_registrata", False):
     st.success("Giocata registrata")

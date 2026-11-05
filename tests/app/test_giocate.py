@@ -152,20 +152,34 @@ def test_registro_filtrato_per_campionato(sessione_db):
     with sessione_db() as s:
         _prepara(s)
         _aggiungi_liga(s)
-        # una giocata su una partita di Serie A, una su una di Liga, una su una Champions
-        s.add(Partita(id=211, data_utc=datetime.now(timezone.utc) + timedelta(days=3),
-                      competizione_id=2, stagione=2026, casa_id=CASA, trasferta_id=TRASF, stato="NS"))
+        # giocate su: Serie A, Liga, Coppa Italia, Copa del Rey, Champions tra squadre di Serie A,
+        # Champions tra squadre di Liga, Europa League tra squadre di nessun campionato
+        s.add_all([Squadra(id=900, nome="Ajax"), Squadra(id=901, nome="Benfica")])
         s.flush()
-        for pid, gid in ((PARTITA_VICINA, 12), (PARTITA_LIGA, 511), (211, 12)):
+        extra = {
+            211: (137, CASA, TRASF), 212: (143, 501, 502), 213: (2, CASA, TRASF),
+            214: (2, 501, 502), 215: (3, 900, 901),
+        }
+        for pid, (comp, c, t) in extra.items():
+            s.add(Partita(id=pid, data_utc=datetime.now(timezone.utc) + timedelta(days=3),
+                          competizione_id=comp, stagione=2026, casa_id=c, trasferta_id=t, stato="NS"))
+        s.flush()
+        for pid, gid in ((PARTITA_VICINA, 12), (PARTITA_LIGA, 511), *((p, 12) for p in extra)):
             s.add(Giocata(data=date(2026, 11, 5), partita_id=pid, giocatore_id=gid, fonte="io",
-                          quota=2.0, puntata=10.0))
+                          quota=2.0, puntata=10.0, esito="vinta" if pid in (PARTITA_VICINA, 214) else "persa"))
         s.flush()
-        partite = lambda righe: sorted(r["Partita"] for r in righe)  # noqa: E731
-        assert partite(componenti_giocate.righe_registro(s)) == ["Casa FC – Trasferta FC"]
-        assert partite(componenti_giocate.righe_registro(s, campionati=(140,))) == [
-            "Real Liga – Barca Liga"
-        ]
-        assert len(componenti_giocate.righe_registro(s, campionati=None)) == 3  # tutte, anche la Champions
+        partite = lambda righe: len(righe)  # noqa: E731
+        # Serie A: campionato, Coppa Italia, Champions con squadre di Serie A
+        assert partite(componenti_giocate.righe_registro(s)) == 3
+        # Liga: campionato, Copa del Rey, Champions con squadre di Liga
+        liga = componenti_giocate.righe_registro(s, campionati=(140,))
+        assert partite(liga) == 3 and {r["Partita"] for r in liga} == {"Real Liga – Barca Liga"}
+        assert partite(componenti_giocate.righe_registro(s, campionati=None)) == 7  # tutte
+        # le statistiche per fonte seguono lo stesso filtro
+        giocate = lambda campionati: componenti_giocate.righe_statistiche(s, campionati)[0]["Giocate"]  # noqa: E731
+        assert giocate((135,)) == 3  # 1 vinta + 2 perse
+        assert giocate((140,)) == 3  # 1 vinta (Champions) + 2 perse
+        assert giocate(None) == 7
 
 
 def test_giocatori_proposti_sono_quelli_delle_due_squadre(sessione_db):

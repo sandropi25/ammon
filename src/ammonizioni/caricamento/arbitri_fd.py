@@ -120,7 +120,7 @@ def collega(
             )
             continue
         voce = min(vicine, key=lambda v: abs(v.data_utc - partita.data_utc))
-        arbitro = trova_o_crea(s, voce.arbitro_nome)
+        arbitro = trova_o_crea(s, voce.arbitro_nome, competizione_id)
         if arbitro is None:
             log.info(
                 "Partita %s (%s - %s): arbitro non ancora designato su football-data.org",

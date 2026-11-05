@@ -12,7 +12,7 @@ from ammonizioni.caricamento.notturno import salva_partita
 
 OGGI = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
 CARICATE = tuple(COMPETIZIONI.values())  # tutte e 7: due campionati, due coppe, tre europee
-CALENDARI = len(CARICATE) * len(STAGIONI) - 1  # tutti tranne la Serie A della stagione corrente
+CALENDARI = len(CARICATE) * len(STAGIONI) - 2  # tutti tranne i campionati della stagione corrente
 
 
 def _salva(s, *partite):
@@ -64,7 +64,7 @@ def test_coda_storico_tutte_le_coppie_tranne_il_calendario_notturno(sessione):
     assert (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE) not in coda
     assert {c for c, _ in coda} == set(CARICATE)
     # dentro ogni gruppo (Serie A e coppe, poi Liga e Copa del Rey) le stagioni recenti per prime
-    for gruppo in (coda[:CALENDARI - 6], coda[CALENDARI - 6:]):
+    for gruppo in (coda[:CALENDARI - 5], coda[CALENDARI - 5:]):
         assert [st for _, st in gruppo] == sorted((st for _, st in gruppo), reverse=True)
 
 
@@ -73,10 +73,13 @@ def test_coda_storico_i_calendari_della_liga_dopo_quelli_della_serie_a(sessione)
     liga = {COMPETIZIONI["liga"], COMPETIZIONI["copa_del_rey"]}
     posizioni = [i for i, (c, _) in enumerate(coda) if c in liga]
     altre = [i for i, (c, _) in enumerate(coda) if c not in liga]
-    assert len(posizioni) == 6 and max(altre) < min(posizioni)
-    # la Serie A del 2025 e del 2024 prima di qualsiasi Liga, anche quella della stagione corrente
+    assert len(posizioni) == 5 and max(altre) < min(posizioni)
+    # la Serie A del 2025 e del 2024 prima di qualsiasi Liga; i campionati della stagione
+    # corrente non sono in coda (li scarica il job notturno), la Copa del Rey si'
     assert (COMPETIZIONI["serie_a"], 2025) in [coda[i] for i in altre]
-    assert coda[min(posizioni)] == (COMPETIZIONI["liga"], STAGIONE_CORRENTE)
+    assert (COMPETIZIONI["liga"], STAGIONE_CORRENTE) not in coda
+    assert (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE) not in coda
+    assert coda[min(posizioni)] == (COMPETIZIONI["copa_del_rey"], STAGIONE_CORRENTE)
 
 
 def test_prossime_da_scaricare_serie_a_prima_della_liga(sessione):
@@ -138,7 +141,7 @@ def test_coda_storico_salta_i_calendari_gia_scaricati(sessione):
     repo.scrivi_impostazione(sessione, "calendari_scaricati", [[137, 2025], [2, 2024]])
     coda = storico.coda_storico(sessione, OGGI)
     assert (137, 2025) not in coda and (2, 2024) not in coda
-    assert len(coda) == len(CARICATE) * len(STAGIONI) - 3
+    assert len(coda) == CALENDARI - 2
 
 
 def test_calendari_stagione_corrente_non_serie_a_riscaricati_dopo_7_giorni(sessione):
@@ -175,7 +178,7 @@ def test_avanza_scarica_calendari_poi_statistiche(sessione):
     r = storico.avanza(sessione, fonte)
     assert r.completo is True
     assert r.partite_aggiornate == 2
-    assert r.richieste_usate == len(CARICATE) * len(STAGIONI) - 1 + 2
+    assert r.richieste_usate == CALENDARI + 2
     nomi = [c[0] for c in fonte.chiamate]
     assert nomi == ["partite"] * CALENDARI + ["statistiche"] * 2
     assert [c[1] for c in fonte.chiamate if c[0] == "statistiche"] == [2, 1]  # più recente prima
@@ -361,7 +364,7 @@ def test_avanza_collega_gli_arbitri_anche_della_liga_dopo_la_serie_a(sessione):
     stagione = (date(2025, 7, 1), date(2026, 6, 30))
     assert fd.chiamate == [("SA", *stagione), ("PD", *stagione)]  # Serie A per prima
     nome = lambda pid: sessione.get(Arbitro, sessione.get(Partita, pid).arbitro_id).nome_normalizzato  # noqa: E731
-    assert (nome(1), nome(2)) == ("massa", "manzano")
+    assert (nome(1), nome(2)) == ("massa", "140:manzano")
     assert repo.leggi_impostazione(sessione, "arbitri_collegati") == [2025]  # chiave invariata
     assert repo.leggi_impostazione(sessione, "arbitri_collegati_140") == [2025]
 

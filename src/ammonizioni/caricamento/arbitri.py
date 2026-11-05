@@ -7,6 +7,7 @@ import unicodedata
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ammonizioni.config import SERIE_A
 from ammonizioni.db.modelli import Arbitro
 
 # Paesi che l'API aggiunge dopo la virgola ("Daniele Doveri, Italy").
@@ -46,11 +47,24 @@ def normalizza(nome: str) -> str:
     return parole[-1] if parole else ""
 
 
-def trova_o_crea(s: Session, nome: str | None) -> Arbitro | None:
-    """Restituisce l'arbitro con lo stesso cognome normalizzato, creandolo se manca."""
+def chiave_arbitro(nome: str, campionato_id: int | None = None) -> str:
+    """Chiave di identità dell'arbitro: il cognome normalizzato. Per i campionati diversi dalla
+    Serie A è preceduta dal campionato ("140:martinez"), così due arbitri con lo stesso cognome
+    in campionati diversi restano distinti e le statistiche della Serie A non cambiano."""
+    chiave = normalizza(nome)
+    if chiave and campionato_id is not None and campionato_id != SERIE_A:
+        return f"{campionato_id}:{chiave}"
+    return chiave
+
+
+def trova_o_crea(
+    s: Session, nome: str | None, campionato_id: int | None = None
+) -> Arbitro | None:
+    """Restituisce l'arbitro con la stessa chiave (cognome normalizzato; con il campionato
+    se non è la Serie A), creandolo se manca."""
     if not nome or not nome.strip():
         return None
-    chiave = normalizza(nome)
+    chiave = chiave_arbitro(nome, campionato_id)
     if not chiave:
         return None
     esistente = s.scalars(select(Arbitro).where(Arbitro.nome_normalizzato == chiave)).first()

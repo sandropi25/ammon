@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session
 import componenti
 from ammonizioni.config import (
     CAMPIONATI,
-    COPPE_NAZIONALI,
     NOMI_CAMPIONATI,
     SERIE_A,
     STAGIONE_CORRENTE,
+    campionato_di,
 )
 from ammonizioni.db.modelli import Giocata, Giocatore, ListaManuale, Partita, Squadra
 from ammonizioni.giocate.registro import aggiungi_giocata, statistiche_per_fonte
@@ -152,12 +152,46 @@ def registra_giocata(
     return aggiungi_giocata(s, partita_id, giocatore_id, fonte, quota, puntata, giorno)
 
 
+def partite_con_giocate(s: Session, campionati: tuple[int, ...] | None) -> set[int] | None:
+    """Id delle partite con giocate che appartengono ai campionati dati: il campionato, la sua
+    coppa nazionale, le coppe europee con una squadra di quel campionato nella stagione.
+    `None` (nessun filtro) se `campionati` è None."""
+    if campionati is None:
+        return None
+    squadre: dict[tuple[int, int], set[int]] = {}
+
+    def squadre_di(campionato: int, stagione: int) -> set[int]:
+        if (campionato, stagione) not in squadre:
+            righe = s.execute(
+                select(Partita.casa_id, Partita.trasferta_id).where(
+                    Partita.competizione_id == campionato, Partita.stagione == stagione
+                )
+            ).all()
+            squadre[(campionato, stagione)] = {i for riga in righe for i in riga}
+        return squadre[(campionato, stagione)]
+
+    ids = set()
+    partite = s.scalars(
+        select(Partita).where(Partita.id.in_(select(Giocata.partita_id).distinct()))
+    ).all()
+    for p in partite:
+        proprio = campionato_di(p.competizione_id)
+        if proprio is not None:
+            if proprio in campionati:
+                ids.add(p.id)
+        elif any(
+            {p.casa_id, p.trasferta_id} & squadre_di(c, p.stagione) for c in campionati
+        ):
+            ids.add(p.id)
+    return ids
+
+
 def righe_registro(
     s: Session, campionati: tuple[int, ...] | None = (SERIE_A,)
 ) -> list[dict[str, str]]:
     """Giocate registrate, la più recente per prima. Solo quelle sulle partite dei campionati
-    dati e delle loro coppe nazionali (la Serie A se non indicati); `None` = tutte, comprese
-    le coppe europee."""
+    dati (la Serie A se non indicati), delle loro coppe nazionali e delle coppe europee con
+    squadre di quei campionati; `None` = tutte."""
     nomi = _nomi_squadre(s)
     interrogazione = (
         select(Giocata, Partita, Giocatore)
@@ -165,9 +199,9 @@ def righe_registro(
         .join(Giocatore, Giocatore.id == Giocata.giocatore_id)
         .order_by(Giocata.data.desc(), Giocata.id.desc())
     )
-    if campionati is not None:
-        competizioni = {*campionati, *(COPPE_NAZIONALI[c] for c in campionati if c in COPPE_NAZIONALI)}
-        interrogazione = interrogazione.where(Partita.competizione_id.in_(competizioni))
+    ids = partite_con_giocate(s, campionati)
+    if ids is not None:
+        interrogazione = interrogazione.where(Partita.id.in_(ids))
     righe = s.execute(interrogazione).all()
     return [
         {
@@ -183,7 +217,10 @@ def righe_registro(
     ]
 
 
-def righe_statistiche(s: Session) -> list[dict[str, object]]:
+def righe_statistiche(
+    s: Session, campionati: tuple[int, ...] | None = (SERIE_A,)
+) -> list[dict[str, object]]:
+    """Statistiche per fonte, con lo stesso filtro del registro (`None` = tutte)."""
     return [
         {
             "Fonte": st.fonte,
@@ -193,7 +230,7 @@ def righe_statistiche(s: Session) -> list[dict[str, object]]:
             "Profitto": euro(st.profitto),
             "Rendimento": componenti.percentuale(st.rendimento),
         }
-        for st in statistiche_per_fonte(s)
+        for st in statistiche_per_fonte(s, partite_con_giocate(s, campionati))
     ]
 
 

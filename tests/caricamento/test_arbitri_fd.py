@@ -277,9 +277,9 @@ def test_arbitro_non_ancora_designato_non_collega(sessione, caplog):
     assert sessione.scalars(select(Arbitro)).all() == []
 
 
-def test_stesso_arbitro_in_due_competizioni_una_riga(sessione):
-    """Serie A e un'altra competizione (qui la Liga: l'unica altra con codice
-    football-data in config; la Champions arriva con arbitro da `salva_partita`)."""
+def test_stesso_cognome_in_serie_a_e_in_liga_due_righe_distinte(sessione):
+    """L'identita' dell'arbitro e' per campionato (fuori dalla Serie A la chiave porta il
+    campionato): un arbitro di Liga con lo stesso cognome di uno di Serie A non si fonde con lui."""
     altra = datetime(2025, 9, 16, 19, 0, tzinfo=timezone.utc)
     aggiungi_partita(sessione, 1, T0, GENOA, LECCE)
     aggiungi_partita(
@@ -292,8 +292,9 @@ def test_stesso_arbitro_in_due_competizioni_una_riga(sessione):
     assert collega(sessione, serie_a, 135, GIORNO, GIORNO) == 1
     assert collega(sessione, coppa, 140, date(2025, 9, 16), date(2025, 9, 16)) == 1
     arbitri = sessione.scalars(select(Arbitro)).all()
-    assert len(arbitri) == 1
-    assert sessione.get(Partita, 1).arbitro_id == sessione.get(Partita, 2).arbitro_id
+    assert sorted(a.nome_normalizzato for a in arbitri) == ["140:massa", "massa"]
+    assert sessione.get(Partita, 1).arbitro_id != sessione.get(Partita, 2).arbitro_id
+    assert sessione.get(Arbitro, sessione.get(Partita, 1).arbitro_id).nome_normalizzato == "massa"
 
 
 def test_arbitro_di_champions_da_salva_partita_e_da_football_data_una_riga(sessione):

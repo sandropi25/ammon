@@ -89,7 +89,8 @@ def test_filtro_campionato_liga_e_tutti(sessione_db):
     t = visibile(at)
     assert "Real Liga" in t and "Casa FC" in t
     # ogni partita dice il suo campionato
-    assert "Liga" in t and "Serie A" in t
+    assert "**Real Liga – Barca Liga** · Liga · Giornata 11" in t
+    assert "**Casa FC – Trasferta FC** · Serie A · Giornata 7" in t
 
 
 def test_filtro_liga_senza_partite(sessione_db):

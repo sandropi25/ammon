@@ -17,6 +17,7 @@ from ammonizioni.config import (
     SERIE_A,
     STAGIONE_CORRENTE,
     STATI_FINITI,
+    campionato_di,
 )
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita, Presenza, Squadra
@@ -92,7 +93,7 @@ def salva_partita(s: Session, dati: PartitaDati) -> Partita:
     repo.upsert(s, Squadra(id=dati.casa_id, nome=dati.casa_nome))
     repo.upsert(s, Squadra(id=dati.trasferta_id, nome=dati.trasferta_nome))
     s.flush()
-    arbitro = trova_o_crea(s, dati.arbitro_nome)
+    arbitro = trova_o_crea(s, dati.arbitro_nome, campionato_di(dati.competizione_id))
     partita = s.get(Partita, dati.id)
     if partita is None:
         partita = Partita(id=dati.id, statistiche_scaricate=False)

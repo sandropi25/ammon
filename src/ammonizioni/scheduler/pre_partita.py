@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import salva_probabili, ultimo_xi
 from ammonizioni.caricamento.notturno import indica_competizione
-from ammonizioni.config import CAMPIONATI
+from ammonizioni.config import CAMPIONATI, SERIE_A
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
@@ -40,7 +40,8 @@ def partite_da_controllare(s: Session, adesso_utc: datetime) -> list[Partita]:
                 Partita.data_utc > adesso_utc,
                 Partita.data_utc <= adesso_utc + timedelta(minutes=MINUTI_FINESTRA),
             )
-            .order_by(Partita.data_utc, Partita.id)
+            # la Serie A per prima: se il limite di richieste finisce, le sue partite sono servite
+            .order_by(Partita.competizione_id != SERIE_A, Partita.data_utc, Partita.id)
         )
     )
 

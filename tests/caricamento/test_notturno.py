@@ -129,7 +129,7 @@ def test_notte_collega_gli_arbitri_di_ogni_campionato(sessione):
     assert r.completo is True
     assert fd.chiamate == ["SA", "PD"]
     nome = lambda pid: sessione.get(Arbitro, sessione.get(Partita, pid).arbitro_id).nome_normalizzato  # noqa: E731
-    assert (nome(7), nome(8)) == ("doveri", "manzano")
+    assert (nome(7), nome(8)) == ("doveri", "140:manzano")  # gli arbitri della Liga hanno il campionato nella chiave
 
 
 def test_errore_football_data_su_un_campionato_non_ferma_l_altro(sessione, caplog):
@@ -160,7 +160,9 @@ def test_errore_football_data_su_un_campionato_non_ferma_l_altro(sessione, caplo
 def test_statistiche_dicono_alla_fonte_la_competizione_della_partita(sessione):
     """Processo nuovo: la fonte non ha letto il calendario, la competizione arriva dal database."""
     class FonteEspnFinta(FonteFinta):
-        indicate = []
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.indicate = []
 
         def indica_competizione(self, partita_id, competizione_id):
             self.indicate.append((partita_id, competizione_id))
@@ -171,7 +173,7 @@ def test_statistiche_dicono_alla_fonte_la_competizione_della_partita(sessione):
     sessione.commit()
     fonte = FonteEspnFinta(calendari={(140, 2026): [liga]})
     assert notturno.scarica_statistiche_partita(sessione, notturno.FonteContata(fonte), 8) is True
-    assert FonteEspnFinta.indicate == [(8, 140)]
+    assert fonte.indicate == [(8, 140)]
 
 
 def test_notte_solo_partite_degli_ultimi_7_giorni(sessione):

@@ -134,7 +134,7 @@ Senza un `DATABASE_URL` Postgres i test marcati `postgres` vengono saltati.
 
 ### 2. GitHub: repository e segreti delle Actions
 
-1. Crea su GitHub un repository **privato** e fai il push del progetto (i workflow sono in `.github/workflows/`).
+1. Crea su GitHub un repository e fai il push del progetto (i workflow sono in `.github/workflows/`). Con Serie A e Liga il pre-partita supera i 2000 minuti mensili del piano Free (vedi "Minuti di GitHub Actions" più sotto): **si consiglia un repository pubblico** (minuti illimitati; i segreti restano protetti, il codice è visibile); se lo tieni privato, metti in conto minuti a pagamento.
 2. Nel repository: **Settings > Secrets and variables > Actions > New repository secret**. Crea due segreti:
    - `FOOTBALL_DATA_KEY`: il token di football-data.org (arbitri);
    - `DATABASE_URL`: la stringa di Supabase del punto 1.
@@ -175,7 +175,7 @@ periodo di caricamento hai due strade:
 
 ### 3. Streamlit Community Cloud
 
-1. Vai su <https://share.streamlit.io>, accedi con GitHub e scegli **Create app** sul repository privato (concedi l'accesso quando richiesto).
+1. Vai su <https://share.streamlit.io>, accedi con GitHub e scegli **Create app** sul repository (pubblico, come consigliato per i minuti di GitHub Actions, oppure privato: concedi l'accesso quando richiesto).
 2. Branch: quello da pubblicare. **Main file path**: `app/Partite.py`.
 3. In **Advanced settings** scegli Python 3.12 e incolla nei **Secrets** il contenuto di `.streamlit/secrets.toml.example` con i valori veri:
 

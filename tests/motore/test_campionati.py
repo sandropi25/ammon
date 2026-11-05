@@ -271,6 +271,44 @@ def test_aggiungere_la_liga_non_cambia_la_classifica_di_serie_a(sessione):
     assert carica_dati(sessione, 700).medie != prima_dati.medie
 
 
+def test_arbitro_di_liga_con_lo_stesso_cognome_non_si_fonde_con_quello_di_serie_a(sessione):
+    from ammonizioni.caricamento import arbitri_fd
+    from ammonizioni.fonti.football_data import ArbitroPartita
+
+    popola(sessione)  # arbitro di Serie A "rossi" (id 1) con 6 partite
+    prima = MercatoAmmonizioni().classifica(sessione, PARTITA_FUTURA)
+    prima_dati = carica_dati(sessione, PARTITA_FUTURA)
+
+    giocatori = _liga_squadre_e_giocatori(sessione)
+    for i in range(6):
+        _liga_partita(sessione, 600 + i, INIZIO + timedelta(days=7 * i + 1), giocatori,
+                      gialli=3, falli=9)
+    for pid in range(600, 606):
+        sessione.get(Partita, pid).arbitro_id = None
+    sessione.flush()
+
+    class FonteFd:
+        chiave = "k"
+
+        def arbitri(self, codice, dal, al):
+            return [
+                ArbitroPartita(sessione.get(Partita, pid).data_utc, "Liga Casa", "Liga Trasf",
+                               pid, "Juan Rossi")
+                for pid in range(600, 606)
+            ]
+
+    assert arbitri_fd.collega(sessione, FonteFd(), LIGA, INIZIO.date(), GIORNO.date()) == 6
+
+    arbitri = sessione.query(Arbitro).filter(Arbitro.nome_visualizzato.like("%Rossi%")).all()
+    assert sorted(a.nome_normalizzato for a in arbitri) == ["140:rossi", "rossi"]
+    liga_id = sessione.get(Partita, 600).arbitro_id
+    assert liga_id != 1 and sessione.get(Arbitro, liga_id).nome_normalizzato == "140:rossi"
+    # le statistiche dell'arbitro di Serie A e la classifica non sono cambiate
+    dopo_dati = carica_dati(sessione, PARTITA_FUTURA)
+    assert dopo_dati.arbitro == prima_dati.arbitro and dopo_dati.arbitro.partite == 6
+    assert MercatoAmmonizioni().classifica(sessione, PARTITA_FUTURA) == prima
+
+
 def test_senza_dati_di_liga_medie_predefinite(sessione):
     """Una partita di Liga senza storico di Liga non prende le medie della Serie A."""
     popola(sessione)

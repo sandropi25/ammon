@@ -72,7 +72,19 @@ def test_anche_la_liga_e_controllata_la_copa_del_rey_no(sessione):
     prepara(sessione, 101, competizione=143)
     prepara(sessione, 102)  # Serie A
     adesso = INIZIO - timedelta(minutes=30)
-    assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [100, 102]
+    assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [102, 100]
+
+
+def test_serie_a_servita_prima_della_liga_anche_se_piu_tarda(sessione):
+    prepara(sessione, 100, data=INIZIO - timedelta(minutes=20), competizione=140)  # prima
+    prepara(sessione, 101, data=INIZIO)  # Serie A, dopo
+    prepara(sessione, 102, data=INIZIO - timedelta(minutes=10), competizione=140)
+    adesso = INIZIO - timedelta(minutes=60)
+    assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [101, 100, 102]
+    # le richieste seguono lo stesso ordine: se il limite finisce, la Serie A e' gia' servita
+    fonte = FonteFinta()
+    pre_partita.esegui(sessione, fonte, adesso)
+    assert fonte.chiamate == [("formazioni", 101), ("formazioni", 100), ("formazioni", 102)]
 
 
 def test_la_fonte_sa_la_competizione_della_partita(sessione):
@@ -363,9 +375,9 @@ def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
 
     assert notte.main([], crea_fonte=crea, controllo=lambda f: []) == 0
     assert len(fonti) == 2
-    # lo storico ha scaricato i suoi calendari: 7 competizioni x 3 stagioni, meno la Serie A
-    # della stagione corrente (e' del job notturno)
-    assert len(fonti[1].chiamate) == 20
+    # lo storico ha scaricato i suoi calendari: 7 competizioni x 3 stagioni, meno i due
+    # campionati della stagione corrente (sono del job notturno)
+    assert len(fonti[1].chiamate) == 19
 
     def controlla(s):
         assert s.get(UltimoAggiornamento, "notte").completo is False

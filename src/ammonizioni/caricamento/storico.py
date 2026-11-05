@@ -61,8 +61,8 @@ def _scaricati(s: Session) -> set[tuple[int, int]]:
 def coda_storico(s: Session, oggi: datetime) -> list[tuple[int, int]]:
     """(competizione, stagione) di cui manca l'elenco partite: prima le competizioni della
     Serie A (Serie A, Coppa Italia, coppe europee), poi quelle della Liga; in ciascun gruppo
-    le stagioni recenti per prime. Il calendario Serie A della stagione corrente è già
-    aggiornato dal job notturno."""
+    le stagioni recenti per prime. I calendari dei campionati della stagione corrente sono
+    già aggiornati dal job notturno."""
     fatti = _scaricati(s)
     quando = repo.leggi_impostazione(s, CALENDARI_QUANDO, {}) or {}
     coda = []
@@ -74,8 +74,8 @@ def coda_storico(s: Session, oggi: datetime) -> list[tuple[int, int]]:
                 if _rango_competizione(competizione_id) != rango:
                     continue
                 coppia = (competizione_id, stagione)
-                if coppia == (SERIE_A, STAGIONE_CORRENTE):
-                    continue
+                if competizione_id in CAMPIONATI and stagione == STAGIONE_CORRENTE:
+                    continue  # lo scarica ogni notte il job notturno
                 if coppia in fatti and not (
                     stagione == STAGIONE_CORRENTE
                     and _scaduto(quando.get(_chiave(coppia)), oggi)

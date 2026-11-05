@@ -86,9 +86,12 @@ def aggiorna_esiti(s: Session) -> int:
     return cambiate
 
 
-def statistiche_per_fonte(s: Session) -> list[StatFonte]:
-    """Statistiche su vinte e perse per ogni fonte, ordinate per nome."""
+def statistiche_per_fonte(s: Session, partita_ids: set[int] | None = None) -> list[StatFonte]:
+    """Statistiche su vinte e perse per ogni fonte, ordinate per nome. Con `partita_ids`
+    contano solo le giocate su quelle partite."""
     giocate = s.scalars(select(Giocata).where(Giocata.esito.in_(("vinta", "persa")))).all()
+    if partita_ids is not None:
+        giocate = [g for g in giocate if g.partita_id in partita_ids]
     per_fonte: dict[str, list[Giocata]] = {}
     for g in giocate:
         per_fonte.setdefault(g.fonte, []).append(g)
