@@ -31,8 +31,8 @@ Note:
 5. L'app conta i gialli della stagione nel campionato della partita e applica le soglie di diffida di ciascun campionato (da verificare sul regolamento in vigore).
 6. ESPN non dà i minuti giocati: l'app li **ricava** da titolari, sostituzioni e minuti degli eventi della partita, quindi sono una stima (non conta il recupero esatto).
 7. ESPN dà la posizione (ruolo) di ogni giocatore e i titolari nella formazione, con cui l'app individua l'avversario diretto.
-8. football-data.org dà l'arbitro di Serie A (`SA`) e Liga (`PD`) già nel piano gratuito (10 richieste al minuto, con chiave). Non copre Coppa Italia, Copa del Rey e coppe europee.
-9. football-data.org è usata solo per gli arbitri, collegati alle partite ESPN per data e squadre; l'app chiede una stagione per volta (una richiesta per campionato e stagione) e, se una stagione non è accessibile col piano gratuito, quelle partite restano senza arbitro.
+8. football-data.org dà l'arbitro di Serie A (`SA`) e Liga (`PD`) già nel piano gratuito (10 richieste al minuto, con chiave). Il piano gratuito include anche la Champions League (`CL`), ma è una scelta del progetto non collegarla; non sono coperte Coppa Italia, Copa del Rey, Europa League e Conference.
+9. football-data.org è usata solo per gli arbitri, collegati alle partite ESPN per data e squadre; l'app chiede una stagione per volta (una richiesta per campionato e stagione). Lo storico multi-stagione c'è: verificato che per `SA` e `PD` le stagioni 2024, 2025 e 2026 danno 380 partite ciascuna con gli arbitri (sul database reale: 379/380 e 380/380 partite collegate).
 
 ## Accesso
 

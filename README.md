@@ -16,7 +16,7 @@ Due job programmati tengono i dati aggiornati:
 
 - **ESPN (predefinita)**: API pubblica, gratuita e senza chiave, ma non ufficiale: la struttura può cambiare senza preavviso. Il programma fa al massimo 30 richieste al minuto. Fornisce partite, formazioni e statistiche dei giocatori (non ha dribbling, voto e arbitro: il modello usa solo i dati presenti).
 - **football-data.org** (chiave gratuita, 10 richieste al minuto): fornisce gli arbitri di Serie A e Liga, collegati alle partite ESPN per data e squadre. Senza chiave tutto funziona ma le partite restano senza arbitro (fattore arbitro neutro) e nel log compare l'avviso sulla chiave mancante.
-- **API-Football** (opzionale; per la stagione corrente serve il piano Pro, 19 $ al mese): resta nel codice come fonte alternativa, con dribbling, voto e arbitro. Si torna a lei con `FONTE_DATI=api_football` (e `API_FOOTBALL_KEY`, anche dalla pagina Impostazioni); con `FONTE_DATI` assente, vuota o `espn` si usa ESPN e `API_FOOTBALL_KEY` non serve.
+- **API-Football** (opzionale; per la stagione corrente serve il piano Pro, 19 $ al mese): resta nel codice come fonte alternativa, con dribbling, voto e arbitro. Si usa con `FONTE_DATI=api_football` (e `API_FOOTBALL_KEY`, anche dalla pagina Impostazioni); con `FONTE_DATI` assente, vuota o `espn` si usa ESPN e `API_FOOTBALL_KEY` non serve. **Cambiare fonte richiede un database nuovo e vuoto**: gli id di ESPN e di API-Football si sovrappongono (squadre e giocatori diversi con lo stesso id) e i dati si mescolerebbero. La fonte è memorizzata nel database al primo uso (impostazione `fonte_dati_db`) e i job escono con errore se `FONTE_DATI` non coincide; un database con partite ma senza il valore (creato prima di questo controllo) si considera ESPN.
 
 ### Chiave di football-data.org
 
@@ -32,7 +32,7 @@ Poiché ESPN non è ufficiale, `python scripts/controlla_espn.py` scarica una pa
 
 ### Primo caricamento dello storico
 
-Con ESPN lo storico delle tre stagioni della sola Serie A (con Coppa Italia e coppe europee) richiede circa 1500 richieste a 30 al minuto, cioè circa 50 minuti; con la Liga e la Copa del Rey se ne aggiungono circa altrettante (stima: in tutto circa 2800 richieste, un'ora e mezza). Il job notturno ferma lo storico dopo `STORICO_MAX_MINUTI` minuti (variabile d'ambiente o variabile del repository GitHub; default 40) e il giorno dopo riprende da dove era arrivato: **il primo caricamento può richiedere 3 notti**. La Serie A viene sempre caricata per prima: i calendari della Serie A prima di quelli della Liga e, per le statistiche, prima le partite di Serie A (e le coppe delle squadre di Serie A), poi quelle di Liga. Poi la notte dura pochi minuti. Insieme allo storico vengono collegati gli arbitri di ogni stagione (una richiesta a football-data.org per campionato e stagione, la Serie A per prima).
+Con ESPN il primo caricamento reale dello storico della Serie A (tre stagioni, con Coppa Italia e coppe europee) è di 2.203 richieste a 30 al minuto, cioè circa 74 minuti; con la Liga e la Copa del Rey si arriva a circa 3.300 richieste (comunque entro circa 3 notti a 40 minuti per notte). Il job notturno ferma lo storico dopo `STORICO_MAX_MINUTI` minuti (variabile d'ambiente o variabile del repository GitHub; default 40) e il giorno dopo riprende da dove era arrivato: **il primo caricamento può richiedere 3 notti**. La Serie A viene sempre caricata per prima: i calendari della Serie A prima di quelli della Liga e, per le statistiche, prima le partite di Serie A (e le coppe delle squadre di Serie A), poi quelle di Liga. Poi la notte dura pochi minuti. Insieme allo storico vengono collegati gli arbitri di ogni stagione (una richiesta a football-data.org per campionato e stagione, la Serie A per prima).
 
 Il vecchio limite di 100 richieste al giorno riguarda solo API-Football (piano gratuito: 100 richieste al giorno e 10 al minuto, storico in circa 2 settimane).
 
@@ -91,9 +91,9 @@ giorno) imposta per esempio `API_RICHIESTE_GIORNO=7500` e `API_RISERVA_OGGI=500`
 paio di giorni. Su GitHub crea le due voci in **Settings > Secrets and variables > Actions > Variables** (non
 sono segreti); se mancano valgono i default. Il ritmo resta di 10 richieste al minuto.
 
-### Da verificare con la chiave: griglia delle partite passate
+### Da verificare con la chiave (solo con `FONTE_DATI=api_football`): griglia delle partite passate
 
-Le statistiche dei giocatori arrivano da `/fixtures/players`, che non contiene la posizione in campo (la "griglia",
+Con ESPN non c'è nulla da verificare: la prova del modello aveva la griglia in 380 partite su 380. Quanto segue vale solo per API-Football. Le statistiche dei giocatori arrivano da `/fixtures/players`, che non contiene la posizione in campo (la "griglia",
 es. `2:3`). La griglia serve a trovare l'avversario diretto (fattore duello). Oggi viene salvata solo per le partite
 di cui il controllo pre-partita ha letto la formazione ufficiale (`/fixtures/lineups`); per le partite dello storico
 resta vuota, quindi prima delle formazioni ufficiali e in tutta la prova del modello il duello vale 1 (neutro).
