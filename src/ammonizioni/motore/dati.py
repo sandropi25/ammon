@@ -131,10 +131,13 @@ def _medie_campionato(
     n, tot_gialli, tot_falli = s.execute(
         select(func.count(), func.sum(per_partita.c.gialli), func.sum(per_partita.c.falli))
     ).one()
+    # su Postgres la SUM di una SUM e' un Decimal: float() per non mescolare i tipi
     gialli_partita = _positivo(
-        tot_gialli / n if n else None, MEDIE_PREDEFINITE.gialli_partita
+        float(tot_gialli) / n if n else None, MEDIE_PREDEFINITE.gialli_partita
     )
-    falli_partita = _positivo(tot_falli / n if n else None, MEDIE_PREDEFINITE.falli_partita)
+    falli_partita = _positivo(
+        float(tot_falli) / n if n else None, MEDIE_PREDEFINITE.falli_partita
+    )
 
     ruolo_eff = func.coalesce(Presenza.ruolo, Giocatore.ruolo)
     righe = s.execute(
@@ -161,7 +164,7 @@ def _medie_campionato(
     for ruolo, *valori in righe:
         acc = somme[_ruolo(ruolo)]
         for i, v in enumerate(valori):
-            acc[i] += v or 0
+            acc[i] += float(v or 0)
 
     # "dato assente" (fonte senza dribbling/voto) e' diverso da "nessun dato" (DB vuoto):
     # solo nel secondo caso valgono i predefiniti. Con minuti ma zero dribbling in tutta la
