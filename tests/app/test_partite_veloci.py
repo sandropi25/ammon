@@ -70,6 +70,26 @@ def test_calde_raggruppate_uguali_al_calcolo_per_partita(sessione):
     assert {r.id: r.arbitro for r in righe}[202] is None
 
 
+def test_calde_con_statistiche_fra_le_partite_della_finestra(sessione):
+    """Una partita con statistiche fra due partite elencate: le medie vanno calcolate con il
+    "prima di" di ogni partita, come nel vecchio calcolo."""
+    _scenario(sessione)
+    sessione.add(Partita(
+        id=500, data_utc=ORA + timedelta(days=1, hours=12), competizione_id=135, stagione=2026,
+        giornata=8, casa_id=5, trasferta_id=6, gol_casa=0, gol_trasferta=0, stato="FT",
+        statistiche_scaricate=True,
+    ))
+    sessione.flush()
+    sessione.add(Presenza(partita_id=500, giocatore_id=30, squadra_id=3, titolare=True,
+                          ruolo="D", minuti=90, gialli=40, falli_commessi=200, falli_subiti=1))
+    sessione.flush()
+    righe = componenti.prossime_partite(sessione, ORA, giorni=7)
+    partite = sessione.execute(
+        select(Partita).where(Partita.data_utc >= ORA, Partita.stato == "NS")
+    ).scalars().all()
+    assert {r.id: r.calda for r in righe if r.id != 500} == _vecchio(sessione, partite)
+
+
 def test_prossime_partite_poche_query(sessione):
     _scenario(sessione)
     conteggio = []

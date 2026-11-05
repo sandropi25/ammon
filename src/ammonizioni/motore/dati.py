@@ -246,9 +246,8 @@ class DatiCalda:
 def carica_dati_calda(s: Session, partite: list[Partita]) -> dict[int, DatiCalda]:
     """DatiCalda di piu' partite con poche query raggruppate (invece di un `carica_dati` per
     partita): liste manuali una volta, statistiche degli arbitri in un'unica query, medie del
-    campionato una volta per (campionato, stagione). Stessi valori di `carica_dati` per ogni
-    partita; le medie usano come "prima di" la prima partita del gruppo (le partite future non
-    hanno statistiche, quindi il risultato e' lo stesso)."""
+    campionato una volta per (campionato, stagione) quando e' esatto. Stessi valori di
+    `carica_dati` per ogni partita."""
     if not partite:
         return {}
     liste = s.execute(
@@ -285,13 +284,26 @@ def carica_dati_calda(s: Session, partite: list[Partita]) -> dict[int, DatiCalda
         ).all():
             giocate.setdefault(arb, []).append((pid, casa, trasf, int(g or 0), int(f or 0), data))
 
-    medie: dict[tuple[int, int], MedieCampionato] = {}
+    # Le medie dipendono dal "prima di" di ogni partita. Se fra la prima e l'ultima partita
+    # non c'e' nessuna partita con statistiche, il risultato e' identico per tutte e si
+    # calcola una volta per (campionato, stagione); altrimenti si calcola per partita.
+    primo = min(p.data_utc for p in partite)
+    ultimo = max(p.data_utc for p in partite)
+    condivise = s.scalar(
+        select(func.count()).select_from(Partita).where(
+            Partita.statistiche_scaricate.is_(True),
+            Partita.data_utc >= primo,
+            Partita.data_utc < ultimo,
+        )
+    ) == 0
+
+    medie: dict[tuple, MedieCampionato] = {}
     risultato: dict[int, DatiCalda] = {}
     for p in partite:
         campionato = _campionato_partita(s, p)
-        chiave = (campionato, p.stagione)
+        chiave = (campionato, p.stagione) if condivise else (campionato, p.stagione, p.data_utc)
         if chiave not in medie:
-            prima = min(q.data_utc for q in partite if (q.stagione == p.stagione))
+            prima = primo if condivise else p.data_utc
             medie[chiave] = _medie_campionato(s, p.stagione, prima, campionato)
         arbitro = None
         if p.arbitro_id is not None:

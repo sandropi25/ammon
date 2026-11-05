@@ -2,9 +2,10 @@
 from datetime import datetime, timedelta, timezone
 
 import ayuda_app  # noqa: F401  (aggiunge app/ a sys.path)
+import cache_dati
 import componenti
 import pytest
-from ayuda_app import PAGINA_DETTAGLIO, PAGINA_PARTITE, avvia, sessione_db, url_db, visibile
+from ayuda_app import PAGINA_DETTAGLIO, avvia, sessione_db, url_db
 from db_prova import PARTITA_FUTURA, popola
 
 from ammonizioni.db.modelli import Partita
@@ -63,12 +64,34 @@ def test_quota_non_ricarica_dal_db(sessione_db, monkeypatch):
     assert len(chiamate) == 1  # le quote stanno in sessione: niente query
 
 
-def test_partite_secondo_caricamento_dalla_cache(sessione_db, monkeypatch):
+ORA = datetime(2026, 11, 5, 10, 20, tzinfo=timezone.utc)  # tempo fisso: niente flakiness
+
+
+def test_partite_cache_per_ora_intera_e_filtro_su_adesso(sessione_db, monkeypatch):
     with sessione_db() as s:
         popola(s)
-        s.get(Partita, PARTITA_FUTURA).data_utc = datetime.now(timezone.utc) + timedelta(days=2)
+        s.get(Partita, PARTITA_FUTURA).data_utc = ORA + timedelta(minutes=20)  # 10:40
     chiamate = _contatore(monkeypatch, "prossime_partite")
-    avvia(PAGINA_PARTITE)
-    at = avvia(PAGINA_PARTITE)
-    assert "Casa FC" in visibile(at)
+    campionati = (135,)
+    _, _, righe = cache_dati.pagina_partite(ORA, campionati)
+    assert [r.id for r in righe] == [PARTITA_FUTURA]
+    # 15 minuti dopo (stessa ora): dalla cache, partita ancora da giocare
+    _, _, righe = cache_dati.pagina_partite(ORA + timedelta(minutes=15), campionati)
+    assert [r.id for r in righe] == [PARTITA_FUTURA]
+    # 30 minuti dopo (ancora stessa ora, dalla cache): la partita e' iniziata, esce dall'elenco
+    _, _, righe = cache_dati.pagina_partite(ORA + timedelta(minutes=30), campionati)
+    assert righe == []
     assert len(chiamate) == 1
+    # l'ora dopo: nuova chiave
+    cache_dati.pagina_partite(ORA + timedelta(hours=1), campionati)
+    assert len(chiamate) == 2
+
+
+def test_partita_mancante_non_resta_in_cache(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+    assert cache_dati.pagina_dettaglio(777) is None
+    with sessione_db() as s:
+        s.add(Partita(id=777, data_utc=ORA + timedelta(days=1), competizione_id=135,
+                      stagione=2026, giornata=8, casa_id=1, trasferta_id=2, stato="NS"))
+    assert cache_dati.pagina_dettaglio(777) is not None

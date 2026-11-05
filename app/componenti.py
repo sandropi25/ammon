@@ -132,6 +132,14 @@ def ora_italiana(dt_utc: datetime) -> str:
     return f"{dt_utc.astimezone(ROMA):%H:%M}"
 
 
+def nella_finestra(
+    righe: list[RigaPartita], adesso_utc: datetime, giorni: int = GIORNI_PROSSIME
+) -> list[RigaPartita]:
+    """Le partite da `adesso_utc` fino a `giorni` giorni dopo (per filtrare dopo la cache)."""
+    fine = adesso_utc + timedelta(days=giorni)
+    return [r for r in righe if adesso_utc <= r.data_utc <= fine]
+
+
 def intestazione_giorno(giorno: date, oggi: date) -> str:
     """"Oggi · giovedì 6 novembre 2026", "Domani · ..." o solo "sabato 8 novembre 2026"."""
     testo = f"{GIORNI_ESTESI[giorno.weekday()]} {giorno.day} {MESI[giorno.month - 1]} {giorno.year}"
