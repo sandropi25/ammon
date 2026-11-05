@@ -39,6 +39,14 @@ def _normalizza(url: str) -> str:
 def copia(url_origine: str, url_destinazione: str, stampa=lambda *_: None) -> dict[str, int]:
     origine = crea_engine(_normalizza(url_origine))
     destinazione = crea_engine(_normalizza(url_destinazione))
+    try:
+        return _copia(origine, destinazione, stampa)
+    finally:  # chiude le connessioni (niente ResourceWarning)
+        origine.dispose()
+        destinazione.dispose()
+
+
+def _copia(origine, destinazione, stampa) -> dict[str, int]:
     crea_tabelle(destinazione)
     tabelle = Base.metadata.sorted_tables  # prima le tabelle a cui le altre fanno riferimento
     partite = Base.metadata.tables["partite"]
