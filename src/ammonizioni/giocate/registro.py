@@ -62,10 +62,13 @@ def _esito(s: Session, giocata: Giocata, partita: Partita) -> str | None:
     if partita.stato not in STATI_FINITI or not partita.statistiche_scaricate:
         return None
     presenza = s.get(Presenza, (giocata.partita_id, giocata.giocatore_id))
+    # Conta solo il cartellino finale registrato dalla fonte: rosso diretto = persa.
+    # Un giallo vale sempre, anche preso dalla panchina senza entrare (0 minuti).
+    if presenza is not None and presenza.gialli >= 1:
+        return "vinta"
     if presenza is None or presenza.minuti == 0:
         return "rimborsata"
-    # Conta solo il cartellino finale registrato dalla fonte: rosso diretto = persa.
-    return "vinta" if presenza.gialli >= 1 else "persa"
+    return "persa"
 
 
 def aggiorna_esiti(s: Session) -> int:

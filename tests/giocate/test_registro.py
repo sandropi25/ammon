@@ -170,3 +170,28 @@ def test_in_attesa_escluse_e_fonti_ordinate_per_nome(sessione):
 
 def test_nessuna_giocata_nessuna_statistica(sessione):
     assert statistiche_per_fonte(sessione) == []
+
+
+def test_ammonito_dalla_panchina_senza_entrare_vinta(sessione):
+    """Il cartellino e' stato mostrato anche se il giocatore non e' mai entrato (0 minuti)."""
+    crea_partita(sessione)
+    crea_giocatore_con_presenza(sessione, 10, minuti=0, gialli=1)
+    aggiungi_giocata(sessione, 1, 10, "A", 3.0, 10.0, GIORNO)
+    assert aggiorna_esiti(sessione) == 1
+    assert sessione.query(Giocata).one().esito == "vinta"
+
+
+def test_subentrato_per_un_minuto_e_ammonito_vinta(sessione):
+    crea_partita(sessione)
+    crea_giocatore_con_presenza(sessione, 10, minuti=1, gialli=1)
+    aggiungi_giocata(sessione, 1, 10, "A", 3.0, 10.0, GIORNO)
+    aggiorna_esiti(sessione)
+    assert sessione.query(Giocata).one().esito == "vinta"
+
+
+def test_subentrato_per_un_minuto_senza_giallo_persa(sessione):
+    crea_partita(sessione)
+    crea_giocatore_con_presenza(sessione, 10, minuti=1, gialli=0)
+    aggiungi_giocata(sessione, 1, 10, "A", 3.0, 10.0, GIORNO)
+    aggiorna_esiti(sessione)
+    assert sessione.query(Giocata).one().esito == "persa"
