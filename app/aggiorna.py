@@ -15,7 +15,7 @@ from pathlib import Path
 
 SORGENTI = Path(__file__).resolve().parents[1] / "src" / "ammonizioni"
 MODULI_APP = ("componenti", "componenti_giocate", "componenti_cerca",
-              "componenti_calendario", "cache_dati", "stile", "auth")
+              "componenti_calendario", "componenti_calde", "cache_dati", "stile", "auth")
 
 _firma: tuple[int, int] | None = None
 

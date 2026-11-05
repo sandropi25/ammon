@@ -1,6 +1,8 @@
-"""Impostazioni: derby e campi caldi, pesi del modello e chiavi API."""
+"""Impostazioni: derby e campi caldi (sola lettura, calcolati), pesi del modello e chiavi API."""
 import os
 import sys
+from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -26,73 +28,36 @@ stile.applica_stile()
 st.title("Impostazioni")
 
 with apri() as s:
-    squadre = cg.squadre_campionati(s)  # Serie A e Liga, col campionato fra parentesi
-    derby = cg.voci_lista(s, "derby")
-    campi_caldi = cg.voci_lista(s, "campo_caldo")
     pesi = carica_pesi(s)
     chiave_salvata = repo.leggi_impostazione(s, "chiave_api", None)
     chiave_football_data = repo.leggi_impostazione(s, "chiave_football_data", None)
 
-nomi_squadre = dict(squadre)
-
-
-def elenco_con_rimozione(voci: list[cg.VoceLista]) -> None:
-    if not voci:
-        st.caption("Nessuna voce.")
-    for voce in voci:
-        colonne = st.columns([6, 1])
-        colonne[0].markdown(voce.testo)
-        if colonne[1].button("Rimuovi", key=f"rimuovi_lista_{voce.id}"):
-            with apri() as s:
-                cg.rimuovi_voce(s, voce.id)
-            cache_dati.svuota()  # derby e campi caldi cambiano il badge "partita calda"
-            st.rerun()
-
+rivalita = cache_dati.elenco_rivalita(datetime.now(timezone.utc))
 
 schede = st.tabs(["Derby e campi caldi", "Pesi del modello", "Chiavi API"])
 
 # ---------------------------------------------------------------- derby e campi caldi
 
 with schede[0], st.container(key="riquadro_impostazioni_0"):
+    st.caption(
+        "Derby e campi caldi sono riconosciuti in automatico e contano nel punteggio "
+        "dei giocatori e nelle partite calde: non c'è niente da inserire."
+    )
     st.header("Derby e rivalità")
-    elenco_con_rimozione(derby)
-    if len(squadre) < 2:
-        st.info("Servono almeno due squadre di Serie A o Liga nei dati per aggiungere un derby.")
-    else:
-        colonne = st.columns(2)
-        squadra_a = colonne[0].selectbox(
-            "Prima squadra", list(nomi_squadre), format_func=lambda i: nomi_squadre[i], key="derby_a"
-        )
-        squadra_b = colonne[1].selectbox(
-            "Seconda squadra", list(nomi_squadre), index=1, format_func=lambda i: nomi_squadre[i],
-            key="derby_b",
-        )
-        if st.button("Aggiungi derby", key="aggiungi_derby"):
-            try:
-                with apri() as s:
-                    cg.aggiungi_derby(s, squadra_a, squadra_b)
-            except ValueError as errore:
-                st.error(str(errore))
-            else:
-                cache_dati.svuota()
-                st.rerun()
+    if not rivalita.derby:
+        st.caption("Nessun derby riconosciuto nei dati.")
+    for campionato, testo in rivalita.derby:
+        st.markdown(f"**{escape(testo)}** · {escape(campionato)}")
 
     st.header("Campi caldi")
-    elenco_con_rimozione(campi_caldi)
-    if squadre:
-        squadra_calda = st.selectbox(
-            "Squadra", list(nomi_squadre), format_func=lambda i: nomi_squadre[i],
-            key="campo_caldo_squadra",
-        )
-        if st.button("Aggiungi campo caldo", key="aggiungi_campo_caldo"):
-            try:
-                with apri() as s:
-                    cg.aggiungi_campo_caldo(s, squadra_calda)
-            except ValueError as errore:
-                st.error(str(errore))
-            else:
-                cache_dati.svuota()
-                st.rerun()
+    st.caption(
+        "Squadre che in casa vedono almeno il 20% di cartellini in più della media del "
+        "campionato (ultime 2 stagioni, almeno 15 partite in casa)."
+    )
+    if not rivalita.campi_caldi:
+        st.caption("Nessun campo caldo calcolato.")
+    for motivo in rivalita.campi_caldi:
+        st.markdown(escape(motivo))
 
 
 # ---------------------------------------------------------------- pesi

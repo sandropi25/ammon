@@ -19,8 +19,7 @@ sys.path.insert(0, str(RADICE / "src"))
 
 from ammonizioni.config import STAGIONE_CORRENTE  # noqa: E402
 from ammonizioni.db.modelli import (  # noqa: E402
-    Arbitro, Formazione, Giocata, Giocatore, ListaManuale, Partita, Presenza, Squadra,
-    UltimoAggiornamento,
+    Arbitro, Formazione, Giocata, Giocatore, Partita, Presenza, Squadra, UltimoAggiornamento,
 )
 from ammonizioni.db.sessione import apri  # noqa: E402
 
@@ -70,10 +69,10 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                 s.add(Arbitro(id=aid, nome_normalizzato=nome.lower(), nome_visualizzato=nome))
                 arbitri[camp].append(aid)
                 aid += 1
+        # nessuna lista manuale: Inter-Milan, Roma-Lazio e gli altri derby sono riconosciuti dai
+        # nomi, il campo caldo del Napoli dai cartellini della stagione scorsa (vedi sotto)
         inter, milan, roma, lazio = (squadre[SERIE_A][i] for i in (0, 1, 4, 5))
-        s.add(ListaManuale(tipo="derby", squadra_a_id=inter, squadra_b_id=milan))
-        s.add(ListaManuale(tipo="derby", squadra_a_id=roma, squadra_b_id=lazio))
-        s.add(ListaManuale(tipo="campo_caldo", squadra_a_id=squadre[SERIE_A][3]))
+        napoli = squadre[SERIE_A][3]
         s.flush()
 
         # storico: 8 giornate già giocate per campionato (tutti contro tutti, a rotazione),
@@ -121,13 +120,38 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                         passate.append(pid)
                     pid += 1
 
+        # stagione scorsa: 16 partite in casa del Napoli molto nervose (almeno 9 gialli della
+        # sola squadra di casa): il Napoli risulta "campo caldo" in automatico
+        altri = [q for q in squadre[SERIE_A] if q != napoli]
+        for k in range(16):
+            ospite = altri[k % len(altri)]
+            s.add(Partita(
+                id=pid, data_utc=adesso - timedelta(days=330 - 7 * k), competizione_id=SERIE_A,
+                stagione=STAGIONE_CORRENTE - 1, giornata=k + 1, casa_id=napoli,
+                trasferta_id=ospite, arbitro_id=rnd.choice(arbitri[SERIE_A]), gol_casa=1,
+                gol_trasferta=1, stato="FT", stato_formazioni="ufficiali",
+                statistiche_scaricate=True,
+            ))
+            s.flush()
+            for sq in (napoli, ospite):
+                for n, (g, ruolo, griglia) in enumerate(rose[sq]):
+                    s.add(Presenza(
+                        partita_id=pid, giocatore_id=g, squadra_id=sq, titolare=True, ruolo=ruolo,
+                        griglia=griglia, minuti=90,
+                        gialli=int(sq == napoli and 1 <= n <= 9) or int(rnd.random() < 0.1),
+                        falli_commessi=rnd.randint(0, 3), falli_subiti=rnd.randint(0, 3),
+                    ))
+            pid += 1
+
         # prossime partite: Serie A in 4 giorni, Liga in 2, alcune con formazioni ufficiali
         future = [
             (SERIE_A, inter, milan, 1, 19, 45, True), (SERIE_A, roma, lazio, 1, 17, 0, False),
             (SERIE_A, squadre[SERIE_A][2], squadre[SERIE_A][3], 2, 19, 45, True),
             (SERIE_A, squadre[SERIE_A][6], squadre[SERIE_A][7], 2, 14, 0, False),
             (SERIE_A, milan, squadre[SERIE_A][2], 4, 19, 45, False),
-            (SERIE_A, squadre[SERIE_A][3], roma, 4, 11, 30, False),
+            (SERIE_A, napoli, squadre[SERIE_A][7], 4, 11, 30, False),  # in casa del Napoli
+            # un derby lontano: nella sezione "resto della stagione" delle Partite calde
+            (SERIE_A, milan, inter, 20, 20, 45, False),
             (LIGA, squadre[LIGA][0], squadre[LIGA][1], 2, 20, 0, True),
             (LIGA, squadre[LIGA][2], squadre[LIGA][3], 3, 18, 30, False),
         ]

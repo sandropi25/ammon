@@ -373,6 +373,8 @@ html, body, .stApp {{
   letter-spacing: .02em; box-shadow: inset 0 0 0 2px rgba(255,255,255,.18);
 }}
 .cr-arbitro {{ margin-top: .55rem; font-size: .88rem; color: var(--cr-testo2); }}
+.cr-calore {{ margin-top: .45rem; font-size: .88rem; color: var(--cr-testo2); line-height: 1.4; }}
+.cr-attesi {{ display: block; font-weight: 700; color: var(--cr-testo); }}
 .cr-nome-sq {{ min-width: 0; }}
 .cr-gol {{
   margin-left: auto; font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
@@ -555,6 +557,15 @@ def scheda_partita(riga: componenti.RigaPartita) -> str:
             badges.append(badge("✅ Formazioni ufficiali", "verde"))
         else:
             badges.append(badge(f"📋 Formazioni {riga.formazioni}", "neutro"))
+    calore = ""
+    if riga.attesi is not None or riga.motivi:
+        # pagina Partite calde: cartellini attesi e ragioni in chiaro
+        attesi = (
+            f'<span class="cr-attesi">🟨 {escape(componenti.numero_it(riga.attesi))} cartellini attesi</span>'
+            if riga.attesi is not None else ""
+        )
+        motivi = " · ".join(escape(m) for m in riga.motivi)
+        calore = f'<div class="cr-calore">{attesi}<span class="cr-motivi">{motivi}</span></div>'
     return (
         '<div class="cr-partita">'
         f'<div class="cr-partita-testa"><span class="cr-ora">{escape(riga.ora)}</span>'
@@ -562,6 +573,7 @@ def scheda_partita(riga: componenti.RigaPartita) -> str:
         f'<div class="cr-squadre" title="{escape(riga.casa)} – {escape(riga.trasferta)}">'
         f"{_squadra(riga.casa, gol_casa)}{_squadra(riga.trasferta, gol_trasf)}</div>"
         f'<div class="cr-arbitro">{escape(arbitro)}</div>'
+        f"{calore}"
         f'<div class="cr-badges">{"".join(badges)}</div>'
         "</div>"
     )

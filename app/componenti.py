@@ -11,7 +11,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import riepilogo_cambi
-from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A, STATI_FINITI
+from ammonizioni.config import (
+    CAMPIONATI,
+    NOMI_CAMPIONATI,
+    SERIE_A,
+    SOGLIA_CARTELLINI_ATTESI,
+    STATI_FINITI,
+)
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import (
     Arbitro,
@@ -135,6 +141,9 @@ class RigaPartita:
     gol_trasferta: int | None = None
     gialli: int | None = None  # compresi quelli presi dalla panchina; None: statistiche mancanti
     rossi: int | None = None
+    # solo per la pagina Partite calde: cartellini attesi e motivi in chiaro
+    attesi: float | None = None
+    motivi: tuple[str, ...] = ()
 
 
 def ora_italiana(dt_utc: datetime) -> str:
@@ -174,6 +183,91 @@ def raggruppa_per_giorno(
     for r in sorted(righe, key=lambda r: (locale(r), r.id)):
         gruppi.setdefault(locale(r).date(), []).append(r)
     return [(intestazione_giorno(g, oggi), rr) for g, rr in gruppi.items()]
+
+
+# ---------------------------------------------------------------- calore di una partita
+
+PRECEDENTI_MINIMI = 2  # precedenti diretti con statistiche per contare
+PARTITE_ARBITRO_MINIME = 5
+PARTITE_SQUADRA_MINIME = 3
+ECCESSO_MOTIVO = 1.15  # un dato spiega il calore se supera la media del campionato del 15%
+BONUS_DERBY = 0.8
+BONUS_CAMPO_CALDO = 0.4
+BONUS_POSTA = 0.15  # per ogni squadra con qualcosa in palio
+MEDIA_LEGA_PREDEFINITA = 4.4  # cartellini (gialli + rossi) a partita senza dati
+
+
+@dataclass(frozen=True)
+class Calore:
+    """Quanto si prevede "calda" una partita: cartellini attesi (gialli + rossi, entrambe le
+    squadre; None senza dati) e le ragioni in chiaro."""
+    attesi: float | None
+    calda: bool
+    motivi: tuple[str, ...]
+
+
+def numero_it(valore: float) -> str:
+    return f"{valore:.1f}".replace(".", ",")
+
+
+def calore_partita(
+    *,
+    derby: str | None = None,
+    campo_caldo: str | None = None,
+    precedenti: list[int] | tuple[int, ...] = (),
+    arbitro: str | None = None,
+    arbitro_medi: float | None = None,
+    arbitro_partite: int = 0,
+    medie_squadre: tuple[float | None, float | None] = (None, None),
+    media_lega: float = MEDIA_LEGA_PREDEFINITA,
+    posta: tuple[tuple[str, str], ...] = (),
+) -> Calore:
+    """Cartellini attesi della partita: media di quello che dicono i dati disponibili
+    (precedenti diretti già limitati agli ultimi 5, cartellini a partita dell'arbitro
+    designato, media delle due squadre nella stagione) più piccoli bonus per derby, campo caldo
+    e posta in classifica (`posta`: coppie (squadra, posta)). Calda se i cartellini attesi
+    arrivano alla soglia di `config.SOGLIA_CARTELLINI_ATTESI` oppure è un derby."""
+    valori: list[float] = []
+    motivi: list[str] = []
+    if derby:
+        motivi.append(derby)
+    if campo_caldo:
+        motivi.append(f"campo caldo: {campo_caldo}")
+
+    def alto(valore: float) -> bool:
+        return valore >= media_lega * ECCESSO_MOTIVO
+
+    if len(precedenti) >= PRECEDENTI_MINIMI:
+        media_prec = sum(precedenti) / len(precedenti)
+        valori.append(media_prec)
+        if alto(media_prec):
+            motivi.append(f"precedenti: {numero_it(media_prec)} cartellini")
+    if arbitro_medi is not None and arbitro_partite >= PARTITE_ARBITRO_MINIME:
+        valori.append(arbitro_medi)
+        if alto(arbitro_medi):
+            nome = f" ({arbitro})" if arbitro else ""
+            motivi.append(f"arbitro severo{nome}: {numero_it(arbitro_medi)} cartellini a partita")
+    squadre = [m for m in medie_squadre if m is not None]
+    if squadre:
+        media_sq = sum(squadre) / len(squadre)
+        valori.append(media_sq)
+        if alto(media_sq):
+            motivi.append(f"squadre nervose: {numero_it(media_sq)} cartellini a partita")
+    for squadra, in_palio in posta:
+        motivi.append(f"posta in classifica: {squadra} ({in_palio})")
+
+    if not valori:
+        return Calore(attesi=None, calda=bool(derby), motivi=tuple(motivi))
+    attesi = (
+        sum(valori) / len(valori)
+        + (BONUS_DERBY if derby else 0.0)
+        + (BONUS_CAMPO_CALDO if campo_caldo else 0.0)
+        + BONUS_POSTA * len(posta)
+    )
+    calda = bool(derby) or attesi >= SOGLIA_CARTELLINI_ATTESI
+    if calda and not motivi:
+        motivi.append("cartellini attesi elevati")
+    return Calore(attesi=attesi, calda=calda, motivi=tuple(motivi))
 
 
 def stato_aggiornamento(s: Session) -> tuple[str, bool]:

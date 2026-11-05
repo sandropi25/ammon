@@ -23,6 +23,7 @@ st.set_page_config(
 
 pagine = [
     st.Page("pagine/0_Partite.py", title="Partite", icon="📅", default=True),
+    st.Page("pagine/6_Partite_calde.py", title="Partite calde", icon="🔥"),
     st.Page("pagine/5_Calendario.py", title="Calendario", icon="🗓️"),
     st.Page("pagine/4_Cerca.py", title="Cerca", icon="🔎"),
     st.Page("pagine/1_Dettaglio_partita.py", title="Dettaglio partita", visibility="hidden"),

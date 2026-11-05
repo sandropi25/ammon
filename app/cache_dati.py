@@ -11,6 +11,7 @@ from datetime import datetime
 import streamlit as st
 
 import componenti
+import componenti_calde
 import componenti_calendario
 import componenti_cerca
 from ammonizioni import config
@@ -135,6 +136,31 @@ def _righe_turno(db: str, ids: tuple[int, ...]):
 def righe_turno(turno) -> list:
     """Righe delle partite di un turno del calendario (poche query raggruppate, in cache)."""
     return _righe_turno(config.url_database(), tuple(turno.ids))
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=10, show_spinner=False)
+def _partite_calde(db: str, blocco: datetime, campionati: tuple[int, ...]):
+    with apri(db) as s:
+        return componenti_calde.partite_calde(s, blocco, campionati)
+
+
+def partite_calde(adesso: datetime, campionati: tuple[int, ...]):
+    """(partite calde dei prossimi 7 giorni, calde del resto della stagione), in cache per ora
+    intera; le partite già iniziate escono col filtro finale, fuori dalla cache."""
+    blocco = adesso.replace(minute=0, second=0, microsecond=0)
+    righe = _partite_calde(config.url_database(), blocco, tuple(campionati))
+    return componenti_calde.separa_prossimi_giorni(righe, adesso)
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=5, show_spinner=False)
+def _elenco_rivalita(db: str, blocco: datetime):
+    with apri(db) as s:
+        return componenti_calde.elenco_rivalita(s, blocco)
+
+
+def elenco_rivalita(adesso: datetime):
+    """Derby riconosciuti e campi caldi calcolati (sola lettura), in cache per ora intera."""
+    return _elenco_rivalita(config.url_database(), adesso.replace(minute=0, second=0, microsecond=0))
 
 
 def svuota() -> None:

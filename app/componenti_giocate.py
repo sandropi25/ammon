@@ -3,21 +3,19 @@ le pagine si limitano a mostrare quello che restituiscono queste funzioni."""
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, fields, replace
+from dataclasses import fields, replace
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import componenti
 from ammonizioni.config import (
-    CAMPIONATI,
     NOMI_CAMPIONATI,
     SERIE_A,
-    STAGIONE_CORRENTE,
     campionato_di,
 )
-from ammonizioni.db.modelli import Giocata, Giocatore, ListaManuale, Partita, Squadra
+from ammonizioni.db.modelli import Giocata, Giocatore, Partita, Squadra
 from ammonizioni.giocate.registro import aggiungi_giocata, statistiche_per_fonte
 from ammonizioni.motore.classifica import converti_quota
 from ammonizioni.motore.pesi import Pesi, valida_pesi
@@ -232,82 +230,6 @@ def righe_statistiche(
         }
         for st in statistiche_per_fonte(s, partite_con_giocate(s, campionati))
     ]
-
-
-# ---------------------------------------------------------------- liste manuali
-
-@dataclass(frozen=True)
-class VoceLista:
-    id: int
-    testo: str
-
-
-def squadre_campionati(s: Session) -> list[tuple[int, str]]:
-    """Squadre dei campionati nella stagione corrente: (id, "Nome (Campionato)"), la Serie A
-    per prima, in ordine alfabetico dentro ciascun campionato."""
-    risultato: list[tuple[int, str]] = []
-    for campionato in CAMPIONATI:
-        partite = select(Partita.casa_id, Partita.trasferta_id).where(
-            Partita.competizione_id == campionato, Partita.stagione == STAGIONE_CORRENTE
-        )
-        ids = {i for coppia in s.execute(partite).all() for i in coppia}
-        righe = s.execute(select(Squadra.id, Squadra.nome).where(Squadra.id.in_(ids))).all()
-        risultato.extend(
-            (i, f"{n} ({NOMI_CAMPIONATI[campionato]})") for i, n in sorted(righe, key=lambda r: r[1])
-        )
-    return risultato
-
-
-def voci_lista(s: Session, tipo: str) -> list[VoceLista]:
-    nomi = _nomi_squadre(s)
-    voci = []
-    for r in s.execute(
-        select(ListaManuale).where(ListaManuale.tipo == tipo).order_by(ListaManuale.id)
-    ).scalars():
-        testo = nomi.get(r.squadra_a_id, str(r.squadra_a_id))
-        if r.squadra_b_id is not None:
-            testo += f" – {nomi.get(r.squadra_b_id, str(r.squadra_b_id))}"
-        voci.append(VoceLista(r.id, testo))
-    return voci
-
-
-def aggiungi_derby(s: Session, squadra_a: int, squadra_b: int) -> None:
-    """Coppia di squadre in rivalità, salvata una volta sola a prescindere dall'ordine."""
-    if squadra_a == squadra_b:
-        raise ValueError("Scegli due squadre diverse")
-    a, b = sorted((squadra_a, squadra_b))
-    esiste = s.execute(
-        select(ListaManuale.id).where(
-            ListaManuale.tipo == "derby",
-            or_(
-                (ListaManuale.squadra_a_id == a) & (ListaManuale.squadra_b_id == b),
-                (ListaManuale.squadra_a_id == b) & (ListaManuale.squadra_b_id == a),
-            ),
-        )
-    ).first()
-    if esiste is not None:
-        raise ValueError("Derby già presente nell'elenco")
-    s.add(ListaManuale(tipo="derby", squadra_a_id=a, squadra_b_id=b))
-    s.flush()
-
-
-def aggiungi_campo_caldo(s: Session, squadra: int) -> None:
-    esiste = s.execute(
-        select(ListaManuale.id).where(
-            ListaManuale.tipo == "campo_caldo", ListaManuale.squadra_a_id == squadra
-        )
-    ).first()
-    if esiste is not None:
-        raise ValueError("Campo caldo già presente nell'elenco")
-    s.add(ListaManuale(tipo="campo_caldo", squadra_a_id=squadra, squadra_b_id=None))
-    s.flush()
-
-
-def rimuovi_voce(s: Session, voce_id: int) -> None:
-    riga = s.get(ListaManuale, voce_id)
-    if riga is not None:
-        s.delete(riga)
-        s.flush()
 
 
 # ---------------------------------------------------------------- pesi

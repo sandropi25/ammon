@@ -1,11 +1,10 @@
 import pytest
 from ayuda_app import PAGINA_DETTAGLIO, PAGINA_IMPOSTAZIONI, avvia, sessione_db, url_db, visibile
-from db_prova import CASA, PARTITA_FUTURA, TRASF, popola
-from sqlalchemy import select
+from db_prova import CASA, PARTITA_FUTURA, popola
 
 import componenti_giocate  # noqa: E402  (app/ è in sys.path grazie ad ayuda_app)
 from ammonizioni.db import repo
-from ammonizioni.db.modelli import Impostazione, ListaManuale, Partita, Squadra
+from ammonizioni.db.modelli import Impostazione, Partita, Squadra
 from ammonizioni.motore.pesi import Pesi, carica_pesi, salva_pesi
 
 TERZA = 3
@@ -23,128 +22,53 @@ def _prepara(s):
     s.flush()
 
 
-def _liste(s, tipo):
-    return [
-        (r.squadra_a_id, r.squadra_b_id)
-        for r in s.execute(select(ListaManuale).where(ListaManuale.tipo == tipo)).scalars()
-    ]
+def test_derby_e_campi_caldi_in_sola_lettura_senza_moduli_di_inserimento(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)  # il seed ha il derby manuale Casa FC - Trasferta FC
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert not at.exception
+    assert not at.selectbox  # niente selettori di squadre
+    assert not {b.key for b in at.button} & {"aggiungi_derby", "aggiungi_campo_caldo"}
+    t = visibile(at)
+    assert "Derby e rivalità" in t and "Campi caldi" in t
+    assert "Trasferta FC – Casa FC" in t  # la riga manuale resta valida e si vede
+    assert "Nessun campo caldo calcolato" in t
 
 
-def test_squadre_selezionabili_solo_campionati_stagione_corrente(sessione_db):
+def test_derby_predefinito_e_campo_caldo_calcolato_con_il_motivo(sessione_db):
     with sessione_db() as s:
         _prepara(s)
-        assert componenti_giocate.squadre_campionati(s) == [
-            (CASA, "Casa FC (Serie A)"), (TERZA, "Terza FC (Serie A)"),
-            (TRASF, "Trasferta FC (Serie A)"),
-        ]
-
-
-def test_squadre_di_serie_a_e_liga_con_il_campionato_la_serie_a_per_prima(sessione_db):
-    with sessione_db() as s:
-        _prepara(s)
-        s.add_all([Squadra(id=501, nome="Zaragoza"), Squadra(id=502, nome="Alaves")])
+        s.add_all([Squadra(id=300, nome="FC Internazionale Milano"), Squadra(id=301, nome="AC Milan")])
         s.flush()
-        s.add(Partita(id=60, data_utc=s.get(Partita, 1).data_utc, competizione_id=140,
-                      stagione=2026, casa_id=501, trasferta_id=502, stato="FT"))
-        s.add(Partita(id=61, data_utc=s.get(Partita, 1).data_utc, competizione_id=143,
-                      stagione=2026, casa_id=4, trasferta_id=502, stato="FT"))  # coppa: non conta
+        _storia_campo_caldo(s, squadra=CASA)
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert not at.exception
+    t = visibile(at)
+    assert "FC Internazionale Milano – AC Milan" in t and "Serie A" in t
+    assert "Casa FC in casa: 6,0 cartellini a partita contro 4,5 di media" in t
+
+
+def _storia_campo_caldo(s, squadra):
+    """In Liga: 16 partite in casa di `squadra` con 6 cartellini ciascuna e 16 di altre
+    squadre con 3: media del campionato 4,5, la squadra sta al +33%."""
+    from datetime import datetime, timedelta, timezone
+
+    from ammonizioni.db.modelli import Giocatore, Partita, Presenza
+
+    altre = [Squadra(id=400 + i, nome=f"Altra {i}") for i in range(2)]
+    s.add_all(altre)
+    s.add(Giocatore(id=900, nome="Pippo"))
+    s.flush()
+    base = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
+    pid = 1000
+    for i in range(32):
+        casa, trasf, gialli = (squadra, 400, 6) if i < 16 else (401, 400, 3)
+        s.add(Partita(id=pid, data_utc=base + timedelta(days=i), competizione_id=140,
+                      stagione=2026, casa_id=casa, trasferta_id=trasf, stato="FT",
+                      statistiche_scaricate=True))
         s.flush()
-        nomi = [n for _, n in componenti_giocate.squadre_campionati(s)]
-        assert nomi == [
-            "Casa FC (Serie A)", "Terza FC (Serie A)", "Trasferta FC (Serie A)",
-            "Alaves (Liga)", "Zaragoza (Liga)",
-        ]
-
-
-def test_derby_e_campo_caldo_offrono_le_squadre_di_entrambi_i_campionati(sessione_db):
-    with sessione_db() as s:
-        _prepara(s)
-        s.add_all([Squadra(id=501, nome="Real Liga"), Squadra(id=502, nome="Barca Liga")])
-        s.flush()
-        s.add(Partita(id=60, data_utc=s.get(Partita, 1).data_utc, competizione_id=140,
-                      stagione=2026, casa_id=501, trasferta_id=502, stato="FT"))
-    at = avvia(PAGINA_IMPOSTAZIONI)
-    assert not at.exception
-    for chiave in ("derby_a", "derby_b", "campo_caldo_squadra"):
-        etichette = [str(o) for o in at.selectbox(key=chiave).options]
-        assert "Real Liga (Liga)" in etichette and "Casa FC (Serie A)" in etichette
-    at.selectbox(key="derby_a").select(501)
-    at.selectbox(key="derby_b").select(502)
-    at.button(key="aggiungi_derby").click().run()
-    assert not at.exception and not at.error
-    with sessione_db() as s:
-        assert (501, 502) in _liste(s, "derby")
-    assert "Real Liga – Barca Liga" in visibile(at)
-
-
-def test_aggiungi_derby_persistito(sessione_db):
-    with sessione_db() as s:
-        _prepara(s)
-    at = avvia(PAGINA_IMPOSTAZIONI)
-    assert not at.exception
-    at.selectbox(key="derby_a").select(CASA)
-    at.selectbox(key="derby_b").select(TERZA)
-    at.button(key="aggiungi_derby").click().run()
-    assert not at.exception
-    assert not at.error
-    with sessione_db() as s:
-        assert sorted(_liste(s, "derby")) == sorted([(TRASF, CASA), (CASA, TERZA)])
-    assert "Casa FC – Terza FC" in visibile(at)
-
-
-def test_derby_duplicato_anche_a_squadre_invertite_rifiutato(sessione_db):
-    with sessione_db() as s:
-        _prepara(s)  # il seed ha già il derby (TRASF, CASA)
-    at = avvia(PAGINA_IMPOSTAZIONI)
-    at.selectbox(key="derby_a").select(CASA)
-    at.selectbox(key="derby_b").select(TRASF)
-    at.button(key="aggiungi_derby").click().run()
-    assert not at.exception
-    assert any("già presente" in e.value for e in at.error)
-    with sessione_db() as s:
-        assert len(_liste(s, "derby")) == 1
-
-
-def test_derby_con_stessa_squadra_rifiutato(sessione_db):
-    with sessione_db() as s:
-        _prepara(s)
-    at = avvia(PAGINA_IMPOSTAZIONI)
-    at.selectbox(key="derby_a").select(CASA)
-    at.selectbox(key="derby_b").select(CASA)
-    at.button(key="aggiungi_derby").click().run()
-    assert any("diverse" in e.value for e in at.error)
-    with sessione_db() as s:
-        assert len(_liste(s, "derby")) == 1
-
-
-def test_rimuovi_derby(sessione_db):
-    with sessione_db() as s:
-        _prepara(s)
-        riga_id = s.execute(select(ListaManuale.id)).scalar_one()
-    at = avvia(PAGINA_IMPOSTAZIONI)
-    at.button(key=f"rimuovi_lista_{riga_id}").click().run()
-    assert not at.exception
-    with sessione_db() as s:
-        assert _liste(s, "derby") == []
-
-
-def test_aggiungi_e_rimuovi_campo_caldo(sessione_db):
-    with sessione_db() as s:
-        _prepara(s)
-    at = avvia(PAGINA_IMPOSTAZIONI)
-    at.selectbox(key="campo_caldo_squadra").select(TERZA)
-    at.button(key="aggiungi_campo_caldo").click().run()
-    assert not at.exception
-    with sessione_db() as s:
-        assert _liste(s, "campo_caldo") == [(TERZA, None)]
-        riga_id = s.execute(select(ListaManuale.id).where(ListaManuale.tipo == "campo_caldo")).scalar_one()
-    # di nuovo la stessa squadra: rifiutata
-    at.selectbox(key="campo_caldo_squadra").select(TERZA)
-    at.button(key="aggiungi_campo_caldo").click().run()
-    assert any("già presente" in e.value for e in at.error)
-    at.button(key=f"rimuovi_lista_{riga_id}").click().run()
-    with sessione_db() as s:
-        assert _liste(s, "campo_caldo") == []
+        s.add(Presenza(partita_id=pid, giocatore_id=900, squadra_id=casa, gialli=gialli))
+        pid += 1
 
 
 def test_modifica_peso_persistita_e_ripristino(sessione_db):
