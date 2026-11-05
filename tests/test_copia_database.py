@@ -46,6 +46,18 @@ def test_copia_tutte_le_tabelle_e_le_date_restano_utc(tmp_path):
         s.flush()
 
 
+def test_destinazione_con_sole_righe_di_servizio_viene_ripulita(tmp_path):
+    origine = f"sqlite:///{tmp_path / 'origine.db'}"
+    destinazione = f"sqlite:///{tmp_path / 'dest.db'}"
+    _popola(origine)
+    with apri(destinazione) as s:  # come un job pre-partita su un database vuoto
+        repo.scrivi_impostazione(s, "fonte_dati_db", "espn")
+    copiate = _modulo().copia(origine, destinazione)
+    assert copiate["impostazioni"] == 1
+    with apri(destinazione) as s:
+        assert repo.leggi_impostazione(s, "fonte_dati_db", None) == "espn"
+
+
 def test_rifiuta_destinazione_non_vuota(tmp_path):
     origine = f"sqlite:///{tmp_path / 'origine.db'}"
     destinazione = f"sqlite:///{tmp_path / 'dest.db'}"

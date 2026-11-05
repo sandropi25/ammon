@@ -6,7 +6,8 @@ Uso:
 
 La destinazione si passa con il nome di una variabile d'ambiente, così la stringa
 di connessione (che contiene la password) non compare mai sulla riga di comando né
-nell'output. La destinazione deve essere vuota.
+nell'output. La destinazione non deve contenere partite (eventuali righe di servizio
+scritte dai job su un database vuoto vengono sostituite).
 """
 from __future__ import annotations
 
@@ -40,12 +41,16 @@ def copia(url_origine: str, url_destinazione: str, stampa=lambda *_: None) -> di
     destinazione = crea_engine(_normalizza(url_destinazione))
     crea_tabelle(destinazione)
     tabelle = Base.metadata.sorted_tables  # prima le tabelle a cui le altre fanno riferimento
+    partite = Base.metadata.tables["partite"]
     with destinazione.connect() as d:
-        for t in tabelle:
-            if d.execute(select(func.count()).select_from(t)).scalar():
-                raise SystemExit(f"Il database di destinazione non e' vuoto (tabella {t.name}).")
+        if d.execute(select(func.count()).select_from(partite)).scalar():
+            raise SystemExit("Il database di destinazione non e' vuoto (ci sono gia' partite).")
     copiate: dict[str, int] = {}
     with origine.connect() as o, destinazione.begin() as d:
+        # senza partite ci possono essere solo righe di servizio (es. scritte da un job
+        # pre-partita su un database vuoto): si cancellano e si copia tutto dall'origine
+        for t in reversed(tabelle):
+            d.execute(t.delete())
         for t in tabelle:
             righe = o.execute(select(t)).mappings()
             n = 0
