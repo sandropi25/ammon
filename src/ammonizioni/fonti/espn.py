@@ -106,11 +106,6 @@ def _classifica(abbreviazione: str) -> tuple[str, int, int] | None:
     return voce[0], voce[1], posto
 
 
-def _ruolo(abbreviazione: str) -> str:
-    """Ruolo G/D/M/F; posizione sconosciuta -> M con una riga di log."""
-    return _classifica_o_centrocampista(abbreviazione)[0]
-
-
 def _classifica_o_centrocampista(abbreviazione: str) -> tuple[str, int, int]:
     classe = _classifica(abbreviazione)
     if classe is None:
@@ -311,11 +306,12 @@ class Espn:
 
     @staticmethod
     def _griglie_titolari(giocatori: list[_Giocatore]) -> dict[int, str]:
-        titolari = []
-        for g in giocatori:
-            if g.titolare:
-                _, riga, posto = g.classe
-                titolari.append((g.id, riga, posto, g.ordine))
+        """Griglia dei titolari; vuota se non sono 11 (mai griglie parziali)."""
+        titolari = [
+            (g.id, g.classe[1], g.classe[2], g.ordine) for g in giocatori if g.titolare
+        ]
+        if len(titolari) != TITOLARI_PER_SQUADRA:
+            return {}
         return _griglie(titolari)
 
     @staticmethod

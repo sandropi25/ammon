@@ -363,16 +363,50 @@ def test_statistiche_sostituzione_mancante_in_key_events_usa_plays(espn):
         ("RM", "M"), ("LM", "M"), ("AM", "M"), ("AM-R", "M"), ("AM-L", "M"),
         ("F", "F"), ("CF", "F"), ("CF-R", "F"), ("CF-L", "F"), ("RF", "F"), ("LF", "F"),
         ("ST", "F"), ("RW", "F"), ("LW", "F"),
+        ("XYZ", "M"),
     ],
 )
-def test_ruolo_dalla_posizione(abbreviazione, ruolo):
-    assert modulo_espn._ruolo(abbreviazione) == ruolo
+@respx.mock
+def test_ruolo_dalla_posizione(espn, abbreviazione, ruolo):
+    corpo = carica("summary_sassuolo_fiorentina.json")
+    corpo["rosters"][0]["roster"][0]["position"]["abbreviation"] = abbreviazione  # Turati
+    rotta_summary(corpo)
+    assert per_id(espn.statistiche(PARTITA_SF))[261399].ruolo == ruolo
 
 
-def test_ruolo_sconosciuto_diventa_centrocampista_con_log(caplog):
-    with caplog.at_level(logging.WARNING):
-        assert modulo_espn._ruolo("XYZ") == "M"
-    assert "XYZ" in caplog.text
+@respx.mock
+def test_statistiche_squadra_incompleta_senza_griglia(espn):
+    corpo = carica("summary_sassuolo_fiorentina.json")
+    next(r for r in corpo["rosters"][1]["roster"] if r["starter"])["starter"] = False
+    rotta_summary(corpo)
+    presenze = espn.statistiche(PARTITA_SF)
+    viola = [p for p in presenze if p.squadra_id == FIORENTINA]
+    sassuolo = [p for p in presenze if p.squadra_id == SASSUOLO and p.titolare]
+    assert all(p.griglia is None for p in viola)
+    assert len(sassuolo) == 11 and all(p.griglia is not None for p in sassuolo)
+
+
+@respx.mock
+def test_statistiche_titolari_completi_hanno_griglia(espn):
+    rotta_summary(carica("summary_sassuolo_fiorentina.json"))
+    titolari = [p for p in espn.statistiche(PARTITA_SF) if p.titolare]
+    assert len(titolari) == 22 and all(p.griglia for p in titolari)
+
+
+@respx.mock
+def test_statistiche_entrato_e_poi_sostituito(espn):
+    corpo = carica("summary_con_espulsione.json")
+    corpo["keyEvents"].append({
+        "type": {"id": "76", "text": "Substitution", "type": "substitution"},
+        "clock": {"value": 4800.0, "displayValue": "80'"},
+        "team": {"id": "119"},
+        "participants": [
+            {"athlete": {"id": "999999", "displayName": "Altro"}},
+            {"athlete": {"id": "236424", "displayName": "Daniel Mosquera"}},
+        ],
+    })
+    rotta_summary(corpo)
+    assert per_id(espn.statistiche(PARTITA_ROSSO))[236424].minuti == 23  # dentro 57', fuori 80'
 
 
 @respx.mock
