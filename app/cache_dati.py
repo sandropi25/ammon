@@ -11,6 +11,7 @@ from datetime import datetime
 import streamlit as st
 
 import componenti
+import componenti_calendario
 import componenti_cerca
 from ammonizioni import config
 from ammonizioni.db.sessione import apri
@@ -111,6 +112,29 @@ def partite_squadra(squadra_id: int, adesso: datetime):
     blocco = adesso.replace(minute=0, second=0, microsecond=0)
     righe = _partite_squadra(config.url_database(), squadra_id, blocco)
     return componenti.nella_finestra(righe, adesso, giorni=componenti_cerca.GIORNI_SQUADRA)
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=10, show_spinner=False)
+def _calendario(db: str, campionato: int, stagione: int):
+    with apri(db) as s:
+        return componenti_calendario.carica_calendario(s, campionato, stagione)
+
+
+def calendario(campionato: int, stagione: int = config.STAGIONE_CORRENTE):
+    """Giornate (o settimane) del campionato nella stagione, con la giornata in corso: una
+    sola query leggera, in cache."""
+    return _calendario(config.url_database(), campionato, stagione)
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=60, show_spinner=False)
+def _righe_turno(db: str, ids: tuple[int, ...]):
+    with apri(db) as s:
+        return componenti_calendario.righe_turno(s, ids)
+
+
+def righe_turno(turno) -> list:
+    """Righe delle partite di un turno del calendario (poche query raggruppate, in cache)."""
+    return _righe_turno(config.url_database(), tuple(turno.ids))
 
 
 def svuota() -> None:

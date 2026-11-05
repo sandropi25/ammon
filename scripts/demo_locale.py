@@ -76,9 +76,11 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
         s.add(ListaManuale(tipo="campo_caldo", squadra_a_id=squadre[SERIE_A][3]))
         s.flush()
 
-        # storico: 8 giornate già giocate per campionato (tutti contro tutti, a rotazione)
+        # storico: 8 giornate già giocate per campionato (tutti contro tutti, a rotazione),
+        # numerate 1-8 con i risultati; le prossime partite sono la giornata 9 (e 10) del Calendario
         pid = 1
         passate: list[int] = []  # di Serie A, per le giocate dimostrative
+        panchina: list[int] = []  # partite con un ammonito dalla panchina
         for camp, ids in squadre.items():
             for giornata in range(1, 9):
                 quando = adesso - timedelta(days=7 * (9 - giornata), hours=rnd.randint(0, 30))
@@ -104,6 +106,17 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                                 falli_commessi=rnd.randint(0, 4 if ruolo in "DM" else 2),
                                 falli_subiti=rnd.randint(0, 3), dribbling_tentati=rnd.randint(0, 4),
                             ))
+                    if giornata == 8 and camp == SERIE_A and len(panchina) < 2:
+                        # ammonito dalla panchina (0 minuti): conta nei cartellini del Calendario
+                        s.add(Giocatore(id=9000 + len(panchina), nome=f"Riserva {len(panchina) + 1}",
+                                        ruolo="M"))
+                        s.flush()
+                        s.add(Presenza(
+                            partita_id=pid, giocatore_id=9000 + len(panchina), squadra_id=casa,
+                            titolare=False, ruolo="M", minuti=0, gialli=1,
+                            rossi=len(panchina),  # la seconda riserva ha anche un rosso
+                        ))
+                        panchina.append(pid)
                     if camp == SERIE_A:
                         passate.append(pid)
                     pid += 1

@@ -2,7 +2,7 @@
 import importlib.util
 
 from ayuda_app import (
-    PAGINA_DETTAGLIO, PAGINA_GIOCATE, PAGINA_PARTITE, RADICE, avvia, sessione_db, url_db, visibile,
+    PAGINA_CALENDARIO, PAGINA_DETTAGLIO, PAGINA_GIOCATE, PAGINA_PARTITE, RADICE, avvia, sessione_db, url_db, visibile,
 )
 from sqlalchemy import func, select
 
@@ -29,6 +29,14 @@ def test_demo_popola_e_le_pagine_funzionano(url_db, sessione_db):
     at = avvia(PAGINA_DETTAGLIO, partita=future[0])
     assert not at.exception
     assert any('class="cr-candidato"' in m.value for m in at.markdown)
+    # Calendario: si apre sulla giornata 9 (da giocare); la 8 ha risultati e cartellini
+    at = avvia(PAGINA_CALENDARIO)
+    assert not at.exception and "Giornata 9" in visibile(at)
+    at.button(key="calendario_precedente").click().run()
+    assert not at.exception and "Giornata 8" in visibile(at)
+    schede = [m.value for m in at.markdown if 'class="cr-partita"' in m.value]
+    assert len(schede) == 4 and all("cr-gol" in x and "🟨" in x for x in schede)
+    assert any("🟥 1 rosso" in x for x in schede)  # il rosso del subentrato dalla panchina
     at = avvia(PAGINA_GIOCATE, tema="chiaro")
     assert not at.exception
     assert any('class="cr-tessera"' in m.value for m in at.markdown)

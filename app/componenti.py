@@ -11,9 +11,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento.formazioni import riepilogo_cambi
-from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A
+from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A, STATI_FINITI
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import (
+    Arbitro,
     DuelloManuale,
     Formazione,
     Giocatore,
@@ -127,6 +128,13 @@ class RigaPartita:
     data_utc: datetime | None = None
     derby: bool = False  # rivalità nelle liste manuali (per il badge)
     arbitro_severo: bool = False  # fattore arbitro >= soglia per almeno una squadra
+    # solo per le partite finite (Calendario): risultato e cartellini totali della partita
+    stato: str = ""
+    finita: bool = False
+    gol_casa: int | None = None
+    gol_trasferta: int | None = None
+    gialli: int | None = None  # compresi quelli presi dalla panchina; None: statistiche mancanti
+    rossi: int | None = None
 
 
 def ora_italiana(dt_utc: datetime) -> str:
@@ -215,42 +223,80 @@ def prossime_partite(
     if squadra_id is not None:
         filtri.append((Partita.casa_id == squadra_id) | (Partita.trasferta_id == squadra_id))
     partite = s.execute(select(Partita).where(*filtri).order_by(Partita.data_utc)).scalars().all()
+    return righe_partite(s, list(partite))
+
+
+def righe_partite(s: Session, partite: list[Partita]) -> list[RigaPartita]:
+    """Righe (per le schede) di partite già lette, con query raggruppate per tutte insieme.
+    Da giocare: badge (calda, derby, arbitro severo) dai dati del motore. Finite: risultato,
+    arbitro e cartellini totali (gialli e rossi di tutte le presenze, panchina compresa)."""
     if not partite:
         return []
-    pesi = carica_pesi(s)
     ids_squadre = {p.casa_id for p in partite} | {p.trasferta_id for p in partite}
     nomi = {
         sq.id: sq.nome
         for sq in s.execute(select(Squadra).where(Squadra.id.in_(ids_squadre))).scalars()
     }
+    finite = [p for p in partite if p.stato in STATI_FINITI]
+    da_giocare = [p for p in partite if p.stato not in STATI_FINITI]
     # per il badge servono solo liste manuali e arbitro: query raggruppate per tutte le partite
-    calde = carica_dati_calda(s, list(partite))
+    calde = carica_dati_calda(s, da_giocare) if da_giocare else {}
+    pesi = carica_pesi(s) if da_giocare else None
+    arbitri_finite = {}
+    ids_arbitri = {p.arbitro_id for p in finite if p.arbitro_id is not None}
+    if ids_arbitri:
+        arbitri_finite = {
+            a.id: a.nome_visualizzato
+            for a in s.execute(select(Arbitro).where(Arbitro.id.in_(ids_arbitri))).scalars()
+        }
+    cartellini = cartellini_partite(s, [p.id for p in finite if p.statistiche_scaricate])
     righe = []
     for p in partite:
-        dc = calde[p.id]
-        righe.append(
-            RigaPartita(
-                id=p.id,
-                quando=data_italiana(p.data_utc),
-                giornata=p.giornata,
-                casa=nomi.get(p.casa_id, str(p.casa_id)),
-                trasferta=nomi.get(p.trasferta_id, str(p.trasferta_id)),
-                arbitro=dc.arbitro.nome if dc.arbitro and dc.arbitro.nome else None,
-                calda=_calda(
-                    dc.rivalita, dc.campo_caldo, dc.arbitro, dc.medie,
-                    dc.casa_id, dc.trasferta_id, pesi,
-                ),
-                formazioni=p.stato_formazioni,
-                campionato=NOMI_CAMPIONATI.get(p.competizione_id, ""),
-                ora=ora_italiana(p.data_utc),
-                data_utc=p.data_utc,
-                derby=bool(dc.rivalita),
-                arbitro_severo=_arbitro_severo(
-                    dc.arbitro, dc.medie, dc.casa_id, dc.trasferta_id, pesi
-                ),
-            )
+        comune = dict(
+            id=p.id,
+            quando=data_italiana(p.data_utc),
+            giornata=p.giornata,
+            casa=nomi.get(p.casa_id, str(p.casa_id)),
+            trasferta=nomi.get(p.trasferta_id, str(p.trasferta_id)),
+            formazioni=p.stato_formazioni,
+            campionato=NOMI_CAMPIONATI.get(p.competizione_id, ""),
+            ora=ora_italiana(p.data_utc),
+            data_utc=p.data_utc,
+            stato=p.stato,
         )
+        if p.stato in STATI_FINITI:
+            gialli, rossi = cartellini.get(p.id, (None, None))
+            righe.append(RigaPartita(
+                **comune, arbitro=arbitri_finite.get(p.arbitro_id), calda=False, finita=True,
+                gol_casa=p.gol_casa, gol_trasferta=p.gol_trasferta, gialli=gialli, rossi=rossi,
+            ))
+            continue
+        dc = calde[p.id]
+        righe.append(RigaPartita(
+            **comune,
+            arbitro=dc.arbitro.nome if dc.arbitro and dc.arbitro.nome else None,
+            calda=_calda(
+                dc.rivalita, dc.campo_caldo, dc.arbitro, dc.medie,
+                dc.casa_id, dc.trasferta_id, pesi,
+            ),
+            derby=bool(dc.rivalita),
+            arbitro_severo=_arbitro_severo(dc.arbitro, dc.medie, dc.casa_id, dc.trasferta_id, pesi),
+        ))
     return righe
+
+
+def cartellini_partite(s: Session, partite_ids: list[int]) -> dict[int, tuple[int, int]]:
+    """(gialli, rossi) totali di ogni partita, di entrambe le squadre e di tutte le presenze
+    (anche i subentrati e chi è stato ammonito dalla panchina), con una sola query. Su
+    Postgres SUM restituisce Decimal: convertito in int."""
+    if not partite_ids:
+        return {}
+    righe = s.execute(
+        select(Presenza.partita_id, func.sum(Presenza.gialli), func.sum(Presenza.rossi))
+        .where(Presenza.partita_id.in_(partite_ids))
+        .group_by(Presenza.partita_id)
+    ).all()
+    return {pid: (int(g or 0), int(r or 0)) for pid, g, r in righe}
 
 
 # ---------------------------------------------------------------- pagina Dettaglio

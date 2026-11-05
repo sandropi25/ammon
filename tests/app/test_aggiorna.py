@@ -60,6 +60,7 @@ def test_file_modificato_o_aggiunto_ricarica(tmp_path, monkeypatch):
 def test_i_valori_predefiniti_puntano_al_motore_vero():
     assert aggiorna.SORGENTI.name == "ammonizioni" and aggiorna.SORGENTI.is_dir()
     assert "componenti" in aggiorna.MODULI_APP and "cache_dati" in aggiorna.MODULI_APP
+    assert "componenti_calendario" in aggiorna.MODULI_APP
 
 
 def test_ogni_pagina_lo_chiama_prima_degli_import_dell_app():

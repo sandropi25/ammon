@@ -95,3 +95,23 @@ def test_partita_mancante_non_resta_in_cache(sessione_db):
         s.add(Partita(id=777, data_utc=ORA + timedelta(days=1), competizione_id=135,
                       stagione=2026, giornata=8, casa_id=1, trasferta_id=2, stato="NS"))
     assert cache_dati.pagina_dettaglio(777) is not None
+
+
+def test_calendario_e_turno_secondo_caricamento_dalla_cache(sessione_db, monkeypatch):
+    import componenti_calendario
+
+    with sessione_db() as s:
+        popola(s)
+    chiamate = []
+    for nome in ("carica_calendario", "righe_turno"):
+        originale = getattr(componenti_calendario, nome)
+
+        def contato(*args, _o=originale, **kwargs):
+            chiamate.append(1)
+            return _o(*args, **kwargs)
+
+        monkeypatch.setattr(componenti_calendario, nome, contato)
+    for _ in range(2):
+        calendario = cache_dati.calendario(135)
+        assert len(cache_dati.righe_turno(calendario.turni[-1])) == 1
+    assert len(chiamate) == 2  # una lettura del calendario e una del turno, non quattro

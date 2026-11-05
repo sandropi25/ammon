@@ -373,6 +373,17 @@ html, body, .stApp {{
   letter-spacing: .02em; box-shadow: inset 0 0 0 2px rgba(255,255,255,.18);
 }}
 .cr-arbitro {{ margin-top: .55rem; font-size: .88rem; color: var(--cr-testo2); }}
+.cr-nome-sq {{ min-width: 0; }}
+.cr-gol {{
+  margin-left: auto; font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 1.6rem; line-height: 1; color: var(--cr-testo);
+}}
+.cr-turno {{ text-align: center; padding: .15rem 0; }}
+.cr-turno-titolo {{
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1.7rem;
+  line-height: 1.1; color: var(--cr-testo);
+}}
+.cr-turno-sotto {{ font-size: .85rem; color: var(--cr-testo2); }}
 
 /* sezioni a scheda (Impostazioni) */
 [class*="st-key-riquadro_"] {{
@@ -488,10 +499,31 @@ def _colore_stemma(nome: str) -> str:
     return f"#{round(r * 255):02X}{round(g * 255):02X}{round(b * 255):02X}"
 
 
-def _squadra(nome: str) -> str:
+def _squadra(nome: str, gol: str | None = None) -> str:
+    punteggio = f'<span class="cr-gol">{escape(gol)}</span>' if gol is not None else ""
     return (
         f'<div class="cr-squadra"><span class="cr-stemma" style="background:{_colore_stemma(nome)}">'
-        f"{escape(iniziali(nome))}</span><span>{escape(nome)}</span></div>"
+        f'{escape(iniziali(nome))}</span><span class="cr-nome-sq">{escape(nome)}</span>'
+        f"{punteggio}</div>"
+    )
+
+
+def _badge_giocata(riga: componenti.RigaPartita) -> list[str]:
+    """Badge di una partita finita: cartellini totali (gialli e rossi, panchina compresa)."""
+    if riga.gialli is None or riga.rossi is None:
+        return [badge("Cartellini non ancora disponibili", "neutro")]
+    gialli = f"🟨 {riga.gialli} {'giallo' if riga.gialli == 1 else 'gialli'}"
+    rossi = f"🟥 {riga.rossi} {'rosso' if riga.rossi == 1 else 'rossi'}"
+    return [badge(gialli, "giallo"), badge(rossi, "rosso" if riga.rossi else "neutro")]
+
+
+def titolo_turno(etichetta: str, sotto: str = "") -> str:
+    """Titolo centrato del Calendario (tra le frecce): "Giornata 12" e una riga sotto."""
+    return (
+        '<div class="cr-turno">'
+        f'<div class="cr-turno-titolo">{escape(etichetta)}</div>'
+        + (f'<div class="cr-turno-sotto">{escape(sotto)}</div>' if sotto else "")
+        + "</div>"
     )
 
 
@@ -501,24 +533,34 @@ def scheda_partita(riga: componenti.RigaPartita) -> str:
     meta = " · ".join(
         x for x in (riga.campionato, f"Giornata {riga.giornata}" if riga.giornata else "") if x
     )
-    arbitro = f"Arbitro: {riga.arbitro}" if riga.arbitro else "Arbitro da designare"
+    gol_casa = gol_trasf = None
     badges = []
-    if riga.calda:
-        badges.append(badge("🔥 Partita calda", "rosso"))
-    if riga.derby:
-        badges.append(badge("⚔️ Derby", "rosso"))
-    if riga.arbitro_severo:
-        badges.append(badge("🟨 Arbitro severo", "giallo"))
-    if riga.formazioni == "ufficiali":
-        badges.append(badge("✅ Formazioni ufficiali", "verde"))
+    if riga.finita:
+        # partita giocata: risultato accanto alle squadre, cartellini totali nei badge
+        gol_casa = "–" if riga.gol_casa is None else str(riga.gol_casa)
+        gol_trasf = "–" if riga.gol_trasferta is None else str(riga.gol_trasferta)
+        arbitro = f"Arbitro: {riga.arbitro}" if riga.arbitro else "Arbitro non indicato"
+        badges = _badge_giocata(riga)
     else:
-        badges.append(badge(f"📋 Formazioni {riga.formazioni}", "neutro"))
+        arbitro = f"Arbitro: {riga.arbitro}" if riga.arbitro else "Arbitro da designare"
+        if riga.stato in ("PST", "CANC"):
+            badges.append(badge("Rinviata" if riga.stato == "PST" else "Annullata", "neutro"))
+        if riga.calda:
+            badges.append(badge("🔥 Partita calda", "rosso"))
+        if riga.derby:
+            badges.append(badge("⚔️ Derby", "rosso"))
+        if riga.arbitro_severo:
+            badges.append(badge("🟨 Arbitro severo", "giallo"))
+        if riga.formazioni == "ufficiali":
+            badges.append(badge("✅ Formazioni ufficiali", "verde"))
+        else:
+            badges.append(badge(f"📋 Formazioni {riga.formazioni}", "neutro"))
     return (
         '<div class="cr-partita">'
         f'<div class="cr-partita-testa"><span class="cr-ora">{escape(riga.ora)}</span>'
         f'<span class="cr-meta">{escape(meta)}</span></div>'
         f'<div class="cr-squadre" title="{escape(riga.casa)} – {escape(riga.trasferta)}">'
-        f"{_squadra(riga.casa)}{_squadra(riga.trasferta)}</div>"
+        f"{_squadra(riga.casa, gol_casa)}{_squadra(riga.trasferta, gol_trasf)}</div>"
         f'<div class="cr-arbitro">{escape(arbitro)}</div>'
         f'<div class="cr-badges">{"".join(badges)}</div>'
         "</div>"

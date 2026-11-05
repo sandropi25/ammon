@@ -16,6 +16,7 @@ from ammonizioni.db.sessione import apri  # noqa: E402
 PAGINA_PARTITE = str(RADICE / "app" / "Partite.py")
 PAGINA_DETTAGLIO = str(RADICE / "app" / "pagine" / "1_Dettaglio_partita.py")
 PAGINA_CERCA = str(RADICE / "app" / "pagine" / "4_Cerca.py")
+PAGINA_CALENDARIO = str(RADICE / "app" / "pagine" / "5_Calendario.py")
 PAGINA_GIOCATE = str(RADICE / "app" / "pagine" / "2_Giocate.py")
 PAGINA_IMPOSTAZIONI = str(RADICE / "app" / "pagine" / "3_Impostazioni.py")
 
@@ -36,7 +37,7 @@ def visibile(at: AppTest) -> str:
 
 
 def avvia(pagina: str, **query) -> AppTest:
-    if pagina in (PAGINA_DETTAGLIO, PAGINA_CERCA):
+    if pagina in (PAGINA_DETTAGLIO, PAGINA_CERCA, PAGINA_CALENDARIO):
         # si parte dalla pagina principale, cosi' st.page_link trova le altre pagine
         at = AppTest.from_file(PAGINA_PARTITE, default_timeout=30)
         at.switch_page("pagine/" + Path(pagina).name)
