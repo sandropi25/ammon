@@ -19,6 +19,14 @@ TITOLARI_MINIMI = 2
 
 
 @dataclass(frozen=True)
+class Copertura:
+    """Quante partite della prova avevano l'arbitro e la griglia dei titolari."""
+    partite: int
+    con_arbitro: int
+    con_griglia: int
+
+
+@dataclass(frozen=True)
 class RisultatoProva:
     partite: int
     successi_modello: int
@@ -48,9 +56,9 @@ def _abbastanza_titolari(titolari: list[Titolare], partita: Partita) -> bool:
 
 
 def _scelta_semplice(
-    s: Session, partita: Partita, titolari: list[Titolare], k: int
+    s: Session, partita: Partita, titolari: list[Titolare], k: int, competizione_id: int
 ) -> list[int]:
-    """I k titolari (portieri esclusi) con piu' gialli in Serie A nella stessa stagione prima
+    """I k titolari (portieri esclusi) con piu' gialli nel campionato nella stessa stagione prima
     della partita; a pari gialli piu' minuti, poi id piu' basso."""
     ids = [t.giocatore_id for t in titolari if t.ruolo != "G"]
     if not ids:
@@ -64,7 +72,7 @@ def _scelta_semplice(
         .join(Partita, Partita.id == Presenza.partita_id)
         .where(
             Presenza.giocatore_id.in_(ids),
-            Partita.competizione_id == SERIE_A,
+            Partita.competizione_id == competizione_id,
             Partita.stagione == partita.stagione,
             Partita.data_utc < partita.data_utc,
             Partita.id != partita.id,
@@ -80,21 +88,47 @@ def _tasso(successi: int, partite: int) -> float:
     return successi / partite if partite else 0.0
 
 
+def _partite_prova(stagione: int, competizione_id: int):
+    """Partite finite con statistiche del campionato e della stagione."""
+    return select(Partita).where(
+        Partita.competizione_id == competizione_id,
+        Partita.stagione == stagione,
+        Partita.stato.in_(STATI_FINITI),
+        Partita.statistiche_scaricate.is_(True),
+    )
+
+
+def copertura(s: Session, stagione: int, competizione_id: int = SERIE_A) -> Copertura:
+    """Delle partite della prova: quante hanno l'arbitro e quante hanno la griglia
+    (non nulla) per almeno un titolare. Dice se i fattori arbitro e duello erano attivi."""
+    partite = s.execute(_partite_prova(stagione, competizione_id)).scalars().all()
+    ids_con_griglia = set(
+        s.execute(
+            select(Presenza.partita_id)
+            .where(
+                Presenza.partita_id.in_([p.id for p in partite]),
+                Presenza.titolare.is_(True),
+                Presenza.griglia.is_not(None),
+            )
+            .distinct()
+        ).scalars()
+    )
+    return Copertura(
+        partite=len(partite),
+        con_arbitro=sum(1 for p in partite if p.arbitro_id is not None),
+        con_griglia=sum(1 for p in partite if p.id in ids_con_griglia),
+    )
+
+
 def prova_stagione(
     s: Session,
     stagione: int,
     k: int = 3,
     avanzamento: Callable[[int, int], None] | None = None,
+    competizione_id: int = SERIE_A,
 ) -> RisultatoProva:
     partite = s.execute(
-        select(Partita)
-        .where(
-            Partita.competizione_id == SERIE_A,
-            Partita.stagione == stagione,
-            Partita.stato.in_(STATI_FINITI),
-            Partita.statistiche_scaricate.is_(True),
-        )
-        .order_by(Partita.data_utc, Partita.id)
+        _partite_prova(stagione, competizione_id).order_by(Partita.data_utc, Partita.id)
     ).scalars().all()
 
     mercato = MercatoAmmonizioni()
@@ -108,7 +142,7 @@ def prova_stagione(
             )
             if any(gialli.get(c.giocatore_id, 0) >= 1 for c in candidati[:k]):
                 successi_modello += 1
-            if any(gialli.get(g, 0) >= 1 for g in _scelta_semplice(s, partita, titolari, k)):
+            if any(gialli.get(g, 0) >= 1 for g in _scelta_semplice(s, partita, titolari, k, competizione_id)):
                 successi_base += 1
         if avanzamento is not None:
             avanzamento(fatte, len(partite))

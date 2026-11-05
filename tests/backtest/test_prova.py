@@ -2,10 +2,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ammonizioni.backtest.prova import RisultatoProva, prova_stagione
-from ammonizioni.db.modelli import Giocatore, Partita, Presenza, Squadra
+import importlib.util
+from pathlib import Path
+
+from ammonizioni.backtest.prova import Copertura, RisultatoProva, copertura, prova_stagione
+from ammonizioni.db import sessione as modulo_sessione
+from ammonizioni.db.modelli import Arbitro, Giocatore, Partita, Presenza, Squadra
 
 SERIE_A = 135
+LIGA = 140
 COPPA_ITALIA = 137
 STAGIONE = 2025
 INIZIO = datetime(2025, 9, 1, 18, 0, tzinfo=timezone.utc)
@@ -143,3 +148,107 @@ def test_avanzamento_chiamato_dopo_ogni_partita(sessione):
     prova_stagione(sessione, STAGIONE, avanzamento=lambda fatte, totale: chiamate.append((fatte, totale)))
 
     assert chiamate == [(1, 2), (2, 2)]
+
+
+def test_liga_nello_stesso_db_non_cambia_la_serie_a(sessione):
+    anagrafica(sessione)
+    # in Liga il 14 prende 2 gialli: se contassero per la Serie A, la scelta semplice
+    # (k=1) sceglierebbe lui invece del 12
+    aggiungi_partita(sessione, 1, 0, gialli={12: 1}, statistiche=False)
+    aggiungi_partita(sessione, 2, 1, gialli={14: 1}, competizione=LIGA, statistiche=False)
+    aggiungi_partita(sessione, 3, 2, gialli={14: 1}, competizione=LIGA, statistiche=False)
+    aggiungi_partita(sessione, 4, 3, gialli={14: 1}, competizione=LIGA)  # Liga da valutare
+    aggiungi_partita(sessione, 10, 30, gialli={12: 1})
+
+    r = prova_stagione(sessione, STAGIONE, k=1)
+
+    assert r.partite == 1
+    assert r.successi_base == 1
+
+
+def test_competizione_140_conta_solo_la_liga(sessione):
+    anagrafica(sessione)
+    aggiungi_partita(sessione, 1, 0, gialli={12: 1}, statistiche=False)  # Serie A
+    aggiungi_partita(sessione, 2, 1, gialli={14: 1}, competizione=LIGA, statistiche=False)
+    aggiungi_partita(sessione, 3, 2, gialli={14: 1}, competizione=LIGA, statistiche=False)
+    aggiungi_partita(sessione, 10, 30, gialli={14: 1}, competizione=LIGA)
+    aggiungi_partita(sessione, 11, 31, gialli={12: 1})  # Serie A: non conta
+
+    r = prova_stagione(sessione, STAGIONE, k=1, competizione_id=LIGA)
+
+    assert r.partite == 1
+    assert r.successi_base == 1  # il 14 ha 2 gialli in Liga
+
+
+def test_copertura_conta_arbitro_e_griglia(sessione):
+    anagrafica(sessione)
+    sessione.add(Arbitro(id=1, nome_normalizzato="rossi", nome_visualizzato="Rossi"))
+    sessione.flush()
+    aggiungi_partita(sessione, 1, 0)  # nessun arbitro, nessuna griglia
+    aggiungi_partita(sessione, 2, 7)
+    aggiungi_partita(sessione, 3, 14)
+    aggiungi_partita(sessione, 4, 21, statistiche=False)  # non finita con statistiche: fuori
+    aggiungi_partita(sessione, 5, 28, competizione=LIGA)  # altro campionato: fuori
+    sessione.get(Partita, 2).arbitro_id = 1
+    sessione.get(Partita, 3).arbitro_id = 1
+    sessione.get(Presenza, (3, 12)).griglia = "3:2"
+    sessione.get(Presenza, (4, 12)).griglia = "3:2"
+    sessione.flush()
+
+    assert copertura(sessione, STAGIONE, SERIE_A) == Copertura(3, 2, 1)
+    assert copertura(sessione, STAGIONE, LIGA) == Copertura(1, 0, 0)
+    assert copertura(sessione, STAGIONE, 999) == Copertura(0, 0, 0)
+
+
+def _script():
+    percorso = Path(__file__).resolve().parents[2] / "scripts" / "prova_stagione.py"
+    spec = importlib.util.spec_from_file_location("prova_stagione_script", percorso)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+@pytest.mark.parametrize("valore", ["137", "0"])
+def test_script_rifiuta_campionato_non_valido(valore, capsys):
+    codice = _script().main(["--stagione", "2025", "--campionato", valore])
+
+    assert codice == 2
+    err = capsys.readouterr().err
+    assert "non valido" in err and "135 o 140" in err
+
+
+def test_script_rifiuta_campionato_non_numerico():
+    with pytest.raises(SystemExit):
+        _script().main(["--stagione", "2025", "--campionato", "abc"])
+
+
+def test_script_liga_stampa_intestazione_e_copertura(tmp_path, monkeypatch, capsys):
+    url = f"sqlite:///{tmp_path / 'prova.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    with modulo_sessione.apri(url) as s:
+        anagrafica(s)
+        aggiungi_partita(s, 10, 30, gialli={14: 1}, competizione=LIGA)
+        aggiungi_partita(s, 11, 31)  # Serie A: non appare nella prova Liga
+
+    codice = _script().main(["--stagione", str(STAGIONE), "--campionato", "140"])
+
+    fuori = capsys.readouterr().out
+    assert codice == 0
+    assert "Liga" in fuori
+    assert "Partite valutate: 1" in fuori
+    assert "Con arbitro: 0/1; con griglia dei titolari: 0/1" in fuori
+
+
+def test_script_predefinito_serie_a(tmp_path, monkeypatch, capsys):
+    url = f"sqlite:///{tmp_path / 'prova.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    with modulo_sessione.apri(url) as s:
+        anagrafica(s)
+        aggiungi_partita(s, 10, 30)
+
+    codice = _script().main(["--stagione", str(STAGIONE)])
+
+    fuori = capsys.readouterr().out
+    assert codice == 0
+    assert "Serie A" in fuori
+    assert "Partite valutate: 1" in fuori
