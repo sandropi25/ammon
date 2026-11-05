@@ -1,6 +1,6 @@
 import pytest
-from ayuda_app import PAGINA_IMPOSTAZIONI, avvia, sessione_db, url_db, visibile
-from db_prova import CASA, TRASF, popola
+from ayuda_app import PAGINA_DETTAGLIO, PAGINA_IMPOSTAZIONI, avvia, sessione_db, url_db, visibile
+from db_prova import CASA, PARTITA_FUTURA, TRASF, popola
 from sqlalchemy import select
 
 import componenti_giocate  # noqa: E402  (app/ è in sys.path grazie ad ayuda_app)
@@ -178,6 +178,53 @@ def test_peso_scalare_negativo_rifiutato():
     scalari["rivalita"] = -0.5
     with pytest.raises(ValueError, match="negativo"):
         componenti_giocate.costruisci_pesi(scalari, testi)
+
+
+@pytest.mark.parametrize(
+    "campo, valore",
+    [
+        ("minuti_prior", 0),          # ZeroDivisionError nel restringimento al ruolo
+        ("bonus_ritardo", 0),         # math domain error nelle motivazioni
+        ("rivalita", 0),
+        ("diffidato", 0),
+        ("soglia_partite_arbitro", 0),
+        ("soglia_precedenti", 0),
+        ("pesi_stagioni", "0, 0, 0"),  # ZeroDivisionError sui pesi stagionali
+        ("limiti_fattore", "0, 1.6"),  # log(0) nelle motivazioni
+    ],
+)
+def test_pesi_che_bloccano_il_motore_rifiutati(campo, valore):
+    scalari = {n: getattr(Pesi(), n) for n, _ in componenti_giocate.campi_pesi()[0]}
+    testi = {n: componenti_giocate.testo_tupla(getattr(Pesi(), n)) for n in componenti_giocate.campi_pesi()[1]}
+    if isinstance(valore, str):
+        testi[campo] = valore
+    else:
+        scalari[campo] = valore
+    with pytest.raises(ValueError, match=campo):
+        componenti_giocate.costruisci_pesi(scalari, testi)
+
+
+def test_pesi_che_bloccano_il_motore_rifiutati_dalla_pagina(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    at.number_input(key="peso_minuti_prior").set_value(0.0)
+    at.button(key="salva_pesi").click().run()
+    assert not at.exception
+    assert any("minuti_prior" in e.value for e in at.error)
+    with sessione_db() as s:
+        assert s.get(Impostazione, "pesi") is None
+
+
+def test_dettaglio_non_si_blocca_con_pesi_non_validi_nel_db(sessione_db):
+    with sessione_db() as s:
+        _prepara(s)
+        repo.scrivi_impostazione(
+            s, "pesi", {"minuti_prior": 0, "bonus_ritardo": 0, "pesi_stagioni": [0, 0, 0]}
+        )
+    at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
+    assert not at.exception
+    assert len(at.dataframe[0].value) > 0
 
 
 def test_tuple_con_virgola_decimale_e_punto_e_virgola():

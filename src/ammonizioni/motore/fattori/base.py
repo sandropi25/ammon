@@ -32,10 +32,10 @@ def _tasso_e_ritardo(
         if minuti_p > 0:
             tassi.append((peso, gialli_p / minuti_p * 90))
     minuti_tot = sum(r.minuti for r in storico)
-    if tassi:
-        somma_pesi = sum(p for p, _ in tassi)
+    somma_pesi = sum(p for p, _ in tassi)
+    if somma_pesi > 0:
         tasso = sum(p * t for p, t in tassi) / somma_pesi
-    else:
+    else:  # nessun dato, o solo stagioni con peso 0
         tasso = medie_ruolo.gialli90
 
     # 2. restringimento al ruolo

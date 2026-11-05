@@ -31,6 +31,20 @@ def test_giocatore_senza_storico_usa_media_ruolo():
     assert f.motivazione is None
 
 
+def test_peso_nullo_sull_unica_stagione_giocata_usa_la_media_del_ruolo():
+    """Pesi validi (somma > 0) ma la sola stagione con minuti ha peso 0: niente divisione
+    per zero, il tasso parte dalla media del ruolo."""
+    pesi = Pesi(pesi_stagioni=(0.0, 0.5, 0.5))
+    storico = _partite(3, 2026, 1, INIZIO)
+    senza_dati = Pesi(pesi_stagioni=(0.0, 0.5, 0.5), minuti_prior=1e12)
+    f = base_giocatore(storico, "D", medie_standard(), 2026, pesi)
+    assert 0 < f.valore < 1
+    # con un restringimento enorme resta solo la media del ruolo
+    assert tasso_base90(storico, "D", medie_standard(), 2026, senza_dati) == pytest.approx(
+        medie_standard().per_ruolo["D"].gialli90
+    )
+
+
 def test_ultime_5_pesano_doppio():
     # 10 partite, 2 gialli: nelle ultime 5 oppure nelle prime 5
     in_ultime = [0] * 5 + [1, 1, 0, 0, 0]

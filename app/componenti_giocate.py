@@ -14,7 +14,7 @@ from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE
 from ammonizioni.db.modelli import Giocata, Giocatore, ListaManuale, Partita, Squadra
 from ammonizioni.giocate.registro import aggiungi_giocata, statistiche_per_fonte
 from ammonizioni.motore.classifica import converti_quota
-from ammonizioni.motore.pesi import Pesi
+from ammonizioni.motore.pesi import Pesi, valida_pesi
 from ammonizioni.motore.tipi import decimale
 
 GIORNI_FINESTRA = 7
@@ -308,4 +308,6 @@ def costruisci_pesi(scalari: dict[str, float], testi: dict[str, str]) -> Pesi:
             raise ValueError(f"{nome}: il primo valore deve essere minore del secondo")
         if nome == "limiti_probabilita" and not 0 < valori[nome][0] < valori[nome][1] < 1:
             raise ValueError(f"{nome}: servono due probabilità con 0 < minimo < massimo < 1")
-    return replace(default, **valori)
+    pesi = replace(default, **valori)
+    valida_pesi(pesi)  # i valori che bloccherebbero il motore
+    return pesi
