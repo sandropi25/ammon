@@ -24,7 +24,7 @@ from ammonizioni.db.modelli import (
     UltimoAggiornamento,
 )
 from ammonizioni.motore.classifica import converti_quota
-from ammonizioni.motore.dati import carica_dati
+from ammonizioni.motore.dati import carica_dati, carica_dati_calda
 from ammonizioni.motore.fattori.arbitro import fattore_arbitro
 from ammonizioni.motore.mercati import MercatoAmmonizioni
 from ammonizioni.motore.pesi import carica_pesi
@@ -132,11 +132,18 @@ def stato_aggiornamento(s: Session) -> tuple[str, bool]:
 
 def e_partita_calda(dati: DatiPartita, pesi) -> bool:
     """Rivalità, campo caldo o arbitro con fattore >= 1.1 (per almeno una delle due squadre)."""
-    if dati.contesto.rivalita or dati.contesto.campo_caldo:
+    return _calda(
+        dati.contesto.rivalita, dati.contesto.campo_caldo, dati.arbitro, dati.medie,
+        dati.casa_id, dati.trasferta_id, pesi,
+    )
+
+
+def _calda(rivalita, campo_caldo, arbitro, medie, casa_id, trasferta_id, pesi) -> bool:
+    if rivalita or campo_caldo:
         return True
     return any(
-        fattore_arbitro(dati.arbitro, sq, dati.medie, pesi).valore >= SOGLIA_PARTITA_CALDA
-        for sq in (dati.casa_id, dati.trasferta_id)
+        fattore_arbitro(arbitro, sq, medie, pesi).valore >= SOGLIA_PARTITA_CALDA
+        for sq in (casa_id, trasferta_id)
     )
 
 
@@ -159,10 +166,16 @@ def prossime_partite(
     if not partite:
         return []
     pesi = carica_pesi(s)
-    nomi = {sq.id: sq.nome for sq in s.execute(select(Squadra)).scalars()}
+    ids_squadre = {p.casa_id for p in partite} | {p.trasferta_id for p in partite}
+    nomi = {
+        sq.id: sq.nome
+        for sq in s.execute(select(Squadra).where(Squadra.id.in_(ids_squadre))).scalars()
+    }
+    # per il badge servono solo liste manuali e arbitro: query raggruppate per tutte le partite
+    calde = carica_dati_calda(s, list(partite))
     righe = []
     for p in partite:
-        dati = carica_dati(s, p.id)
+        dc = calde[p.id]
         righe.append(
             RigaPartita(
                 id=p.id,
@@ -170,8 +183,11 @@ def prossime_partite(
                 giornata=p.giornata,
                 casa=nomi.get(p.casa_id, str(p.casa_id)),
                 trasferta=nomi.get(p.trasferta_id, str(p.trasferta_id)),
-                arbitro=dati.arbitro.nome if dati.arbitro and dati.arbitro.nome else None,
-                calda=e_partita_calda(dati, pesi),
+                arbitro=dc.arbitro.nome if dc.arbitro and dc.arbitro.nome else None,
+                calda=_calda(
+                    dc.rivalita, dc.campo_caldo, dc.arbitro, dc.medie,
+                    dc.casa_id, dc.trasferta_id, pesi,
+                ),
                 formazioni=p.stato_formazioni,
                 campionato=NOMI_CAMPIONATI.get(p.competizione_id, ""),
             )

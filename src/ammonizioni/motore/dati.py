@@ -1,5 +1,6 @@
 """Caricamento dal DB dello snapshot di una partita. Ogni query vede solo righe con
 Partita.data_utc < prima_di (default: calcio d'inizio), cosi' la prova storica non vede il futuro."""
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func, or_, select
@@ -208,23 +209,109 @@ def _stat_arbitro(s: Session, partita: Partita, prima_di: datetime) -> StatArbit
         )
     ).scalars().all()
     totali = _totali_partite(s, [p.id for p in sue])
-    gialli = [totali[p.id][0] for p in sue if p.id in totali]
-    falli = [totali[p.id][1] for p in sue if p.id in totali]
+    return _stat_da_righe(
+        arbitro.nome_visualizzato if arbitro else "",
+        [(p.casa_id, p.trasferta_id, *totali[p.id]) for p in sue if p.id in totali],
+    )
+
+
+def _stat_da_righe(nome: str, righe: list[tuple[int, int, int, int]]) -> StatArbitro:
+    """StatArbitro dalle partite con presenze dell'arbitro: (casa, trasferta, gialli, falli)."""
+    gialli = [r[2] for r in righe]
+    falli = [r[3] for r in righe]
     con: dict[int, tuple[float, int]] = {}
-    for squadra in {p.casa_id for p in sue} | {p.trasferta_id for p in sue}:
-        g = [
-            totali[p.id][0]
-            for p in sue
-            if p.id in totali and squadra in (p.casa_id, p.trasferta_id)
-        ]
+    for squadra in {r[0] for r in righe} | {r[1] for r in righe}:
+        g = [r[2] for r in righe if squadra in (r[0], r[1])]
         con[squadra] = (sum(g) / len(g), len(g)) if g else (0.0, 0)
     return StatArbitro(
-        nome=arbitro.nome_visualizzato if arbitro else "",
+        nome=nome,
         partite=len(gialli),
         gialli_medi=_media(gialli) or 0.0,
         falli_medi=_media(falli) or 0.0,
         gialli_medi_con={q: v for q, v in con.items() if v[1] > 0},
     )
+
+
+@dataclass(frozen=True)
+class DatiCalda:
+    """Quanto serve per il badge "partita calda": niente storico dei giocatori."""
+    casa_id: int
+    trasferta_id: int
+    rivalita: bool
+    campo_caldo: bool
+    arbitro: StatArbitro | None
+    medie: MedieCampionato
+
+
+def carica_dati_calda(s: Session, partite: list[Partita]) -> dict[int, DatiCalda]:
+    """DatiCalda di piu' partite con poche query raggruppate (invece di un `carica_dati` per
+    partita): liste manuali una volta, statistiche degli arbitri in un'unica query, medie del
+    campionato una volta per (campionato, stagione). Stessi valori di `carica_dati` per ogni
+    partita; le medie usano come "prima di" la prima partita del gruppo (le partite future non
+    hanno statistiche, quindi il risultato e' lo stesso)."""
+    if not partite:
+        return {}
+    liste = s.execute(
+        select(ListaManuale.tipo, ListaManuale.squadra_a_id, ListaManuale.squadra_b_id).where(
+            ListaManuale.tipo.in_(("derby", "campo_caldo"))
+        )
+    ).all()
+    derby = {_coppia(a, b) for t, a, b in liste if t == "derby" and b is not None}
+    campi_caldi = {a for t, a, _ in liste if t == "campo_caldo"}
+
+    # statistiche degli arbitri coinvolti: una query raggruppata per partita arbitrata
+    arbitri_ids = {p.arbitro_id for p in partite if p.arbitro_id is not None}
+    nomi_arbitri: dict[int, str] = {}
+    giocate: dict[int, list[tuple[int, int, int, int, int, datetime]]] = {}
+    if arbitri_ids:
+        nomi_arbitri = {
+            a.id: a.nome_visualizzato
+            for a in s.execute(select(Arbitro).where(Arbitro.id.in_(arbitri_ids))).scalars()
+        }
+        limite = max(p.data_utc for p in partite if p.arbitro_id is not None)
+        for arb, pid, casa, trasf, data, g, f in s.execute(
+            select(
+                Partita.arbitro_id, Partita.id, Partita.casa_id, Partita.trasferta_id,
+                Partita.data_utc, func.sum(Presenza.gialli), func.sum(Presenza.falli_commessi),
+            )
+            .join(Presenza, Presenza.partita_id == Partita.id)
+            .where(
+                Partita.arbitro_id.in_(arbitri_ids),
+                Partita.statistiche_scaricate.is_(True),
+                Partita.data_utc < limite,
+            )
+            .group_by(Partita.arbitro_id, Partita.id, Partita.casa_id, Partita.trasferta_id,
+                      Partita.data_utc)
+        ).all():
+            giocate.setdefault(arb, []).append((pid, casa, trasf, int(g or 0), int(f or 0), data))
+
+    medie: dict[tuple[int, int], MedieCampionato] = {}
+    risultato: dict[int, DatiCalda] = {}
+    for p in partite:
+        campionato = _campionato_partita(s, p)
+        chiave = (campionato, p.stagione)
+        if chiave not in medie:
+            prima = min(q.data_utc for q in partite if (q.stagione == p.stagione))
+            medie[chiave] = _medie_campionato(s, p.stagione, prima, campionato)
+        arbitro = None
+        if p.arbitro_id is not None:
+            arbitro = _stat_da_righe(
+                nomi_arbitri.get(p.arbitro_id, ""),
+                [
+                    (casa, trasf, g, f)
+                    for pid, casa, trasf, g, f, data in giocate.get(p.arbitro_id, [])
+                    if data < p.data_utc and pid != p.id
+                ],
+            )
+        risultato[p.id] = DatiCalda(
+            casa_id=p.casa_id,
+            trasferta_id=p.trasferta_id,
+            rivalita=_coppia(p.casa_id, p.trasferta_id) in derby,
+            campo_caldo=p.casa_id in campi_caldi,
+            arbitro=arbitro,
+            medie=medie[chiave],
+        )
+    return risultato
 
 
 def _contesto(
