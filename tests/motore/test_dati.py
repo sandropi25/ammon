@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 from costruttori import medie_standard
 from db_prova import CASA, DATA_FUTURA, INIZIO, PARTITA_FUTURA, TRASF, popola
+from sqlalchemy import update
 
 from ammonizioni.db.modelli import (
     DuelloManuale,
@@ -14,7 +15,7 @@ from ammonizioni.db.modelli import (
 )
 from ammonizioni.motore.dati import MEDIE_PREDEFINITE, carica_dati
 from ammonizioni.motore.mercati import MercatoAmmonizioni
-from ammonizioni.motore.tipi import Titolare
+from ammonizioni.motore.tipi import RUOLI, Titolare
 
 
 def test_carica_dati_base(sessione):
@@ -70,6 +71,32 @@ def test_medie_per_ruolo_e_predefinite(sessione):
     assert m.per_ruolo["D"].voto == pytest.approx(6.0)
     # G: nessun giallo/dribbling/gol -> valori <= 0 sostituiti dai predefiniti
     assert m.per_ruolo["G"].gialli90 == MEDIE_PREDEFINITE.per_ruolo["G"].gialli90
+    # lega senza alcun dribbling (come ESPN): dato assente = 0, non il valore predefinito
+    assert m.per_ruolo["M"].dribbling90 == 0.0
+
+
+def test_lega_senza_dribbling_e_senza_voti_segnala_dato_assente(sessione):
+    popola(sessione)
+    sessione.execute(update(Presenza).values(dribbling_tentati=0, voto=None))
+    sessione.flush()
+    m = carica_dati(sessione, PARTITA_FUTURA).medie
+    for ruolo in RUOLI:
+        assert m.per_ruolo[ruolo].dribbling90 == 0.0
+        assert m.per_ruolo[ruolo].voto is None
+    # le altre medie restano quelle misurate
+    assert m.per_ruolo["D"].falli90 == pytest.approx(2.0)
+
+
+def test_lega_con_dribbling_e_voti_usa_i_valori_misurati(sessione):
+    """Guardia di regressione (dati tipo API-Football): nessun cambiamento rispetto a prima."""
+    popola(sessione)
+    sessione.execute(update(Presenza).where(Presenza.giocatore_id == 12).values(dribbling_tentati=3))
+    sessione.flush()
+    m = carica_dati(sessione, PARTITA_FUTURA).medie
+    # ruolo D: giocatori 12 e 22 (6 partite x 90'), 3 dribbling x 6 partite -> 18 in 1080'
+    assert m.per_ruolo["D"].dribbling90 == pytest.approx(18 / (12 * 90) * 90)
+    assert m.per_ruolo["D"].voto == pytest.approx(6.0)
+    # ruolo senza dribbling in una lega che li ha: ancora il predefinito, come prima
     assert m.per_ruolo["M"].dribbling90 == MEDIE_PREDEFINITE.per_ruolo["M"].dribbling90
 
 
@@ -77,6 +104,9 @@ def test_senza_dati_medie_predefinite(sessione):
     popola(sessione)
     d = carica_dati(sessione, PARTITA_FUTURA, prima_di=INIZIO)
     assert d.medie == MEDIE_PREDEFINITE
+    # DB senza partite: ne' dribbling a 0 ne' voto assente, restano i predefiniti
+    assert d.medie.per_ruolo["M"].dribbling90 == MEDIE_PREDEFINITE.per_ruolo["M"].dribbling90 > 0
+    assert d.medie.per_ruolo["M"].voto == MEDIE_PREDEFINITE.per_ruolo["M"].voto
     assert d.arbitro is not None and d.arbitro.partite == 0
     assert d.contesto.precedenti_gialli_medi is None
 

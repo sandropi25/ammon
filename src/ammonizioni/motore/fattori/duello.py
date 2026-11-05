@@ -106,7 +106,11 @@ def _scarto_forma(recente: float | None, stagione: float | None) -> float:
 
 
 def _forma(ordinate: list[RigaPresenza]) -> float:
-    """Media degli scarti di gol+assist/90 e voto (ultime 5 contro stagione piu' recente)."""
+    """Media degli scarti di gol+assist/90 e voto (ultime 5 contro stagione piu' recente).
+
+    Il voto entra solo se esiste sia nelle ultime 5 sia nella stagione (fonti senza voto:
+    conta il solo scarto dei gol+assist, senza dimezzarlo).
+    """
     if not ordinate:
         return 0.0
     ultima_stagione = max(r.stagione for r in ordinate)
@@ -117,9 +121,11 @@ def _forma(ordinate: list[RigaPresenza]) -> float:
         minuti = sum(r.minuti for r in righe)
         return sum(r.gol + r.assist for r in righe) / minuti * 90 if minuti > 0 else None
 
-    scarto_ga = _scarto_forma(ga90(ultime5), ga90(stagione))
-    scarto_voto = _scarto_forma(_voto_medio(ultime5), _voto_medio(stagione))
-    return (scarto_ga + scarto_voto) / 2
+    scarti = [_scarto_forma(ga90(ultime5), ga90(stagione))]
+    voto_recente, voto_stagione = _voto_medio(ultime5), _voto_medio(stagione)
+    if voto_recente is not None and voto_stagione is not None:
+        scarti.append(_scarto_forma(voto_recente, voto_stagione))
+    return sum(scarti) / len(scarti)
 
 
 def fattore_duello(

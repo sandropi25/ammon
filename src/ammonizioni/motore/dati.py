@@ -137,6 +137,13 @@ def _medie_campionato(s: Session, stagione: int, prima_di: datetime) -> MedieCam
         for i, v in enumerate(valori):
             acc[i] += v or 0
 
+    # "dato assente" (fonte senza dribbling/voto) e' diverso da "nessun dato" (DB vuoto):
+    # solo nel secondo caso valgono i predefiniti. Con minuti ma zero dribbling in tutta la
+    # lega, dribbling90 = 0 (il duello lo tratta come neutro); senza alcun voto, voto = None.
+    ci_sono_minuti = sum(v[0] for v in somme.values()) > 0
+    lega_senza_dribbling = ci_sono_minuti and sum(v[4] for v in somme.values()) == 0
+    lega_senza_voti = ci_sono_minuti and sum(v[7] for v in somme.values()) == 0
+
     medie: dict[str, MedieRuolo] = {}
     for ruolo in RUOLI:
         minuti, gialli, falli, subiti, drib, ga, voto_somma, voto_n = somme[ruolo]
@@ -149,9 +156,13 @@ def _medie_campionato(s: Session, stagione: int, prima_di: datetime) -> MedieCam
             gialli90=_positivo(per90(gialli), pre.gialli90),
             falli90=_positivo(per90(falli), pre.falli90),
             falli_subiti90=_positivo(per90(subiti), pre.falli_subiti90),
-            dribbling90=_positivo(per90(drib), pre.dribbling90),
+            dribbling90=0.0
+            if lega_senza_dribbling
+            else _positivo(per90(drib), pre.dribbling90),
             ga90=_positivo(per90(ga), pre.ga90),
-            voto=_positivo(voto_somma / voto_n if voto_n else None, pre.voto),
+            voto=None
+            if lega_senza_voti
+            else _positivo(voto_somma / voto_n if voto_n else None, pre.voto),
         )
     return MedieCampionato(gialli_partita, falli_partita, medie)
 

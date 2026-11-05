@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 from costruttori import medie_standard, riga
 
@@ -177,6 +179,76 @@ def test_pochi_dati_attenuano():
 def test_nessun_avversario_fattore_neutro():
     f = fattore_duello(None, [], medie_standard(), Pesi())
     assert (f.nome, f.valore, f.motivazione, f.n_dati) == ("duello", 1.0, None, 0)
+
+
+def _medie_senza_dribbling():
+    """Campionato come ESPN: media dribbling di ruolo a 0 (dato assente)."""
+    standard = medie_standard()
+    return replace(
+        standard,
+        per_ruolo={r: replace(m, dribbling90=0.0) for r, m in standard.per_ruolo.items()},
+    )
+
+
+def test_fattore_con_dribbling_e_voti_uguale_alla_formula():
+    """Guardia di regressione (dati tipo API-Football): valore completo calcolato a mano."""
+    vecchie = [riga(gol=0, falli_subiti=3, dribbling_tentati=4, voto=6.0) for _ in range(5)]
+    recenti = [riga(gol=1, falli_subiti=3, dribbling_tentati=4, voto=7.0) for _ in range(5)]
+    pesi = Pesi()
+    # media F: falli subiti 1,5 e dribbling 1,8 per 90'; 10 partite da 90' (nessuna attenuazione)
+    rapporto_fs = 3 / 1.5
+    rapporto_drib = 4 / 1.8
+    scarto_ga = max(-1.0, min(1.0, 1.0 / 0.5 - 1))  # ultime 5: 1,0 ga/90 ; stagione: 0,5
+    scarto_voto = 7.0 / 6.5 - 1  # ultime 5: 7,0 ; stagione: 6,5
+    atteso = (
+        1
+        + pesi.coeff_falli_subiti * (rapporto_fs - 1)
+        + pesi.coeff_dribbling * (rapporto_drib - 1)
+        + pesi.coeff_forma * (scarto_ga + scarto_voto) / 2
+    )
+    f = fattore_duello(_avv(), vecchie + recenti, medie_standard(), pesi)
+    assert f.valore == pytest.approx(atteso)
+    assert 1.0 < atteso < 1.6  # non e' il limite a decidere il valore
+
+
+def test_media_dribbling_zero_nessun_effetto():
+    medie = _medie_senza_dribbling()
+    senza = [riga(gol=0, falli_subiti=3, dribbling_tentati=0, voto=6.2) for _ in range(10)]
+    con = [riga(gol=0, falli_subiti=3, dribbling_tentati=9, voto=6.2) for _ in range(10)]
+    f_senza = fattore_duello(_avv(), senza, medie, Pesi())
+    f_con = fattore_duello(_avv(), con, medie, Pesi())
+    assert f_con.valore == pytest.approx(f_senza.valore)
+    # il solo termine falli subiti (3/1,5 = 2) resta attivo: 1 + 0,25
+    assert f_senza.valore == pytest.approx(1 + Pesi().coeff_falli_subiti)
+
+
+def test_media_falli_subiti_zero_termine_neutro():
+    standard = medie_standard()
+    medie = replace(
+        standard,
+        per_ruolo={r: replace(m, falli_subiti90=0.0) for r, m in standard.per_ruolo.items()},
+    )
+    righe = [riga(gol=0, falli_subiti=9, dribbling_tentati=1.8, voto=6.2) for _ in range(10)]
+    assert fattore_duello(_avv(), righe, medie, Pesi()).valore == pytest.approx(1.0)
+
+
+def test_avversario_senza_voti_forma_solo_con_ga90():
+    """Senza voti la forma e' lo scarto dei soli gol+assist, non meta' dello scarto."""
+    pesi = Pesi()
+    vecchie = [riga(gol=0, falli_subiti=1.5, dribbling_tentati=1.8, voto=None) for _ in range(5)]
+    recenti = [riga(gol=1, falli_subiti=1.5, dribbling_tentati=1.8, voto=None) for _ in range(5)]
+    # fs e dribbling nella media: restano solo i 5 gol su 10 partite -> scarto ga = +1 (limitato)
+    f = fattore_duello(_avv(), vecchie + recenti, medie_standard(), pesi)
+    assert f.valore == pytest.approx(1 + pesi.coeff_forma * 1.0)
+
+
+def test_voto_solo_nelle_ultime_o_solo_in_stagione_non_conta():
+    pesi = Pesi()
+    # voto presente solo nella parte vecchia: le ultime 5 non hanno voti -> componente assente
+    vecchie = [riga(gol=0, falli_subiti=1.5, dribbling_tentati=1.8, voto=6.0) for _ in range(5)]
+    recenti = [riga(gol=1, falli_subiti=1.5, dribbling_tentati=1.8, voto=None) for _ in range(5)]
+    f = fattore_duello(_avv(), vecchie + recenti, medie_standard(), pesi)
+    assert f.valore == pytest.approx(1 + pesi.coeff_forma * 1.0)
 
 
 def test_avversario_senza_minuti_neutro():

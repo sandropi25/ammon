@@ -38,9 +38,9 @@ class MedieRuolo:
     gialli90: float
     falli90: float
     falli_subiti90: float
-    dribbling90: float
+    dribbling90: float  # 0 = la lega non ha il dato (fonte senza dribbling)
     ga90: float
-    voto: float
+    voto: float | None  # None = la lega non ha voti (fonte senza voto)
 
 
 @dataclass(frozen=True)
