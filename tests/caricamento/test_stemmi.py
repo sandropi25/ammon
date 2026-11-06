@@ -115,6 +115,29 @@ def test_riempimento_una_tantum_dai_calendari(sessione):
     assert sessione.get(Squadra, 4) is None
 
 
+def test_script_riempi_stemmi_con_fonte_finta(sessione, capsys):
+    import importlib.util
+    from contextlib import contextmanager
+    from pathlib import Path
+
+    percorso = Path(__file__).resolve().parents[2] / "scripts" / "riempi_stemmi.py"
+    spec = importlib.util.spec_from_file_location("riempi_stemmi", percorso)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    sessione.add(Squadra(id=1, nome="Como"))
+    sessione.flush()
+    serie_a = [replace(partita_dati(1, QUANDO, casa=(1, "Como")), casa_stile=COMO)]
+    fonte = FonteFinta(calendari={(135, 2026): serie_a})
+
+    @contextmanager
+    def apri():
+        yield sessione
+
+    assert script.main([], crea_fonte=lambda s, p: fonte, apri=apri) == 0
+    assert sessione.get(Squadra, 1).logo_url == COMO.logo_url
+    assert "aggiornati: 1" in capsys.readouterr().out
+
+
 def test_formazione_ufficiale_salva_i_numeri_di_maglia(sessione):
     sessione.add_all([Squadra(id=1, nome="Casa"), Squadra(id=2, nome="Trasferta")])
     sessione.add(Partita(
