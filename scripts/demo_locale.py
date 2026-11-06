@@ -217,6 +217,27 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                       quota=2.6, puntata=5.0, esito="in_attesa"))
         s.add(UltimoAggiornamento(job="notte", quando_utc=adesso - timedelta(hours=7), completo=True))
 
+        # biografie (inventate, come i giocatori) per i giocatori di movimento di alcune squadre:
+        # le mostra la Home; il link porta alla voce generica "Calciatore" di Wikipedia
+        rnd_b = random.Random(7)
+        posizioni = {"D": "Difensore", "M": "Centrocampista", "F": "Attaccante"}
+        nazioni = ["Italia", "Spagna", "Argentina", "Brasile", "Francia", "Croazia"]
+        for sq in (inter, milan, napoli, squadre[LIGA][0]):
+            for g, ruolo, _ in rose[sq][1:]:
+                giocatore = s.get(Giocatore, g)
+                giocatore.data_nascita = date(rnd_b.randint(1992, 2004), rnd_b.randint(1, 12), rnd_b.randint(1, 28))
+                giocatore.nazionalita = rnd_b.choice(nazioni)
+                giocatore.altezza_cm = rnd_b.randint(172, 194)
+                giocatore.posizione = posizioni[ruolo]
+                giocatore.wiki_titolo = giocatore.nome
+                giocatore.wiki_url = "https://it.wikipedia.org/wiki/Calciatore"
+                giocatore.wiki_estratto = (
+                    f"{giocatore.nome} è un calciatore inventato per i dati dimostrativi, "
+                    f"{posizioni[ruolo].lower()} di grande temperamento: in campo non si "
+                    "risparmia e gli arbitri lo conoscono bene."
+                )
+                giocatore.bio_aggiornata = adesso
+
 
 def main() -> None:
     if len(sys.argv) > 1:

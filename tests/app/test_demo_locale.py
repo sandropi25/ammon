@@ -2,7 +2,7 @@
 import importlib.util
 
 from ayuda_app import (
-    PAGINA_CALDE, PAGINA_CALENDARIO, PAGINA_DETTAGLIO, PAGINA_GIOCATE, PAGINA_IMPOSTAZIONI,
+    PAGINA_CALDE, PAGINA_CALENDARIO, PAGINA_DETTAGLIO, PAGINA_GIOCATE, PAGINA_HOME, PAGINA_IMPOSTAZIONI,
     PAGINA_PARTITE, RADICE, avvia, sessione_db, url_db, visibile,
 )
 from sqlalchemy import func, select
@@ -59,6 +59,17 @@ def test_demo_popola_e_le_pagine_funzionano(url_db, sessione_db):
     schede = [m.value for m in at.markdown if 'class="cr-partita"' in m.value]
     assert len(schede) == 4 and all("cr-gol" in x and "🟨" in x for x in schede)
     assert any("🟥 1 rosso" in x for x in schede)  # il rosso del subentrato dalla panchina
+    # Home: riquadri, classifica, grafici e biografie dimostrative
+    at = avvia(PAGINA_HOME)
+    assert not at.exception
+    t = visibile(at)
+    assert "Partita più calda" in t and "Inter – Milan" in t
+    assert "Profili dei più ammoniti" in t and "calciatore inventato" in t
+    # menu della Serie A aperto: la giornata 9 con il derby caldo
+    at.session_state["menu_serie-a"] = True
+    at.run()
+    voci = [m.value for m in at.markdown if 'class="cr-voce-menu"' in m.value]
+    assert any("Inter" in v and "Milan" in v and "🔥" in v for v in voci)
     at = avvia(PAGINA_GIOCATE, tema="chiaro")
     assert not at.exception
     assert any('class="cr-tessera"' in m.value for m in at.markdown)
