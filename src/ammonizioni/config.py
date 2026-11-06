@@ -81,6 +81,15 @@ CAMPO_CALDO_STAGIONI = 2
 CAMPO_CALDO_SOGLIA = 1.20
 CAMPO_CALDO_PARTITE_MINIME = 15
 
+# Zone colorate della classifica (pagina Classifica): posizioni da/a di ogni zona europea e
+# numero di squadre retrocesse (le ultime). DA VERIFICARE ogni stagione (posti europei
+# in più per il ranking UEFA, coppe nazionali).
+ZONE_CLASSIFICA: dict[int, tuple[tuple[str, int, int], ...]] = {
+    135: (("champions", 1, 4), ("europa", 5, 6), ("conference", 7, 7)),
+    140: (("champions", 1, 4), ("europa", 5, 6), ("conference", 7, 7)),
+}
+RETROCESSE: dict[int, int] = {135: 3, 140: 3}
+
 # Partita calda: cartellini attesi (gialli + rossi) pari o sopra questa soglia, oppure derby.
 SOGLIA_CARTELLINI_ATTESI = 5.5
 
