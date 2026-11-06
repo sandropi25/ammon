@@ -80,6 +80,7 @@ for n, (titolo_giorno, del_giorno) in enumerate(componenti.raggruppa_per_giorno(
         for p in del_giorno:
             with st.container(key=f"scheda_partita_{p.id}"):
                 st.markdown(stile.scheda_partita(p), unsafe_allow_html=True)
+                stile.link_arbitro(p.arbitro_id, p.arbitro, str(p.id))
                 st.page_link(
                     "pagine/1_Dettaglio_partita.py",
                     label="Apri dettaglio →",

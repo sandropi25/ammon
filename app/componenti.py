@@ -202,6 +202,7 @@ class RigaPartita:
     # stemmi ESPN (None: immagini spente o stemma non noto -> iniziali)
     logo_casa: str | None = None
     logo_trasferta: str | None = None
+    arbitro_id: int | None = None  # per il link alla scheda dell'arbitro (pagina Arbitri)
 
 
 # ---------------------------------------------------------------- immagini ESPN
@@ -448,9 +449,12 @@ def righe_partite(s: Session, partite: list[Partita]) -> list[RigaPartita]:
             stato=p.stato,
             logo_casa=loghi.get(p.casa_id),
             logo_trasferta=loghi.get(p.trasferta_id),
+            arbitro_id=p.arbitro_id,
         )
         if p.stato in STATI_FINITI:
             gialli, rossi = cartellini.get(p.id, (None, None))
+            if gialli is None and p.gialli_totali is not None and p.rossi_totali is not None:
+                gialli, rossi = p.gialli_totali, p.rossi_totali  # dal tabellone ESPN
             righe.append(RigaPartita(
                 **comune, arbitro=arbitri_finite.get(p.arbitro_id), calda=False, finita=True,
                 gol_casa=p.gol_casa, gol_trasferta=p.gol_trasferta, gialli=gialli, rossi=rossi,
@@ -492,6 +496,7 @@ class InfoPartita:
     data_utc: datetime
     giornata: int | None
     stato_formazioni: str
+    arbitro_id: int | None = None  # per il link alla scheda dell'arbitro
 
 
 @dataclass(frozen=True)
@@ -613,7 +618,10 @@ def carica_dettaglio(s: Session, partita_id: int, quote: dict[int, float]) -> De
     pesi = carica_pesi(s)
     candidati = classifica(dati, pesi, quote or None)
     return Dettaglio(
-        partita=InfoPartita(partita.id, partita.data_utc, partita.giornata, partita.stato_formazioni),
+        partita=InfoPartita(
+            partita.id, partita.data_utc, partita.giornata, partita.stato_formazioni,
+            partita.arbitro_id,
+        ),
         dati=dati,
         candidati=candidati,
         tipster=tipster_per_giocatore(s, partita_id),

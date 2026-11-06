@@ -11,6 +11,7 @@ from datetime import datetime
 import streamlit as st
 
 import componenti
+import componenti_arbitri
 import componenti_calde
 import componenti_calendario
 import componenti_classifica
@@ -217,6 +218,35 @@ def _classifiche(db: str, campionati: tuple[int, ...], stagione: int):
 def classifiche(campionati: tuple[int, ...], stagione: int = config.STAGIONE_CORRENTE):
     """Classifiche dei campionati dati (tre query raggruppate in tutto), in cache."""
     return _classifiche(config.url_database(), tuple(campionati), stagione)
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)
+def _elenco_arbitri(db: str, campionati: tuple[int, ...]):
+    with apri(db) as s:
+        return componenti_arbitri.carica_elenco(s, campionati)
+
+
+def elenco_arbitri(campionati: tuple[int, ...]):
+    """Arbitri dei campionati dati con le loro medie (una query raggruppata), in cache."""
+    return _elenco_arbitri(config.url_database(), tuple(campionati))
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=50, show_spinner=False)
+def _scheda_arbitro(db: str, arbitro_id: int, blocco: datetime):
+    with apri(db) as s:
+        scheda = componenti_arbitri.scheda_arbitro(s, arbitro_id, blocco)
+    if scheda is None:
+        raise LookupError(arbitro_id)  # le eccezioni non finiscono in cache
+    return scheda
+
+
+def scheda_arbitro(arbitro_id: int, adesso: datetime):
+    """SchedaArbitro (cache per ora intera), o None se l'arbitro non esiste."""
+    blocco = adesso.replace(minute=0, second=0, microsecond=0)
+    try:
+        return _scheda_arbitro(config.url_database(), arbitro_id, blocco)
+    except LookupError:
+        return None
 
 
 def svuota() -> None:

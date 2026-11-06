@@ -31,6 +31,7 @@ pagine = [
     st.Page("pagine/6_Partite_calde.py", title="Partite calde", icon="🔥"),
     st.Page("pagine/8_Classifica.py", title="Classifica", icon="🏆"),
     st.Page("pagine/5_Calendario.py", title="Calendario", icon="🗓️"),
+    st.Page("pagine/9_Arbitri.py", title="Arbitri", icon="🟨"),
     st.Page("pagine/4_Cerca.py", title="Cerca", icon="🔎"),
     st.Page("pagine/1_Dettaglio_partita.py", title="Dettaglio partita", visibility="hidden"),
     st.Page("pagine/2_Giocate.py", title="Giocate", icon="🎯"),

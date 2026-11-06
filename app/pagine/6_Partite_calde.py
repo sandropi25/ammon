@@ -40,6 +40,7 @@ def mostra(righe, prefisso: str) -> None:
             for p in del_giorno:
                 with st.container(key=f"scheda_partita_{prefisso}_{p.id}"):
                     st.markdown(stile.scheda_partita(p), unsafe_allow_html=True)
+                    stile.link_arbitro(p.arbitro_id, p.arbitro, f"{prefisso}_{p.id}")
                     st.page_link(
                         "pagine/1_Dettaglio_partita.py",
                         label="Apri dettaglio →",

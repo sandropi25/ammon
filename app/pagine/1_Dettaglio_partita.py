@@ -82,10 +82,13 @@ if pagina.campo is not None and (pagina.campo.casa.titolari or pagina.campo.tras
         st.markdown(campo.campo_html(pagina.campo), unsafe_allow_html=True)
 contesto = stile.scheda_contesto(componenti.righe_contesto(dati))
 # il contesto accanto al campo su desktop, sotto il campo su telefono
+nome_arbitro = dati.arbitro.nome if dati.arbitro and dati.arbitro.nome else None
 with sinistra, st.container(key="solo_desktop_contesto"):
     st.markdown(contesto, unsafe_allow_html=True)
+    stile.link_arbitro(partita.arbitro_id, nome_arbitro, "dettaglio_desktop")
 with st.container(key="solo_telefono_contesto"):
     st.markdown(contesto, unsafe_allow_html=True)
+    stile.link_arbitro(partita.arbitro_id, nome_arbitro, "dettaglio_telefono")
 
 if cambi:
     st.subheader("Cambi rispetto alle formazioni probabili")

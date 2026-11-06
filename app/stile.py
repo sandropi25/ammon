@@ -15,6 +15,7 @@ from urllib.parse import quote
 import streamlit as st
 
 import componenti
+import componenti_arbitri as ca
 import componenti_classifica as cc
 from ammonizioni.config import NOMI_CAMPIONATI
 from ammonizioni.motore.tipi import decimale
@@ -629,6 +630,7 @@ img.cr-stemma--img {{ object-fit: contain; border-radius: 0; box-shadow: none; b
 {"" if chiaro else "img.cr-stemma--img { filter: drop-shadow(0 0 1px rgba(255,255,255,.75)) drop-shadow(0 0 2px rgba(255,255,255,.25)); }"}
 {css_campo(tema)}
 {css_classifica(tema)}
+{css_arbitri(tema)}
 {css_sfondo_3d(tema) if animato else ""}
 
 /* telefono: una colonna, sfondo più rado, niente tabelle larghe */
@@ -781,6 +783,39 @@ def css_classifica(tema: str) -> str:
   }}
   .cr-cl-altro-voci b {{ color: var(--cr-testo); }}
 }}
+"""
+
+
+def css_arbitri(tema: str) -> str:
+    """CSS della pagina Arbitri e della scheda arbitro: l'elenco riusa il contenitore e le
+    righe cliccabili della Classifica (stesse chiavi `tabella_cl_`/`riga_cl_`) con colonne
+    sue; le partite dell'arbitro sono riquadri; il link "Scheda arbitro" sotto le schede
+    partita resta cliccabile sopra la scheda (che porta tutta al Dettaglio)."""
+    return """
+.cr-ar-riga { grid-template-columns: 2.1rem minmax(0, 1fr) 3rem 4rem 4rem 4.4rem 3.8rem; }
+.cr-ar-camp {
+  font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--cr-testo2); border: 1px solid var(--cr-bordo); border-radius: 999px; padding: 0 .45rem;
+  white-space: nowrap;
+}
+.cr-ar-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 1rem; }
+.cr-ar-partita {
+  background: var(--cr-superficie); border: 1px solid var(--cr-bordo); border-radius: 14px;
+  box-shadow: var(--cr-ombra); padding: 12px 14px;
+}
+.cr-ar-partita .cr-squadre { margin-top: .5rem; }
+.cr-ar-nota { font-size: .85rem; color: var(--cr-testo2); margin: .2rem 0 1rem; }
+[class*="st-key-scheda_partita_"] [class*="st-key-link_arbitro_"] [data-testid="stPageLink"] a {
+  position: relative !important; z-index: 2; justify-content: flex-start; padding: 0 !important;
+}
+[class*="st-key-scheda_partita_"] [class*="st-key-link_arbitro_"] [data-testid="stPageLink"] a::after { display: none; }
+[class*="st-key-link_arbitro_"] [data-testid="stPageLink"] a { background: transparent !important; padding-left: 0 !important; }
+[class*="st-key-link_arbitro_"] [data-testid="stPageLink"] a * { color: var(--cr-link) !important; font-weight: 700; font-size: .88rem; }
+@media (max-width: 640px) {
+  .cr-ar-riga { grid-template-columns: 1.5rem minmax(0, 1fr) 1.9rem 2.7rem 2.7rem 1.6rem; }
+  .cr-ar-riga .cr-cl-ext { display: none; }
+  .cr-ar-camp { display: none; }
+}
 """
 
 
@@ -1319,6 +1354,139 @@ def legenda_zone(zone) -> str:
         for z in zone
     )
     return f'<div class="cr-cl-legenda">{voci}</div>'
+
+
+# ---------------------------------------------------------------- arbitri
+
+PAGINA_ARBITRI = "pagine/9_Arbitri.py"
+
+
+def link_arbitro(arbitro_id: int | None, nome: str | None, chiave: str) -> None:
+    """Link "Scheda arbitro" sotto una scheda partita o nel Dettaglio: porta a
+    /Arbitri?arbitro=<id>. Nessun link se l'arbitro non e' designato. `chiave` rende unico
+    il contenitore nella pagina; il CSS lo tiene cliccabile sopra la scheda."""
+    if arbitro_id is None or not nome:
+        return
+    with st.container(key=f"link_arbitro_{chiave}"):
+        st.page_link(
+            PAGINA_ARBITRI, label=f"Scheda arbitro {nome} →", query_params={"arbitro": arbitro_id}
+        )
+
+
+def testa_arbitri() -> str:
+    """Intestazione delle colonne dell'elenco arbitri."""
+    celle = [
+        '<span class="cr-cl-pos">#</span>', '<span class="cr-cl-sq">Arbitro</span>',
+        _cella("P", titolo="Partite arbitrate (con i cartellini noti)"),
+        _cella("🟨/P", "cr-cl-gialli", "Gialli a partita"),
+        _cella("🟥/P", "cr-cl-rossi", "Rossi a partita"),
+        _cella("Falli/P", "cr-cl-ext", "Falli a partita (entrambe le squadre)"),
+        _cella("% 🟥", "cr-cl-ext", "Partite con almeno un rosso"),
+    ]
+    return '<div class="cr-cl-riga cr-ar-riga cr-cl-testa">' + "".join(celle) + "</div>"
+
+
+def riga_arbitro(posizione: int, r, mostra_campionato: bool) -> str:
+    """Una riga dell'elenco arbitri (`componenti_arbitri.RigaArbitro`). Su telefono falli e
+    percentuale di rossi stanno in una riga espandibile. Tutto con escape."""
+    t = r.totale
+    gialli, rossi = ca.numero(t.gialli_media), ca.numero(t.rossi_media)
+    falli, rosso_pc = ca.numero(t.falli_media, 1), ca.percentuale(t.percentuale_rosso)
+    sigla = ""
+    if mostra_campionato:
+        sigla = " ".join(
+            f'<span class="cr-ar-camp">{escape(NOMI_CAMPIONATI.get(c, ""))}</span>' for c in r.campionati
+        )
+    celle = [
+        f'<span class="cr-cl-pos">{posizione}</span>',
+        f'<span class="cr-cl-sq"><span class="cr-cl-nome">{escape(r.nome)}</span>{sigla}</span>',
+        _cella(t.partite),
+        _cella(gialli, "cr-cl-gialli"), _cella(rossi, "cr-cl-rossi"),
+        _cella(falli, "cr-cl-ext"), _cella(rosso_pc, "cr-cl-ext"),
+    ]
+    voci = (
+        f"<span><b>{escape(falli)}</b> falli a partita</span>"
+        f"<span><b>{escape(rosso_pc)}</b> partite con un rosso</span>"
+    )
+    return (
+        '<div class="cr-cl-riga cr-ar-riga">' + "".join(celle) + "</div>"
+        '<details class="cr-cl-altro"><summary title="Altri dati">▾</summary>'
+        f'<div class="cr-cl-altro-voci">{voci}</div></details>'
+    )
+
+
+def _voci_statistiche(t) -> list[tuple[str, object]]:
+    return [
+        ("Partite", t.partite),
+        ("🟨 a partita", ca.numero(t.gialli_media)),
+        ("🟥 a partita", ca.numero(t.rossi_media)),
+        ("Falli a partita", ca.numero(t.falli_media, 1)),
+        ("Partite con un rosso", ca.percentuale(t.percentuale_rosso)),
+    ]
+
+
+def tessera_statistiche(titolo: str, sotto: str, t) -> str:
+    """Riquadro con le medie di un gruppo di partite (`componenti_arbitri.Statistiche`)."""
+    return tessera(titolo, sotto, _voci_statistiche(t))
+
+
+COLONNE_ARBITRO_STAGIONI = ("Campionato", "Stagione", "Partite", "🟨/P", "🟥/P", "Falli/P", "% con 🟥")
+
+
+def celle_stagione_arbitro(campionato: str, stagione: str, t) -> list[str]:
+    return [
+        campionato, stagione, str(t.partite), ca.numero(t.gialli_media), ca.numero(t.rossi_media),
+        ca.numero(t.falli_media, 1), ca.percentuale(t.percentuale_rosso),
+    ]
+
+
+def _gol(valore: int | None) -> str:
+    return "–" if valore is None else str(valore)
+
+
+def partita_arbitrata(p) -> str:
+    """Una delle ultime partite dell'arbitro: data, squadre con stemma e risultato, cartellini
+    (o "non noti" se mancano)."""
+    if p.gialli is None or p.rossi is None:
+        cartellini = badge("Cartellini non noti", "neutro")
+    else:
+        cartellini = (
+            badge(f"🟨 {p.gialli}", "giallo")
+            + badge(f"🟥 {p.rossi}", "rosso" if p.rossi else "neutro")
+        )
+    meta = " · ".join(x for x in (p.quando, p.campionato, p.stagione) if x)
+    return (
+        '<div class="cr-ar-partita">'
+        f'<div class="cr-meta">{escape(meta)}</div>'
+        f'<div class="cr-squadre">{_squadra(p.casa, _gol(p.gol_casa), p.logo_casa)}'
+        f"{_squadra(p.trasferta, _gol(p.gol_trasferta), p.logo_trasferta)}</div>"
+        f'<div class="cr-badges">{cartellini}</div></div>'
+    )
+
+
+def prossima_arbitro(pr) -> str:
+    """La prossima partita designata: squadre con stemma, data e campionato."""
+    meta = " · ".join(x for x in (pr.quando, pr.campionato) if x)
+    return (
+        '<div class="cr-ar-partita">'
+        f'<div class="cr-meta">{escape(meta)}</div>'
+        f'<div class="cr-squadre">{_squadra(pr.casa, None, pr.logo_casa)}'
+        f"{_squadra(pr.trasferta, None, pr.logo_trasferta)}</div></div>"
+    )
+
+
+def con_squadra_arbitro(c) -> str:
+    """Medie dell'arbitro con una squadra (`componenti_arbitri.ConSquadra`), con lo stemma."""
+    t = c.statistiche
+    if not t.partite:
+        corpo = '<div class="cr-tessera-sotto">Nessuna partita insieme nei dati.</div>'
+    else:
+        corpo = _voci(_voci_statistiche(t))
+    return (
+        '<div class="cr-tessera"><div class="cr-con-stemma">'
+        f'{stemma(c.nome, c.logo)}<div class="cr-tessera-titolo">{escape(c.nome)}</div></div>'
+        + corpo + "</div>"
+    )
 
 
 def griglia(pezzi: list[str]) -> str:

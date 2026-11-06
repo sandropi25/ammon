@@ -23,6 +23,7 @@ PAGINA_GIOCATE = str(RADICE / "app" / "pagine" / "2_Giocate.py")
 PAGINA_IMPOSTAZIONI = str(RADICE / "app" / "pagine" / "3_Impostazioni.py")
 PAGINA_CALDE = str(RADICE / "app" / "pagine" / "6_Partite_calde.py")
 PAGINA_CLASSIFICA = str(RADICE / "app" / "pagine" / "8_Classifica.py")
+PAGINA_ARBITRI = str(RADICE / "app" / "pagine" / "9_Arbitri.py")
 
 
 def visibile(at: AppTest) -> str:
@@ -57,7 +58,7 @@ def campionato_scelto(at: AppTest) -> str:
 def avvia(pagina: str, **query) -> AppTest:
     if pagina in (
         PAGINA_HOME, PAGINA_PARTITE, PAGINA_DETTAGLIO, PAGINA_CERCA, PAGINA_CALENDARIO,
-        PAGINA_CALDE, PAGINA_CLASSIFICA,
+        PAGINA_CALDE, PAGINA_CLASSIFICA, PAGINA_ARBITRI,
     ):
         # si parte dal punto d'ingresso, cosi' st.page_link trova le altre pagine
         at = AppTest.from_file(PAGINA_APP, default_timeout=30)
