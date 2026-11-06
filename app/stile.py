@@ -15,6 +15,7 @@ from urllib.parse import quote
 import streamlit as st
 
 import componenti
+from ammonizioni.config import NOMI_CAMPIONATI
 from ammonizioni.motore.tipi import decimale
 
 NOME_APP = "Cartellino"
@@ -23,7 +24,6 @@ TEMA_PREDEFINITO = "scuro"
 TEMA_CHIARO = "chiaro"
 CHIAVE_TEMA = "tema"  # session_state e parametro dell'URL (?tema=chiaro)
 CHIAVE_CAMPIONATO = "campionato"  # scelta che resta valida su tutte le pagine
-WIDGET_CAMPIONATO = "scelta_campionato"
 PARAMETRO_CAMPIONATO = "campionato"  # ?campionato=serie-a
 
 PALETTE: dict[str, dict[str, str]] = {
@@ -268,7 +268,45 @@ html, body, .stApp {{
   background: var(--cr-giallo) !important; color: var(--cr-su-giallo) !important;
   border-color: var(--cr-giallo) !important;
 }}
-.st-key-scelta_campionato {{ margin-bottom: .4rem; }}
+
+/* menu dei campionati: "Serie A ▾" e "Liga ▾" con la tendina delle partite, "Tutti" */
+.st-key-menu_campionati {{ margin: 0 0 .5rem; }}
+.st-key-menu_campionati button {{
+  min-height: 44px; border-radius: 999px !important; padding: 0 1.1rem !important;
+  font-weight: 700; font-size: 1rem;
+}}
+[data-testid="stPopoverBody"] {{
+  width: min(440px, calc(100vw - 32px)) !important; max-width: calc(100vw - 32px) !important;
+  max-height: 72vh; overflow-y: auto;
+  background: var(--cr-superficie) !important; border: 1px solid var(--cr-bordo) !important;
+  border-radius: 14px !important; box-shadow: var(--cr-ombra);
+}}
+[data-testid="stPopoverBody"] [data-testid="stVerticalBlock"] {{ gap: .15rem; }}
+.cr-menu-titolo {{
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1.35rem;
+  color: var(--cr-testo); margin: 0 0 .3rem;
+}}
+.cr-menu-sotto {{ font-family: 'Barlow', sans-serif; font-weight: 500; font-size: .9rem; color: var(--cr-testo2); }}
+[class*="st-key-voce_menu_"] {{ position: relative; border-radius: 10px; padding: 6px 8px; gap: 0 !important; }}
+[class*="st-key-voce_menu_"]:hover, [class*="st-key-voce_menu_"]:focus-within {{ background: var(--cr-giallo-tenue); }}
+[class*="st-key-voce_menu_"] > [data-testid="stElementContainer"]:last-child {{
+  position: absolute !important; inset: 0; margin: 0 !important; width: 100% !important;
+}}
+[class*="st-key-voce_menu_"] [data-testid="stPageLink"], [class*="st-key-voce_menu_"] [data-testid="stPageLink"] div {{ height: 100%; }}
+[class*="st-key-voce_menu_"] [data-testid="stPageLink"] a {{
+  width: 100%; height: 100%; padding: 0 !important; background: transparent !important; border-radius: 10px;
+}}
+[class*="st-key-voce_menu_"] [data-testid="stPageLink"] a * {{ color: transparent !important; }}
+[class*="st-key-voce_menu_"] [data-testid="stPageLink"] a:focus-visible {{ outline: 2px solid var(--cr-giallo); }}
+.cr-voce-menu {{ display: flex; align-items: center; gap: .7rem; min-height: 44px; }}
+.cr-voce-ora {{ display: flex; flex-direction: column; align-items: center; min-width: 3.1rem; line-height: 1.1; }}
+.cr-voce-ora b {{ font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1.15rem; color: var(--cr-testo); }}
+.cr-voce-giorno {{ font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--cr-testo2); font-weight: 600; }}
+.cr-voce-squadre {{ display: grid; gap: .15rem; min-width: 0; flex: 1; }}
+.cr-voce-sq {{ display: flex; align-items: center; gap: .45rem; font-weight: 600; font-size: .95rem; color: var(--cr-testo);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.cr-stemma--mini {{ width: 20px; height: 20px; flex: 0 0 20px; font-size: .55rem; }}
+.cr-voce-fuoco {{ font-size: 1.15rem; }}
 
 /* schede di Streamlit: expander, form, tab, tabelle, avvisi */
 [data-testid="stExpander"] details {{
@@ -639,6 +677,43 @@ def scheda_partita(riga: componenti.RigaPartita) -> str:
     )
 
 
+def titolo_menu(etichetta: str, partite: int) -> str:
+    """Titolo della tendina di un campionato: "Giornata 11 · 10 partite"."""
+    quante = "1 partita" if partite == 1 else f"{partite} partite"
+    return (
+        f'<div class="cr-menu-titolo">{escape(etichetta)}'
+        f'<span class="cr-menu-sotto"> · {quante}</span></div>'
+    )
+
+
+def _mini_squadra(nome: str) -> str:
+    return (
+        f'<span class="cr-voce-sq"><span class="cr-stemma cr-stemma--mini" '
+        f'style="background:{_colore_stemma(nome)}">{escape(iniziali(nome))}</span>'
+        f"{escape(nome)}</span>"
+    )
+
+
+def voce_menu(riga: componenti.RigaPartita) -> str:
+    """Una partita nella tendina del campionato: giorno e orario (o risultato se giocata),
+    squadre con lo stemma a iniziali, 🔥 se calda."""
+    if riga.finita:
+        gc = "–" if riga.gol_casa is None else str(riga.gol_casa)
+        gt = "–" if riga.gol_trasferta is None else str(riga.gol_trasferta)
+        quando = f'<span class="cr-voce-giorno">fin.</span><b>{escape(gc)}–{escape(gt)}</b>'
+    else:
+        giorno = ""
+        if riga.data_utc is not None:
+            giorno = componenti.GIORNI[riga.data_utc.astimezone(componenti.ROMA).weekday()]
+        quando = f'<span class="cr-voce-giorno">{escape(giorno)}</span><b>{escape(riga.ora)}</b>'
+    fuoco = '<span class="cr-voce-fuoco" title="Partita calda">🔥</span>' if riga.calda else ""
+    return (
+        f'<div class="cr-voce-menu"><span class="cr-voce-ora">{quando}</span>'
+        f'<span class="cr-voce-squadre">{_mini_squadra(riga.casa)}{_mini_squadra(riga.trasferta)}</span>'
+        f"{fuoco}</div>"
+    )
+
+
 def larghezza_barra(probabilita: float) -> int:
     """Percentuale di riempimento della barra: proporzionale, piena al 70%."""
     quota = round(probabilita / PROBABILITA_MASSIMA * 100)
@@ -871,7 +946,7 @@ def applica_stile_accesso() -> None:
 
 def applica_stile() -> None:
     """Da chiamare in cima a ogni pagina, subito dopo `richiedi_password()`: CSS del tema,
-    pulsante sole/luna e intestazione con "Dati aggiornati"."""
+    pulsante sole/luna, intestazione con "Dati aggiornati" e menu dei campionati."""
     import cache_dati  # qui: cache_dati importa streamlit e il DB solo quando serve
 
     tema = tema_corrente()
@@ -880,38 +955,98 @@ def applica_stile() -> None:
     interruttore_tema()
     testo, _ = cache_dati.stato_aggiornamento()
     st.markdown(intestazione(testo), unsafe_allow_html=True)
+    menu_campionati()
+
+
+CHIAVE_SLUG_URL = "campionato_nell_url"  # ultimo ?campionato= scritto da questa sessione
 
 
 def campionato_corrente() -> str:
-    """Campionato scelto (vale su tutte le pagine); al primo caricamento da ?campionato=."""
+    """Campionato scelto (vale su tutte le pagine): al primo caricamento da ?campionato=;
+    poi da ?campionato= solo se è diverso da quello scritto dall'app (un link come
+    "Tutto il calendario →" della Liga porta con sé il suo campionato)."""
+    param = st.query_params.get(PARAMETRO_CAMPIONATO)
     if CHIAVE_CAMPIONATO not in st.session_state:
-        st.session_state[CHIAVE_CAMPIONATO] = campionato_da_parametro(
-            st.query_params.get(PARAMETRO_CAMPIONATO)
-        )
+        st.session_state[CHIAVE_CAMPIONATO] = campionato_da_parametro(param)
+    elif (
+        param in SLUG_CAMPIONATI.values()
+        and param != st.session_state.get(CHIAVE_SLUG_URL)
+    ):
+        st.session_state[CHIAVE_CAMPIONATO] = campionato_da_parametro(param)
     return st.session_state[CHIAVE_CAMPIONATO]
 
 
-def _scegli_campionato() -> None:
-    scelto = st.session_state.get(WIDGET_CAMPIONATO)
-    if scelto is not None:
-        st.session_state[CHIAVE_CAMPIONATO] = scelto
+def scegli_campionato(nome: str) -> None:
+    """Imposta il campionato condiviso fra le pagine ("Serie A", "Liga" o "Tutti")."""
+    if nome in componenti.FILTRO_CAMPIONATI:
+        st.session_state[CHIAVE_CAMPIONATO] = nome
+
+
+def _menu_aperto(chiave: str, nome: str) -> None:
+    """Aprire la tendina di un campionato (clic sul nome) lo sceglie anche come filtro."""
+    if st.session_state.get(chiave):
+        scegli_campionato(nome)
+
+
+def chiave_menu(nome: str) -> str:
+    return f"menu_{slug_campionato(nome)}"
 
 
 def selettore_campionato() -> str:
-    """Pulsanti Serie A · Liga · Tutti; la scelta resta nelle altre pagine e nell'URL."""
+    """Campionato scelto per la pagina (lo si cambia dal menu dei campionati in alto); la
+    scelta resta nelle altre pagine e nell'URL."""
     corrente = campionato_corrente()
-    # il valore del widget si riallinea a ogni pagina (il widget di un'altra pagina viene
-    # dimenticato da Streamlit, la scelta no)
-    st.session_state[WIDGET_CAMPIONATO] = corrente
-    st.segmented_control(
-        "Campionato",
-        componenti.FILTRO_CAMPIONATI,
-        key=WIDGET_CAMPIONATO,
-        on_change=_scegli_campionato,
-        required=True,
-        label_visibility="collapsed",
-    )
     slug = slug_campionato(corrente)
     if st.query_params.get(PARAMETRO_CAMPIONATO) != slug:
         st.query_params[PARAMETRO_CAMPIONATO] = slug
+    st.session_state[CHIAVE_SLUG_URL] = slug
     return corrente
+
+
+def _voci_menu(campionato: int, nome: str) -> None:
+    """Contenuto della tendina: la giornata in corso (come nel Calendario), una riga per
+    partita che apre il Dettaglio, in fondo il link al calendario completo."""
+    import cache_dati  # qui: cache_dati importa il DB solo quando serve
+
+    cal = cache_dati.calendario(campionato)
+    if not cal.turni:
+        st.caption(f"Nessuna partita di {nome} in calendario.")
+    else:
+        turno = cal.turni[cal.in_corso]
+        righe = cache_dati.righe_turno(turno)
+        st.markdown(titolo_menu(turno.etichetta, len(righe)), unsafe_allow_html=True)
+        for r in sorted(righe, key=lambda r: (r.data_utc, r.id)):
+            with st.container(key=f"voce_menu_{r.id}"):
+                st.markdown(voce_menu(r), unsafe_allow_html=True)
+                st.page_link(
+                    "pagine/1_Dettaglio_partita.py", label=f"{r.casa} – {r.trasferta}",
+                    query_params={"partita": r.id},
+                )
+    st.page_link(
+        "pagine/5_Calendario.py", label="Tutto il calendario →",
+        query_params={PARAMETRO_CAMPIONATO: slug_campionato(nome)},
+    )
+
+
+def menu_campionati() -> None:
+    """Barra dei campionati sotto il menu: "Serie A ▾" e "Liga ▾" aprono la tendina con le
+    partite della giornata (e scelgono il campionato), "Tutti" mostra entrambi. Su telefono
+    la tendina occupa la larghezza dello schermo."""
+    corrente = campionato_corrente()
+    with st.container(key="menu_campionati", horizontal=True, gap="small"):
+        for campionato, nome in NOMI_CAMPIONATI.items():
+            chiave = chiave_menu(nome)
+            tendina = st.popover(
+                nome, type="primary" if corrente == nome else "secondary", key=chiave,
+                on_change=_menu_aperto, args=(chiave, nome),
+                help=f"Partite della giornata di {nome}",
+            )
+            if tendina.open:  # le partite si leggono solo a tendina aperta
+                with tendina:
+                    _voci_menu(campionato, nome)
+        st.button(
+            componenti.TUTTI, key="campionato_tutti",
+            type="primary" if corrente == componenti.TUTTI else "secondary",
+            on_click=scegli_campionato, args=(componenti.TUTTI,),
+            help="Serie A e Liga insieme",
+        )

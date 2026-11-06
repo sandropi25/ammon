@@ -6,7 +6,7 @@ import ayuda_app  # noqa: F401  (aggiunge app/ a sys.path)
 import componenti
 import componenti_calde
 import pytest
-from ayuda_app import PAGINA_CALDE, avvia, sessione_db, url_db, visibile  # noqa: F401
+from ayuda_app import PAGINA_CALDE, avvia, scegli_campionato, sessione_db, url_db, visibile  # noqa: F401
 from sqlalchemy import event
 
 from ammonizioni.db.modelli import Arbitro, Giocatore, ListaManuale, Partita, Presenza, Squadra
@@ -238,7 +238,7 @@ def test_pagina_liga_con_il_filtro(sessione_db):
     with sessione_db() as s:
         _dati_pagina(s, adesso)
     at = avvia(PAGINA_CALDE)
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert not at.exception
     schede = [m.value for m in at.markdown if 'class="cr-partita"' in m.value]
     assert len(schede) == 1 and "Real Madrid" in schede[0] and "Derby" in schede[0]

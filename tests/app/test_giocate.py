@@ -3,7 +3,9 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from zoneinfo import ZoneInfo
 
-from ayuda_app import PAGINA_GIOCATE, avvia, sessione_db, url_db, visibile
+from ayuda_app import (
+    PAGINA_GIOCATE, avvia, campionato_scelto, scegli_campionato, sessione_db, url_db, visibile,
+)
 from db_prova import CASA, TRASF, popola
 from sqlalchemy import select
 
@@ -135,17 +137,17 @@ def test_pagina_giocate_filtro_predefinito_serie_a(sessione_db):
         _aggiungi_liga(s)
     at = avvia(PAGINA_GIOCATE)
     assert not at.exception
-    assert at.segmented_control(key="scelta_campionato").value == "Serie A"
+    assert campionato_scelto(at) == "Serie A"
     # le opzioni sono le etichette "gg/mm hh:mm Casa – Trasferta"
     opzioni = " | ".join(at.selectbox(key="giocata_partita").options)
     assert "Casa FC – Trasferta FC" in opzioni and "Real Liga" not in opzioni
 
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert not at.exception
     opzioni = at.selectbox(key="giocata_partita").options
     assert len(opzioni) == 1 and "Real Liga – Barca Liga" in opzioni[0]
 
-    at.segmented_control(key="scelta_campionato").set_value("Tutti").run()
+    scegli_campionato(at, "Tutti")
     assert not at.exception
     opzioni = " | ".join(at.selectbox(key="giocata_partita").options)
     assert "Liga · " in opzioni and "Serie A · " in opzioni
@@ -276,8 +278,8 @@ def test_partita_senza_giocatori_niente_form_e_niente_eccezioni(sessione_db):
     at.selectbox(key="giocata_partita").select(210).run()
     assert not at.exception
     assert "Nessun giocatore disponibile per questa partita" in visibile(at)
-    # nessun pulsante del form (resta solo il pulsante sole/luna del tema)
-    assert [b.key for b in at.button] == ["cambia_tema"]
+    # nessun pulsante del form (restano il pulsante sole/luna del tema e "Tutti" del menu)
+    assert [b.key for b in at.button] == ["cambia_tema", "campionato_tutti"]
     with sessione_db() as s:
         assert s.execute(select(Giocata)).first() is None
 

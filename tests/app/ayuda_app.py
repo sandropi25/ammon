@@ -38,6 +38,20 @@ def visibile(at: AppTest) -> str:
     return "\n".join(pezzi)
 
 
+def scegli_campionato(at: AppTest, nome: str) -> AppTest:
+    """Come aprire la tendina "Serie A ▾"/"Liga ▾" (o premere "Tutti"): sceglie il filtro.
+    AppTest non apre le tendine: la scelta passa dallo stato della sessione, come fa la
+    funzione chiamata all'apertura (provata a parte in test_menu_campionati.py)."""
+    if nome == "Tutti":
+        return at.button(key="campionato_tutti").click().run()
+    at.session_state["campionato"] = nome
+    return at.run()
+
+
+def campionato_scelto(at: AppTest) -> str:
+    return at.session_state["campionato"]
+
+
 def avvia(pagina: str, **query) -> AppTest:
     if pagina in (PAGINA_DETTAGLIO, PAGINA_CERCA, PAGINA_CALENDARIO, PAGINA_CALDE):
         # si parte dalla pagina principale, cosi' st.page_link trova le altre pagine

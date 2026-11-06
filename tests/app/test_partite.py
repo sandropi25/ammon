@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
-from ayuda_app import PAGINA_PARTITE, avvia, sessione_db, url_db, visibile
+from ayuda_app import (
+    PAGINA_PARTITE, avvia, campionato_scelto, scegli_campionato, sessione_db, url_db, visibile,
+)
 from db_prova import PARTITA_FUTURA, popola
 import pytest
 from streamlit.errors import StreamlitSecretNotFoundError
@@ -68,8 +70,8 @@ def test_filtro_campionato_predefinito_serie_a(sessione_db):
     _aggiungi_liga(sessione_db)
     at = avvia(PAGINA_PARTITE)
     assert not at.exception
-    assert at.segmented_control(key="scelta_campionato").value == "Serie A"
-    assert list(at.segmented_control(key="scelta_campionato").options) == ["Serie A", "Liga", "Tutti"]
+    assert campionato_scelto(at) == "Serie A"
+    assert at.button(key="campionato_tutti").label == "Tutti"
     t = visibile(at)
     assert "Casa FC" in t and "Real Liga" not in t
 
@@ -79,13 +81,13 @@ def test_filtro_campionato_liga_e_tutti(sessione_db):
     _aggiungi_liga(sessione_db)
     at = avvia(PAGINA_PARTITE)
 
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert not at.exception
     t = visibile(at)
     assert "Real Liga – Barca Liga" in t and "Gil Manzano" in t and "Giornata 11" in t
     assert "Casa FC" not in t
 
-    at.segmented_control(key="scelta_campionato").set_value("Tutti").run()
+    scegli_campionato(at, "Tutti")
     t = visibile(at)
     assert "Real Liga" in t and "Casa FC" in t
     # ogni partita dice il suo campionato
@@ -99,7 +101,7 @@ def test_filtro_campionato_liga_e_tutti(sessione_db):
 def test_filtro_liga_senza_partite(sessione_db):
     _prepara(sessione_db)
     at = avvia(PAGINA_PARTITE)
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert not at.exception
     assert "Nessuna partita di Liga nei prossimi 7 giorni" in visibile(at)
     assert "Casa FC" not in visibile(at)
@@ -125,7 +127,7 @@ def test_partita_di_liga_non_e_calda_per_il_derby_di_serie_a(sessione_db):
     _prepara(sessione_db)
     _aggiungi_liga(sessione_db)
     at = avvia(PAGINA_PARTITE)
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert "Partita calda" not in visibile(at)
 
 

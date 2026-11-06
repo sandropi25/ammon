@@ -1,7 +1,10 @@
 """Pagina Cerca: ricerca, scheda del giocatore, partite della squadra, filtro campionato."""
 from datetime import datetime, timedelta, timezone
 
-from ayuda_app import PAGINA_CERCA, PAGINA_PARTITE, RADICE, avvia, sessione_db, url_db, visibile  # noqa: F401
+from ayuda_app import (  # noqa: F401
+    PAGINA_CERCA, PAGINA_PARTITE, RADICE, avvia, campionato_scelto, scegli_campionato,
+    sessione_db, url_db, visibile,
+)
 from db_prova import CASA, PARTITA_FUTURA, TRASF, popola
 
 from ammonizioni.db.modelli import Giocatore, Partita, Presenza, Squadra
@@ -130,19 +133,19 @@ def test_squadra_senza_partite(sessione_db):
 def test_i_pulsanti_del_campionato_filtrano_le_squadre(sessione_db):
     _prepara(sessione_db, liga=True)
     at = _cerca(avvia(PAGINA_CERCA), "liga")
-    assert at.segmented_control(key="scelta_campionato").value == "Serie A"
+    assert campionato_scelto(at) == "Serie A"
     t = visibile(at)
     assert "Real Liga" not in t and "2 squadre di altri campionati" in t
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert "Real Liga" in visibile(at) and "Barca Liga" in visibile(at)
-    at.segmented_control(key="scelta_campionato").set_value("Tutti").run()
+    scegli_campionato(at, "Tutti")
     assert "Real Liga" in visibile(at)
 
 
 def test_i_giocatori_non_dipendono_dal_filtro(sessione_db):
     _prepara(sessione_db, liga=True)
     at = avvia(PAGINA_CERCA)
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert "Hakan Çalhanoğlu" in visibile(_cerca(at, "calhanoglu"))
 
 

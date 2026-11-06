@@ -4,7 +4,9 @@ import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from ayuda_app import PAGINA_CALENDARIO, RADICE, avvia, sessione_db, url_db, visibile  # noqa: F401
+from ayuda_app import (  # noqa: F401
+    PAGINA_CALENDARIO, RADICE, avvia, scegli_campionato, sessione_db, url_db, visibile,
+)
 from db_prova import CASA, PARTITA_FUTURA, TRASF, popola
 
 import componenti
@@ -281,7 +283,7 @@ def test_link_al_dettaglio_di_ogni_partita(sessione_db):
 def test_liga_senza_partite_non_manda_in_errore(sessione_db):
     _prepara(sessione_db)
     at = avvia(PAGINA_CALENDARIO)
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert not at.exception
     assert "Nessuna partita di Liga" in visibile(at)
 
@@ -296,18 +298,18 @@ def test_liga_con_la_sua_giornata(sessione_db):
                       trasferta_id=602, stato="NS"))
     at = avvia(PAGINA_CALENDARIO)
     assert "Real Liga" not in visibile(at)
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert not at.exception
     assert "Giornata 11" in visibile(at) and "Real Liga" in visibile(at)
     # tornando alla Serie A resta la sua giornata
-    at.segmented_control(key="scelta_campionato").set_value("Serie A").run()
+    scegli_campionato(at, "Serie A")
     assert "Giornata 7" in visibile(at)
 
 
 def test_tutti_mostra_la_serie_a(sessione_db):
     _prepara(sessione_db)
     at = avvia(PAGINA_CALENDARIO)
-    at.segmented_control(key="scelta_campionato").set_value("Tutti").run()
+    scegli_campionato(at, "Tutti")
     assert not at.exception
     assert "Giornata 7" in visibile(at) and "un campionato alla volta" in visibile(at)
 

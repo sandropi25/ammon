@@ -8,8 +8,8 @@ import ayuda_app  # noqa: F401  (aggiunge app/ e tests/motore a sys.path)
 import pytest
 import stile
 from ayuda_app import (
-    PAGINA_GIOCATE, PAGINA_IMPOSTAZIONI, PAGINA_PARTITE, RADICE, avvia, sessione_db, url_db,
-    visibile,
+    PAGINA_GIOCATE, PAGINA_IMPOSTAZIONI, PAGINA_PARTITE, RADICE, avvia, campionato_scelto,
+    scegli_campionato, sessione_db, url_db, visibile,
 )
 from componenti import RigaPartita
 from db_prova import PARTITA_FUTURA, popola
@@ -272,29 +272,29 @@ def test_intestazione_con_nome_app(sessione_db):
 def test_campionato_predefinito_serie_a_e_url(sessione_db):
     _prepara(sessione_db)
     at = avvia(PAGINA_PARTITE)
-    sel = at.segmented_control(key="scelta_campionato")
-    assert sel.value == "Serie A"
-    assert list(sel.options) == ["Serie A", "Liga", "Tutti"]
+    assert campionato_scelto(at) == "Serie A"
+    assert at.button(key="campionato_tutti").label == "Tutti"
     assert at.query_params.get("campionato") == "serie-a"
 
 
 def test_campionato_condiviso_tra_le_pagine(sessione_db):
     _prepara(sessione_db)
     at = avvia(PAGINA_PARTITE)
-    at.segmented_control(key="scelta_campionato").set_value("Liga").run()
+    scegli_campionato(at, "Liga")
     assert at.query_params.get("campionato") == "liga"
     at.switch_page("pagine/2_Giocate.py").run()
     assert not at.exception
-    assert at.segmented_control(key="scelta_campionato").value == "Liga"
+    assert campionato_scelto(at) == "Liga"
     at.switch_page("pagine/0_Partite.py").run()
-    assert at.segmented_control(key="scelta_campionato").value == "Liga"
+    assert campionato_scelto(at) == "Liga"
 
 
 def test_campionato_letto_dall_url(sessione_db):
     _prepara(sessione_db)
     at = avvia(PAGINA_GIOCATE, campionato="tutti")
     assert not at.exception
-    assert at.segmented_control(key="scelta_campionato").value == "Tutti"
+    assert campionato_scelto(at) == "Tutti"
+    assert at.button(key="campionato_tutti").proto.type == "primary"
 
 
 def test_navigazione_in_alto_verso_le_pagine(sessione_db):
