@@ -35,6 +35,10 @@ class Pesi:
     # Soglie di diffida della Serie A (la Liga usa config.SOGLIE_DIFFIDA).
     # DA VERIFICARE sul regolamento Serie A in corso
     soglie_diffida: tuple[int, ...] = (4, 9, 13, 16, 19)
+    # subentranti: se la squadra è sfavorita i cambi di attaccanti pesano di più, quelli di
+    # difensori di meno (deve rincorrere)
+    cambi_attaccanti_sfavorita: float = 1.2
+    cambi_difensori_sfavorita: float = 0.8
     attenuazione_pochi_dati: float = 0.2
     limiti_fattore: tuple[float, float] = (0.7, 1.6)
     limiti_probabilita: tuple[float, float] = (0.02, 0.70)
@@ -43,6 +47,7 @@ class Pesi:
 # fattori moltiplicativi: con 0 la probabilita' si azzera e il logaritmo delle motivazioni fallisce
 FATTORI_MOLTIPLICATIVI = (
     "bonus_ritardo", "rivalita", "campo_caldo", "posta", "diffidato", "sostituzione",
+    "cambi_attaccanti_sfavorita", "cambi_difensori_sfavorita",
 )
 SOGLIE_MINIME_UNO = ("soglia_partite_arbitro", "soglia_precedenti")
 

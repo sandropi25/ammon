@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
@@ -68,6 +68,9 @@ class ContestoInfo:
     posta: dict[int, str | None]  # "titolo" / "Europa" / "salvezza"
     precedenti_n: int
     precedenti_gialli_medi: float | None
+    # punti per partita in campionato (solo squadre con almeno 3 partite): serve a capire
+    # quale squadra è sfavorita quando mancano le quote 1X2
+    punti_partita: dict[int, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,10 @@ class DatiPartita:
     contesto: ContestoInfo
     duelli_manuali: dict[int, int]
     campionato_id: int = SERIE_A  # il campionato della partita: medie, posta e diffide sono suoi
+    # probabili subentranti (vuota se non richiesta o non nota) e loro contorno
+    panchina: list[Titolare] = field(default_factory=list)
+    tendenza_cambi: dict[int, dict[str, float]] = field(default_factory=dict)  # squadra -> ruolo -> quota
+    prob_vittoria: dict[int, float] = field(default_factory=dict)  # dalle quote 1X2 ESPN
 
 
 @dataclass(frozen=True)
@@ -119,3 +126,25 @@ class Candidato:
     quota: float | None
     prob_implicita: float | None
     valore: float | None
+    subentro: "InfoSubentro | None" = None  # solo per i probabili subentranti
+
+    @property
+    def subentrante(self) -> bool:
+        return self.subentro is not None
+
+
+@dataclass(frozen=True)
+class InfoSubentro:
+    """Perché un panchinaro è candidato: quanto entra, quanto gioca, al posto di chi."""
+    probabilita_ingresso: float
+    minuti_medi: float
+    panchine: int
+    ingressi: int
+    al_posto_di_id: int | None
+    al_posto_di_nome: str | None
+    gialli90: float | None  # None: meno di 90 minuti nei dati
+    falli90: float | None
+    media_gialli90: float  # del ruolo nel campionato
+    media_falli90: float
+    sopra_media: bool  # solo un'evidenza: non filtra
+    sfavorita: bool
