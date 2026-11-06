@@ -12,6 +12,7 @@ Toccare un giocatore porta alla sua scheda nella classifica (ancora `#cand-<id>`
 Tutti i testi e gli URL hanno l'escape."""
 from __future__ import annotations
 
+import re
 from html import escape
 
 import componenti
@@ -27,7 +28,9 @@ MAGLIA = (
     "M-14,-20 L-25,-14 L-31,-1 L-21,4 L-18,-2 L-18,22 L18,22 L18,-2 L21,4 L31,-1 "
     "L25,-14 L14,-20 Q0,-10 -14,-20 Z"
 )
-MAX_COGNOME = 11
+MAX_COGNOME = 10
+SCALA_GIOCATORE = 1.2
+URL_SICURO = re.compile(r"https://[A-Za-z0-9./_-]+")  # nel CSS di uno style: niente apici
 
 
 def coordinate(riga: int, colonna: int, in_riga: int, casa: bool, verticale: bool) -> tuple[float, float]:
@@ -53,9 +56,19 @@ def colori_squadre(casa: SquadraCampo, trasferta: SquadraCampo) -> tuple[str, st
     si somigliano troppo la trasferta usa il colore alternativo."""
     c = casa.colore or stile._colore_stemma(casa.nome)
     t = trasferta.colore or stile._colore_stemma(trasferta.nome)
-    if stile.contrasto(c, t) < 1.6 and trasferta.colore_alt:
+    if distanza_colori(c, t) < SOGLIA_SIMILI and trasferta.colore_alt:
         t = trasferta.colore_alt
     return c, t
+
+
+SOGLIA_SIMILI = 110  # distanza RGB sotto la quale due magliette si confondono
+
+
+def distanza_colori(a: str, b: str) -> float:
+    """Distanza euclidea fra due colori "#RRGGBB" (0 = uguali, ~441 = bianco e nero):
+    conta la tinta, non solo la luminosità (rosso e blu scuri non si confondono)."""
+    ra, rb = (tuple(int(c.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)) for c in (a, b))
+    return sum((x - y) ** 2 for x, y in zip(ra, rb)) ** 0.5
 
 
 def colore_numero(colore: str) -> str:
@@ -86,25 +99,36 @@ def _maglia(g: GiocatoreCampo, colore: str, clip: str) -> str:
     )
     volto = ""
     url = componenti.url_https(g.volto)
-    if url:
+    if url and URL_SICURO.fullmatch(url):
+        # sfondo CSS e non <image>: se la foto non esiste il browser non disegna niente
+        # (un <image> SVG rotto mostra l'icona dell'immagine mancante)
         volto = (
-            f'<image href="{escape(url)}" x="-17" y="-52" width="34" height="34" '
-            f'preserveAspectRatio="xMidYMin slice" clip-path="url(#{clip})"><title>{escape(g.nome)}</title></image>'
+            '<foreignObject x="-17" y="-52" width="34" height="34">'
+            '<div xmlns="http://www.w3.org/1999/xhtml" class="cr-volto" '
+            f"style=\"background-image:url('{escape(url)}')\"></div></foreignObject>"
         )
+    # alone bianco sotto il bordo del rischio: resta visibile anche su una maglia dello stesso colore
+    alone = (
+        f'<path d="{MAGLIA}" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="9" '
+        'stroke-linejoin="round"/>' if livello in COLORI_RISCHIO else ""
+    )
     return (
-        f'<path class="cr-maglia" d="{MAGLIA}" fill="{colore}" {bordo} stroke-linejoin="round"/>'
+        f'{alone}<path class="cr-maglia" d="{MAGLIA}" fill="{colore}" {bordo} stroke-linejoin="round"/>'
         f"{numero}{volto}"
     )
 
 
 def _giocatore(g: GiocatoreCampo, x: float, y: float, colore: str, clip: str) -> str:
-    return (
-        f'<a href="#cand-{g.id}"><g class="cr-pl cr-pl-{g.id} cr-rischio--{livello_rischio(g.probabilita)}" '
-        f'transform="translate({x:.0f},{y:.0f})"><title>{escape(_titolo(g))}</title>'
+    gruppo = (
+        f'<g class="cr-pl cr-pl-{g.id} cr-rischio--{livello_rischio(g.probabilita)}" '
+        f'transform="translate({x:.0f},{y:.0f}) scale({SCALA_GIOCATORE})">'
+        f"<title>{escape(_titolo(g))}</title>"
         f"{_maglia(g, colore, clip)}"
-        f'<text class="cr-nome-pl" x="0" y="44" text-anchor="middle" font-size="19">'
-        f"{escape(_testo_corto(g.cognome))}</text></g></a>"
+        f'<text class="cr-nome-pl" x="0" y="44" text-anchor="middle" font-size="21">'
+        f"{escape(_testo_corto(g.cognome))}</text></g>"
     )
+    # solo i candidati hanno una scheda nella classifica a cui portare
+    return f'<a href="#cand-{g.id}">{gruppo}</a>' if g.probabilita is not None else gruppo
 
 
 def _prato(verticale: bool) -> str:
@@ -171,7 +195,6 @@ def _svg(dati: DatiCampo, verticale: bool, colori: tuple[str, str]) -> str:
     return (
         f'<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" role="img" '
         f'aria-label="Formazioni in campo: {escape(dati.casa.nome)} contro {escape(dati.trasferta.nome)}">'
-        f'<defs><clipPath id="{clip}"><circle cx="0" cy="-35" r="16"/></clipPath></defs>'
         f"{_prato(verticale)}{''.join(linee)}{''.join(giocatori)}</svg>"
     )
 
@@ -179,13 +202,14 @@ def _svg(dati: DatiCampo, verticale: bool, colori: tuple[str, str]) -> str:
 def _gettone(g: GiocatoreCampo, colore: str, clip: str) -> str:
     """Panchinaro: maglietta (e volto), numero e nome; bordo del rischio se è un subentrante."""
     numero = f"{g.numero} " if g.numero is not None else ""
+    # i probabili subentranti portano alla loro scheda; gli altri panchinari no
+    tag, link = ("a", f' href="#cand-{g.id}"') if g.probabilita is not None else ("span", "")
     return (
-        f'<a class="cr-panca-g cr-rischio--{livello_rischio(g.probabilita)}" href="#cand-{g.id}" '
+        f'<{tag} class="cr-panca-g cr-rischio--{livello_rischio(g.probabilita)}"{link} '
         f'title="{escape(_titolo(g))}">'
         f'<svg viewBox="-32 -54 64 78" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-        f'<defs><clipPath id="{clip}"><circle cx="0" cy="-35" r="16"/></clipPath></defs>'
         f"{_maglia(g, colore, clip)}</svg>"
-        f"<span>{escape(numero + g.cognome)}</span></a>"
+        f"<span>{escape(numero + g.cognome)}</span></{tag}>"
     )
 
 

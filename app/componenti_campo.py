@@ -4,6 +4,7 @@ sintetica "riga:colonna", modulo, numeri di maglia, colori, panchine e rischio d
 Solo dati semplici e congelati: finiscono nella cache di Streamlit insieme al Dettaglio."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -52,6 +53,13 @@ class DatiCampo:
     ufficiali: bool
     casa: SquadraCampo
     trasferta: SquadraCampo
+
+
+def colore_valido(valore) -> str | None:
+    """"#RRGGBB" (maiuscolo) o None: il colore finisce in un attributo dell'SVG."""
+    if isinstance(valore, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", valore):
+        return valore.upper()
+    return None
 
 
 def livello_rischio(probabilita: float | None) -> str:
@@ -208,8 +216,8 @@ def carica_campo(
         return SquadraCampo(
             id=squadra_id,
             nome=q.nome if q else str(squadra_id),
-            colore=q.colore if q else None,
-            colore_alt=q.colore_alt if q else None,
+            colore=colore_valido(q.colore) if q else None,
+            colore_alt=colore_valido(q.colore_alt) if q else None,
             logo=componenti.url_https(q.logo_url) if (q and immagini) else None,
             modulo=modulo(pos),
             titolari=tuple(

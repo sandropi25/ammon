@@ -626,6 +626,8 @@ def css_campo(tema: str) -> str:
 .cr-pl {{ cursor: pointer; transition: opacity .15s; }}
 .cr-pl:hover .cr-maglia {{ filter: brightness(1.15); }}
 .cr-duello {{ display: none; }}
+.cr-volto {{ width: 34px; height: 34px; border-radius: 50%; background-size: cover;
+  background-position: center top; background-repeat: no-repeat; }}
 .cr-panche {{ display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .55rem; }}
 .cr-panca-titolo {{ font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700;
   color: var(--cr-testo2); margin-bottom: .25rem; }}

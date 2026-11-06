@@ -121,7 +121,7 @@ def test_immagini_spente_niente_volti_ne_stemmi(sessione_db):
         dati = _campo(s)
     assert dati.casa.logo is None
     assert all(g.volto is None for g in dati.casa.titolari + dati.casa.panchina)
-    assert "<image" not in campo.campo_html(dati)
+    assert "cr-volto" not in campo.campo_html(dati)
 
 
 def test_probabilita_invariate_con_maglie_colori_e_stemmi(sessione_db):
@@ -160,7 +160,9 @@ def test_rendering_svg_con_ancore_colori_ed_escape(sessione_db):
     assert "#0057B8" in html  # maglia nei colori ESPN
     assert "Formazioni ufficiali" in html
     assert f'src="{LOGO}"' in html
-    assert 'href="https://a.espncdn.com/i/headshots/soccer/players/full/12.png"' in html
+    # volto come sfondo CSS (una foto mancante non mostra l'icona dell'immagine rotta)
+    assert "background-image:url('https://a.espncdn.com/i/headshots/soccer/players/full/12.png')" in html
+    assert "<image" not in html
     # bordo per soglia: classi coerenti con le probabilità
     for g in dati.casa.titolari:
         assert f"cr-pl-{g.id} cr-rischio--{cc.livello_rischio(g.probabilita)}" in html
@@ -181,6 +183,17 @@ def test_colori_simili_la_trasferta_usa_l_alternativo():
     c, t = campo.colori_squadre(senza, senza)
     assert re.fullmatch(r"#[0-9A-F]{6}", c)  # colore ricavato dal nome
     assert campo.colore_numero("#FFFFFF") == "#15171C" and campo.colore_numero("#000000") == "#FFFFFF"
+    # rosso e blu (luminosità simile) restano distinti: conta la tinta
+    rossi = cc.SquadraCampo(4, "D", "#FB090B", "#000000", **base)
+    blu = cc.SquadraCampo(5, "E", "#0068A8", "#000000", **base)
+    assert campo.colori_squadre(blu, rossi) == ("#0068A8", "#FB090B")
+
+
+@pytest.mark.parametrize("valore,atteso", [
+    ("#0068a8", "#0068A8"), ('#000" onload="x', None), ("red", None), (None, None),
+])
+def test_colore_valido_prima_di_finire_nell_svg(valore, atteso):
+    assert cc.colore_valido(valore) == atteso
 
 
 def test_pagina_dettaglio_mostra_il_campo_e_le_ancore(sessione_db):
