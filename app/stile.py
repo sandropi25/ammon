@@ -194,7 +194,7 @@ def css_sfondo_3d(tema: str) -> str:
 }}
 .cr-c3d {{
   position: absolute; left: var(--x); top: var(--y);
-  width: calc(34px * var(--s)); height: calc(48px * var(--s)); border-radius: calc(5px * var(--s));
+  width: calc(42px * var(--s)); height: calc(58px * var(--s)); border-radius: calc(6px * var(--s));
   opacity: var(--o); filter: blur(var(--b)); will-change: transform; backface-visibility: visible;
   background: linear-gradient(135deg, rgba(255,255,255,.6) 0%, rgba(255,255,255,.12) 30%, rgba(255,255,255,0) 46%), var(--cr-c3d-colore);
   transform: translate3d(0, 0, var(--z)) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
