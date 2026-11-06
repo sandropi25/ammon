@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from ammonizioni.caricamento.formazioni import titolare_da
 from ammonizioni.config import COMPETIZIONI, STATI_FINITI
 from ammonizioni.db.modelli import Giocatore, Partita, Presenza
-from ammonizioni.motore.mercati import MercatoAmmonizioni
+from ammonizioni.motore.classifica import classifica, classifica_subentranti
+from ammonizioni.motore.dati import carica_dati
+from ammonizioni.motore.pesi import carica_pesi
 from ammonizioni.motore.tipi import Titolare
 
 SERIE_A = COMPETIZIONI["serie_a"]
@@ -33,19 +35,36 @@ class RisultatoProva:
     successi_base: int
     tasso_modello: float
     tasso_base: float
+    # successi con un subentrante ammonito tra i primi k (0 con `solo_titolari`)
+    successi_subentranti: int = 0
+    # partite con almeno un subentrante tra i primi k
+    partite_con_subentranti: int = 0
+    solo_titolari: bool = False
 
 
 def _titolari_reali(s: Session, partita: Partita) -> tuple[list[Titolare], dict[int, int]]:
     """Titolari della partita (formazione reale) e gialli presi in quella partita."""
+    titolari, _, gialli = _distinta_reale(s, partita)
+    return titolari, {t.giocatore_id: gialli.get(t.giocatore_id, 0) for t in titolari}
+
+
+def _distinta_reale(
+    s: Session, partita: Partita
+) -> tuple[list[Titolare], list[Titolare], dict[int, int]]:
+    """Titolari, panchina in distinta (nota prima del calcio d'inizio) e gialli di tutti,
+    anche dei subentrati e degli ammoniti dalla panchina. Una sola query."""
     righe = s.execute(
         select(Presenza, Giocatore)
         .join(Giocatore, Giocatore.id == Presenza.giocatore_id)
-        .where(Presenza.partita_id == partita.id, Presenza.titolare.is_(True))
+        .where(Presenza.partita_id == partita.id)
         .order_by(Giocatore.id)
     ).all()
-    titolari = [titolare_da(g, p.squadra_id, p.griglia, p.ruolo) for p, g in righe]
-    gialli = {p.giocatore_id: p.gialli for p, _ in righe}
-    return titolari, gialli
+    titolari = [titolare_da(g, p.squadra_id, p.griglia, p.ruolo) for p, g in righe if p.titolare]
+    panchina = [
+        titolare_da(g, p.squadra_id, None, None) for p, g in righe if not p.titolare
+    ]
+    gialli = {p.giocatore_id: int(p.gialli or 0) for p, _ in righe}
+    return titolari, panchina, gialli
 
 
 def _abbastanza_titolari(titolari: list[Titolare], partita: Partita) -> bool:
@@ -128,22 +147,39 @@ def prova_stagione(
     k: int = 3,
     avanzamento: Callable[[int, int], None] | None = None,
     competizione_id: int = SERIE_A,
+    solo_titolari: bool = False,
 ) -> RisultatoProva:
+    """Con i subentranti (predefinito) i primi k si scelgono fra titolari e probabili
+    subentranti (la panchina reale in distinta) per probabilità; `solo_titolari` rifà la
+    prova di prima, per confronto."""
     partite = s.execute(
         _partite_prova(stagione, competizione_id).order_by(Partita.data_utc, Partita.id)
     ).scalars().all()
 
-    mercato = MercatoAmmonizioni()
+    pesi = carica_pesi(s)
     valutate = successi_modello = successi_base = 0
+    successi_subentranti = partite_con_subentranti = 0
     for fatte, partita in enumerate(partite, start=1):
-        titolari, gialli = _titolari_reali(s, partita)
+        titolari, panchina, gialli = _distinta_reale(s, partita)
         if _abbastanza_titolari(titolari, partita):
             valutate += 1
-            candidati = mercato.classifica(
-                s, partita.id, prima_di=partita.data_utc, titolari=titolari
+            dati = carica_dati(
+                s, partita.id, prima_di=partita.data_utc, titolari=titolari,
+                panchina=[] if solo_titolari else panchina,
             )
-            if any(gialli.get(c.giocatore_id, 0) >= 1 for c in candidati[:k]):
+            candidati = classifica(dati, pesi)
+            if not solo_titolari:
+                # stabile: a pari probabilità il titolare resta davanti
+                candidati = sorted(
+                    candidati + classifica_subentranti(dati, pesi), key=lambda c: -c.probabilita
+                )
+            primi = candidati[:k]
+            if any(c.subentrante for c in primi):
+                partite_con_subentranti += 1
+            if any(gialli.get(c.giocatore_id, 0) >= 1 for c in primi):
                 successi_modello += 1
+                if any(c.subentrante and gialli.get(c.giocatore_id, 0) >= 1 for c in primi):
+                    successi_subentranti += 1
             if any(gialli.get(g, 0) >= 1 for g in _scelta_semplice(s, partita, titolari, k, competizione_id)):
                 successi_base += 1
         if avanzamento is not None:
@@ -155,4 +191,7 @@ def prova_stagione(
         successi_base=successi_base,
         tasso_modello=_tasso(successi_modello, valutate),
         tasso_base=_tasso(successi_base, valutate),
+        successi_subentranti=successi_subentranti,
+        partite_con_subentranti=partite_con_subentranti,
+        solo_titolari=solo_titolari,
     )

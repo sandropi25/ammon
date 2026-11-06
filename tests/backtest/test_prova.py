@@ -180,6 +180,59 @@ def test_competizione_140_conta_solo_la_liga(sessione):
     assert r.successi_base == 1  # il 14 ha 2 gialli in Liga
 
 
+def _panchinaro(s, pid: int, *, minuti: int, gialli: int = 0) -> None:
+    """Il 15 (attaccante di casa) in panchina nella partita `pid`."""
+    s.add(Presenza(partita_id=pid, giocatore_id=15, squadra_id=1, titolare=False,
+                   minuti=minuti, gialli=gialli, falli_commessi=1 if minuti else 0))
+    s.flush()
+
+
+def _con_subentrante_ammonito(s) -> None:
+    anagrafica(s)
+    s.add(Giocatore(id=15, nome="Riserva", ruolo="F"))
+    s.flush()
+    # storico: entra spesso e si fa ammonire; poi nella partita valutata entra ed e' ammonito
+    # (solo lui: nessun titolare ammonito)
+    for pid in range(1, 7):
+        aggiungi_partita(s, pid, pid, statistiche=False)
+        _panchinaro(s, pid, minuti=25, gialli=1 if pid % 2 else 0)
+    aggiungi_partita(s, 10, 30)
+    _panchinaro(s, 10, minuti=1, gialli=1)  # un minuto basta: il cartellino conta
+
+
+def test_successo_anche_con_un_subentrante_ammonito_nei_primi(sessione):
+    _con_subentrante_ammonito(sessione)
+    r = prova_stagione(sessione, STAGIONE, k=7)  # 6 titolari di movimento + il subentrante
+    assert r.partite == 1
+    assert r.successi_modello == 1 and r.successi_subentranti == 1
+    assert r.partite_con_subentranti == 1 and r.solo_titolari is False
+
+
+def test_solo_titolari_come_prima(sessione):
+    _con_subentrante_ammonito(sessione)
+    r = prova_stagione(sessione, STAGIONE, k=7, solo_titolari=True)
+    assert r.partite == 1
+    assert r.successi_modello == 0 and r.successi_subentranti == 0
+    assert r.partite_con_subentranti == 0 and r.solo_titolari is True
+
+
+def test_script_solo_titolari_e_riga_dei_subentranti(tmp_path, monkeypatch, capsys):
+    url = f"sqlite:///{tmp_path / 'prova.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    with modulo_sessione.apri(url) as s:
+        _con_subentrante_ammonito(s)
+
+    assert _script().main(["--stagione", str(STAGIONE), "--k", "7"]) == 0
+    fuori = capsys.readouterr().out
+    assert "di cui subentranti nei primi 7: 1" in fuori
+    assert "con un subentrante nei primi 7: 1" in fuori
+
+    assert _script().main(["--stagione", str(STAGIONE), "--k", "7", "--solo-titolari"]) == 0
+    fuori = capsys.readouterr().out
+    assert "solo titolari" in fuori
+    assert "di cui subentranti" not in fuori
+
+
 def test_copertura_conta_arbitro_e_griglia(sessione):
     anagrafica(sessione)
     sessione.add(Arbitro(id=1, nome_normalizzato="rossi", nome_visualizzato="Rossi"))

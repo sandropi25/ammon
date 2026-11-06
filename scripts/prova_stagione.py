@@ -1,6 +1,7 @@
 """Prova sulla scorsa stagione: confronta il modello con la scelta semplice.
 
 Uso: python scripts/prova_stagione.py --stagione 2025 [--k 3] [--campionato 135|140]
+     [--solo-titolari]  (senza i probabili subentranti, per confrontare con prima)
 Richiede lo storico gia' caricato nel database.
 """
 import argparse
@@ -19,7 +20,8 @@ def stampa_tabella(
     r: RisultatoProva, stagione: int, k: int, campionato: int = 135, c: Copertura | None = None
 ) -> None:
     nome = NOMI_CAMPIONATI.get(campionato, str(campionato))
-    print(f"Prova sulla stagione {stagione} - {nome} (primi {k} candidati per partita)")
+    chi = "solo titolari" if r.solo_titolari else "titolari e probabili subentranti"
+    print(f"Prova sulla stagione {stagione} - {nome} (primi {k} candidati per partita, {chi})")
     print(f"Partite valutate: {r.partite}")
     if c is not None:
         print(
@@ -30,6 +32,10 @@ def stampa_tabella(
     print(f"{'Metodo':<26}{'Successi':>10}{'Tasso':>10}")
     print(f"{'Modello':<26}{r.successi_modello:>10}{percentuale(r.tasso_modello):>10}")
     print(f"{'Scelta semplice':<26}{r.successi_base:>10}{percentuale(r.tasso_base):>10}")
+    if not r.solo_titolari:
+        print()
+        print(f"Successi del modello di cui subentranti nei primi {k}: {r.successi_subentranti}")
+        print(f"Partite con un subentrante nei primi {k}: {r.partite_con_subentranti}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,6 +44,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--k", type=int, default=3, help="quanti candidati considerare")
     parser.add_argument(
         "--campionato", type=int, default=135, help="135 (Serie A, predefinito) o 140 (Liga)"
+    )
+    parser.add_argument(
+        "--solo-titolari", action="store_true",
+        help="come prima dei subentranti: i primi k scelti solo fra i titolari",
     )
     args = parser.parse_args(argv)
     if args.campionato not in CAMPIONATI:
@@ -55,7 +65,8 @@ def main(argv: list[str] | None = None) -> int:
 
     with apri() as s:
         r = prova_stagione(
-            s, args.stagione, args.k, avanzamento=avanzamento, competizione_id=args.campionato
+            s, args.stagione, args.k, avanzamento=avanzamento, competizione_id=args.campionato,
+            solo_titolari=args.solo_titolari,
         )
         c = copertura(s, args.stagione, args.campionato)
 
