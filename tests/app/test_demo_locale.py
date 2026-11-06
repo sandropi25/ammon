@@ -43,6 +43,14 @@ def test_demo_popola_e_le_pagine_funzionano(url_db, sessione_db):
     at = avvia(PAGINA_DETTAGLIO, partita=future[0])
     assert not at.exception
     assert any('class="cr-candidato"' in m.value for m in at.markdown)
+    # probabili subentranti: tabella a parte (la prima partita ha le ufficiali e la panchina)
+    assert "Probabili subentranti" in [h.value for h in at.subheader]
+    assert any("cr-subentrante" in m.value and "subentrante · può entrare" in m.value
+               for m in at.markdown)
+    # anche con le formazioni probabili (panchina calcolata dalle ultime partite)
+    at = avvia(PAGINA_DETTAGLIO, partita=future[1])
+    assert not at.exception
+    assert "Probabili subentranti" in [h.value for h in at.subheader]
     # Calendario: si apre sulla giornata 9 (da giocare); la 8 ha risultati e cartellini
     at = avvia(PAGINA_CALENDARIO)
     assert not at.exception and "Giornata 9" in visibile(at)

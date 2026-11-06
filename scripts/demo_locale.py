@@ -41,6 +41,8 @@ COGNOMI = ["Rinaldi", "Ferraro", "Galli", "Conti", "Marchetti", "Barbieri", "Fon
 SCHIERAMENTO = [("G", "1:1"), ("D", "2:1"), ("D", "2:2"), ("D", "2:3"), ("D", "2:4"),
                 ("M", "3:1"), ("M", "3:2"), ("M", "3:3"), ("F", "4:1"), ("F", "4:2"), ("F", "4:3")]
 PROB_GIALLO = {"G": 0.02, "D": 0.16, "M": 0.2, "F": 0.08}
+# panchina di ogni squadra: (ruolo, minuti possibili quando è in distinta; 0 = non entra)
+PANCHINA = [("F", (0, 15, 25, 30)), ("M", (0, 0, 20, 30)), ("D", (0, 0, 0, 0, 20)), ("G", (0,))]
 
 
 def popola_demo(url: str, adesso: datetime | None = None) -> None:
@@ -61,6 +63,16 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                     rose[sid].append((gid, ruolo, griglia))
                     gid += 1
                 sid += 1
+        # panchinari (generatore a parte: il resto dei dati dimostrativi non cambia)
+        rnd_p = random.Random(99)
+        panchine: dict[int, list[tuple[int, str, tuple[int, ...]]]] = {}
+        for sq in rose:
+            panchine[sq] = []
+            for ruolo, minuti_possibili in PANCHINA:
+                s.add(Giocatore(id=gid, nome=f"{rnd_p.choice(NOMI)} {rnd_p.choice(COGNOMI)}",
+                                ruolo=ruolo))
+                panchine[sq].append((gid, ruolo, minuti_possibili))
+                gid += 1
         arbitri: dict[int, list[int]] = {}
         aid = 1
         for camp, nomi in ARBITRI.items():
@@ -104,6 +116,15 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                                 gialli=int(rnd.random() < PROB_GIALLO[ruolo] * spinta),
                                 falli_commessi=rnd.randint(0, 4 if ruolo in "DM" else 2),
                                 falli_subiti=rnd.randint(0, 3), dribbling_tentati=rnd.randint(0, 4),
+                            ))
+                        for g, ruolo, minuti_possibili in panchine[sq]:
+                            # in distinta: chi entra gioca qualche minuto (probabili subentranti)
+                            entrato = rnd_p.choice(minuti_possibili)
+                            s.add(Presenza(
+                                partita_id=pid, giocatore_id=g, squadra_id=sq, titolare=False,
+                                minuti=entrato,
+                                gialli=int(entrato > 0 and rnd_p.random() < 0.12),
+                                falli_commessi=rnd_p.randint(0, 2) if entrato else 0,
                             ))
                     if giornata == 8 and camp == SERIE_A and len(panchina) < 2:
                         # ammonito dalla panchina (0 minuti): conta nei cartellini del Calendario
@@ -173,6 +194,14 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                     for tipo in tipi:
                         s.add(Formazione(partita_id=pid, squadra_id=sq, giocatore_id=g,
                                          tipo=tipo, griglia=griglia))
+                if ufficiali:  # con le ufficiali arriva anche la panchina in distinta
+                    for g, _, _ in panchine[sq]:
+                        s.add(Formazione(partita_id=pid, squadra_id=sq, giocatore_id=g,
+                                         tipo="panchina"))
+            if (casa, trasf) == (inter, milan):
+                # quote 1X2 (probabilità implicite): il Milan è sfavorito
+                partita = s.get(Partita, pid)
+                partita.prob_casa, partita.prob_pareggio, partita.prob_trasferta = 0.52, 0.26, 0.22
             prime.append(pid)
             pid += 1
 
