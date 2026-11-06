@@ -85,6 +85,7 @@ with st.container(key="riquadri_home"):
                 "Partita più calda", f"{calda.casa} – {calda.trasferta}",
                 f"{calda.quando} · {attesi}", righe=list(calda.motivi[:2]),
                 badges=[stile.badge("🔥 Calda", "rosso")],
+                squadre=((calda.casa, calda.logo_casa), (calda.trasferta, calda.logo_trasferta)),
             ), unsafe_allow_html=True)
             st.page_link(PAGINA_DETTAGLIO, label="Apri la partita →", query_params={"partita": calda.id})
         else:

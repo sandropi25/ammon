@@ -14,6 +14,7 @@ aggiorna.ricarica_se_cambiato(lambda: __import__("streamlit").cache_data.clear()
 import streamlit as st  # noqa: E402
 
 import cache_dati  # noqa: E402
+import componenti  # noqa: E402
 import componenti_giocate as cg  # noqa: E402
 import auth  # noqa: E402
 import stile  # noqa: E402
@@ -37,10 +38,11 @@ with apri() as s:
     pesi = carica_pesi(s)
     chiave_salvata = repo.leggi_impostazione(s, "chiave_api", None)
     chiave_football_data = repo.leggi_impostazione(s, "chiave_football_data", None)
+    immagini = componenti.immagini_attive(s)
 
 rivalita = cache_dati.elenco_rivalita(datetime.now(timezone.utc))
 
-schede = st.tabs(["Derby e campi caldi", "Pesi del modello", "Chiavi API"])
+schede = st.tabs(["Derby e campi caldi", "Pesi del modello", "Chiavi API", "Immagini"])
 
 # ---------------------------------------------------------------- derby e campi caldi
 
@@ -156,3 +158,22 @@ with schede[2], st.container(key="riquadro_impostazioni_2"):
                 repo.scrivi_impostazione(s, "chiave_api", nuova.strip())
             del st.session_state["chiave_api_nuova"]  # la chiave non resta nel campo
             st.rerun()
+
+
+# ---------------------------------------------------------------- immagini
+
+
+def _salva_immagini() -> None:
+    with apri() as s:
+        componenti.imposta_immagini(s, st.session_state["immagini_espn"])
+    cache_dati.svuota()  # schede, menu e campo si ricaricano con (o senza) le immagini
+
+
+with schede[3], st.container(key="riquadro_impostazioni_3"):
+    st.header("Immagini")
+    st.toggle(
+        "Immagini da ESPN (stemmi e volti) – solo uso personale",
+        value=immagini, key="immagini_espn", on_change=_salva_immagini,
+        help="Spenta: iniziali al posto degli stemmi e maglietta al posto dei volti.",
+    )
+    st.caption(componenti.NOTA_IMMAGINI)

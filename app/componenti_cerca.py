@@ -94,6 +94,7 @@ class SquadraTrovata:
     nome: str
     campionati: frozenset[int]
     norm: str
+    logo: str | None = None  # stemma ESPN (None: immagini spente o stemma non noto)
 
 
 @dataclass(frozen=True)
@@ -117,7 +118,9 @@ def carica_indice(s: Session) -> Indice:
         .join(Partita, Partita.id == Presenza.partita_id)
         .subquery()
     )
-    nomi_squadre = {q.id: q.nome for q in s.execute(select(Squadra)).scalars()}
+    tutte = list(s.execute(select(Squadra)).scalars())
+    nomi_squadre = {q.id: q.nome for q in tutte}
+    loghi = {q.id: componenti.url_https(q.logo_url) for q in tutte} if componenti.immagini_attive(s) else {}
     attuali = {g: (sq, ruolo) for g, sq, ruolo in s.execute(
         select(ultima.c.g, ultima.c.sq, ultima.c.ruolo).where(ultima.c.n == 1)
     )}
@@ -136,7 +139,9 @@ def carica_indice(s: Session) -> Indice:
         if camp is not None:
             campionati.setdefault(sq, set()).add(camp)
     squadre = [
-        SquadraTrovata(sq, nome, frozenset(campionati.get(sq, ())), normalizza(nome))
+        SquadraTrovata(
+            sq, nome, frozenset(campionati.get(sq, ())), normalizza(nome), loghi.get(sq)
+        )
         for sq, nome in nomi_squadre.items()
     ]
     return Indice(

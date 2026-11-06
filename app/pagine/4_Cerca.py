@@ -116,11 +116,11 @@ def mostra_giocatore(giocatore_id: int) -> None:
 
 def mostra_squadra(squadra_id: int) -> None:
     torna_alla_ricerca()
-    nome = next((q.nome for q in cache_dati.indice_ricerca().squadre if q.id == squadra_id), None)
-    if nome is None:
+    squadra = next((q for q in cache_dati.indice_ricerca().squadre if q.id == squadra_id), None)
+    if squadra is None:
         st.error("Squadra non trovata.")
         return
-    st.header(nome)
+    st.markdown(stile.titolo_squadra(squadra.nome, squadra.logo), unsafe_allow_html=True)
     partite = cache_dati.partite_squadra(squadra_id, adesso)
     if not partite:
         st.info(f"Nessuna partita in programma nei prossimi {cerca.GIORNI_SQUADRA} giorni.")
@@ -164,7 +164,10 @@ def mostra_risultati() -> None:
         with st.container(key="giorno_squadre"):
             for q in squadre:
                 with st.container(key=f"scheda_partita_squadra_{q.id}"):
-                    st.markdown(stile.risultato_ricerca(q.nome, "Squadra"), unsafe_allow_html=True)
+                    st.markdown(
+                        stile.risultato_ricerca(q.nome, "Squadra", q.logo, squadra=True),
+                        unsafe_allow_html=True,
+                    )
                     st.page_link(PAGINA, label="Partite in programma →", query_params={"squadra": q.id})
     if nascoste:
         st.caption(

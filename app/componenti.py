@@ -198,6 +198,39 @@ class RigaPartita:
     # solo per la pagina Partite calde: cartellini attesi e motivi in chiaro
     attesi: float | None = None
     motivi: tuple[str, ...] = ()
+    # stemmi ESPN (None: immagini spente o stemma non noto -> iniziali)
+    logo_casa: str | None = None
+    logo_trasferta: str | None = None
+
+
+# ---------------------------------------------------------------- immagini ESPN
+
+CHIAVE_IMMAGINI = "immagini_espn"  # Impostazione: stemmi e volti da ESPN (accesa di default)
+URL_VOLTO = "https://a.espncdn.com/i/headshots/soccer/players/full/{}.png"
+NOTA_IMMAGINI = (
+    "Stemmi e volti vengono caricati dal browser direttamente dal sito di ESPN, per solo uso "
+    "personale: sono immagini protette da diritti. Da spegnere (o sostituire) in caso di uso "
+    "commerciale o pubblico dell'app."
+)
+
+
+def immagini_attive(s: Session) -> bool:
+    """True se l'impostazione "Immagini da ESPN" è accesa (predefinito: accesa)."""
+    return bool(repo.leggi_impostazione(s, CHIAVE_IMMAGINI, True))
+
+
+def imposta_immagini(s: Session, attive: bool) -> None:
+    repo.scrivi_impostazione(s, CHIAVE_IMMAGINI, bool(attive))
+
+
+def url_https(valore) -> str | None:
+    """L'URL solo se è https (le immagini si caricano dal browser: niente altri schemi)."""
+    return valore if isinstance(valore, str) and valore.startswith("https://") else None
+
+
+def url_volto(giocatore_id: int) -> str:
+    """Foto ESPN del giocatore (può non esistere: allora resta la maglietta)."""
+    return URL_VOLTO.format(int(giocatore_id))
 
 
 def ora_italiana(dt_utc: datetime) -> str:
@@ -381,10 +414,11 @@ def righe_partite(s: Session, partite: list[Partita]) -> list[RigaPartita]:
     if not partite:
         return []
     ids_squadre = {p.casa_id for p in partite} | {p.trasferta_id for p in partite}
-    nomi = {
-        sq.id: sq.nome
-        for sq in s.execute(select(Squadra).where(Squadra.id.in_(ids_squadre))).scalars()
-    }
+    squadre = list(s.execute(select(Squadra).where(Squadra.id.in_(ids_squadre))).scalars())
+    nomi = {sq.id: sq.nome for sq in squadre}
+    loghi = (
+        {sq.id: url_https(sq.logo_url) for sq in squadre} if immagini_attive(s) else {}
+    )
     finite = [p for p in partite if p.stato in STATI_FINITI]
     da_giocare = [p for p in partite if p.stato not in STATI_FINITI]
     # per il badge servono solo liste manuali e arbitro: query raggruppate per tutte le partite
@@ -411,6 +445,8 @@ def righe_partite(s: Session, partite: list[Partita]) -> list[RigaPartita]:
             ora=ora_italiana(p.data_utc),
             data_utc=p.data_utc,
             stato=p.stato,
+            logo_casa=loghi.get(p.casa_id),
+            logo_trasferta=loghi.get(p.trasferta_id),
         )
         if p.stato in STATI_FINITI:
             gialli, rossi = cartellini.get(p.id, (None, None))

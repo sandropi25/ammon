@@ -315,6 +315,11 @@ html, body, .stApp {{
 .cr-voce-sq {{ display: flex; align-items: center; gap: .45rem; font-weight: 600; font-size: .95rem; color: var(--cr-testo);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 .cr-stemma--mini {{ width: 20px; height: 20px; flex: 0 0 20px; font-size: .55rem; }}
+.cr-stemma--grande {{ width: 44px; height: 44px; flex: 0 0 44px; font-size: .95rem; }}
+img.cr-stemma--img {{ object-fit: contain; border-radius: 0; box-shadow: none; background: transparent; }}
+.cr-con-stemma {{ display: flex; align-items: center; gap: .6rem; min-width: 0; }}
+.cr-stemmi {{ display: inline-flex; gap: .2rem; flex: 0 0 auto; }}
+.cr-titolo-squadra h2 {{ margin: 0; padding: 0; }}
 .cr-voce-fuoco {{ font-size: 1.15rem; }}
 
 /* schede di Streamlit: expander, form, tab, tabelle, avvisi */
@@ -536,6 +541,8 @@ html, body, .stApp {{
 .cr-bio-testo {{ margin: .55rem 0 .3rem; font-size: .9rem; line-height: 1.45; color: var(--cr-testo); }}
 .cr-bio-fonte {{ font-size: .78rem; color: var(--cr-testo2); }}
 .cr-bio-fonte a {{ color: var(--cr-link); font-weight: 600; }}
+{"" if chiaro else "img.cr-stemma--img { filter: drop-shadow(0 0 1px rgba(255,255,255,.75)) drop-shadow(0 0 2px rgba(255,255,255,.25)); }"}
+{css_campo(tema)}
 
 /* telefono: una colonna, sfondo più rado, niente tabelle larghe */
 @media (max-width: 640px) {{
@@ -597,6 +604,54 @@ def css_accesso(tema: str) -> str:
 """
 
 
+def css_campo(tema: str) -> str:
+    """CSS del campo con le formazioni (Dettaglio): orizzontale su schermi larghi, verticale
+    su telefono; evidenza del giocatore toccato e del suo avversario; panchine."""
+    p = PALETTE[tema]
+    return f"""
+.cr-campo {{ background: var(--cr-superficie); border: 1px solid var(--cr-bordo); border-radius: 14px;
+  padding: .7rem .75rem .8rem; box-shadow: var(--cr-ombra); }}
+.cr-campo-tipo {{ font-size: .75rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 700;
+  color: var(--cr-testo2); margin-bottom: .4rem; }}
+.cr-campo svg {{ width: 100%; height: auto; display: block; border-radius: 8px; }}
+.cr-campo a {{ text-decoration: none; }}
+.cr-campo-v {{ display: none; }}
+.cr-campo-testa {{ display: flex; justify-content: space-between; gap: .5rem; margin: 0 0 .35rem; }}
+.cr-campo-sq {{ display: flex; align-items: center; gap: .4rem; font-weight: 700; font-size: .9rem;
+  color: var(--cr-testo); min-width: 0; }}
+.cr-campo-sq span {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.cr-campo-modulo {{ font-family: 'Barlow Condensed', sans-serif; font-weight: 800; color: var(--cr-giallo); }}
+.cr-pl text {{ font-family: 'Barlow', sans-serif; font-weight: 700; }}
+.cr-pl .cr-nome-pl {{ fill: #FFFFFF; paint-order: stroke; stroke: rgba(0,0,0,.55); stroke-width: 4px; }}
+.cr-pl {{ cursor: pointer; transition: opacity .15s; }}
+.cr-pl:hover .cr-maglia {{ filter: brightness(1.15); }}
+.cr-duello {{ display: none; }}
+.cr-panche {{ display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .55rem; }}
+.cr-panca-titolo {{ font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700;
+  color: var(--cr-testo2); margin-bottom: .25rem; }}
+.cr-panca {{ display: flex; flex-wrap: wrap; gap: .3rem; }}
+.cr-panca-g {{ display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .45rem .15rem .2rem;
+  border-radius: 999px; border: 2px solid var(--cr-bordo); background: var(--cr-superficie2);
+  font-size: .78rem; font-weight: 600; color: var(--cr-testo) !important; max-width: 100%; }}
+.cr-panca-g svg {{ width: 26px; height: 26px; flex: 0 0 26px; border-radius: 0; }}
+.cr-panca-g span {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.cr-panca-g.cr-rischio--verde {{ border-color: {p["verde"]}; }}
+.cr-panca-g.cr-rischio--giallo {{ border-color: {p["giallo"]}; }}
+.cr-panca-g.cr-rischio--rosso {{ border-color: {p["rosso"]}; }}
+.cr-panca-vuota {{ font-size: .78rem; color: var(--cr-testo2); }}
+.cr-candidato {{ scroll-margin-top: 5.5rem; }}
+.cr-candidato:target {{ outline: 2px solid var(--cr-giallo); outline-offset: 2px; }}
+.cr-legenda {{ display: flex; flex-wrap: wrap; gap: .7rem; margin-top: .45rem; font-size: .72rem; color: var(--cr-testo2); }}
+.cr-legenda i {{ display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .25rem;
+  vertical-align: -1px; border: 2px solid; }}
+@media (max-width: 640px) {{
+  .cr-campo-o {{ display: none; }}
+  .cr-campo-v {{ display: block; }}
+  .cr-campo-v .cr-panche {{ grid-template-columns: 1fr; margin: .45rem 0; }}
+}}
+"""
+
+
 def benvenuto() -> str:
     """Logo grande, titolo e sottotitolo della schermata di benvenuto."""
     titolo = escape(TITOLO_BENVENUTO).replace("Yellow", "<span>Yellow</span>", 1)
@@ -636,11 +691,30 @@ def _colore_stemma(nome: str) -> str:
     return f"#{round(r * 255):02X}{round(g * 255):02X}{round(b * 255):02X}"
 
 
-def _squadra(nome: str, gol: str | None = None) -> str:
+LATO_STEMMA = {"": 30, "mini": 20, "grande": 44}
+
+
+def stemma(nome: str, logo: str | None = None, misura: str = "") -> str:
+    """Stemma della squadra: l'immagine ESPN (caricata dal browser, `loading="lazy"`, con
+    `alt` e dimensioni fisse) se c'è un URL https, altrimenti le iniziali nel cerchio."""
+    lato = LATO_STEMMA.get(misura, 30)
+    classe = "cr-stemma" + (f" cr-stemma--{misura}" if misura else "")
+    url = componenti.url_https(logo)
+    if url:
+        return (
+            f'<img class="{classe} cr-stemma--img" src="{escape(url)}" alt="{escape(nome)}" '
+            f'width="{lato}" height="{lato}" loading="lazy">'
+        )
+    return (
+        f'<span class="{classe}" style="background:{_colore_stemma(nome)}">'
+        f"{escape(iniziali(nome))}</span>"
+    )
+
+
+def _squadra(nome: str, gol: str | None = None, logo: str | None = None) -> str:
     punteggio = f'<span class="cr-gol">{escape(gol)}</span>' if gol is not None else ""
     return (
-        f'<div class="cr-squadra"><span class="cr-stemma" style="background:{_colore_stemma(nome)}">'
-        f'{escape(iniziali(nome))}</span><span class="cr-nome-sq">{escape(nome)}</span>'
+        f'<div class="cr-squadra">{stemma(nome, logo)}<span class="cr-nome-sq">{escape(nome)}</span>'
         f"{punteggio}</div>"
     )
 
@@ -706,7 +780,8 @@ def scheda_partita(riga: componenti.RigaPartita) -> str:
         f'<div class="cr-partita-testa"><span class="cr-ora">{escape(riga.ora)}</span>'
         f'<span class="cr-meta">{escape(meta)}</span></div>'
         f'<div class="cr-squadre" title="{escape(riga.casa)} – {escape(riga.trasferta)}">'
-        f"{_squadra(riga.casa, gol_casa)}{_squadra(riga.trasferta, gol_trasf)}</div>"
+        f"{_squadra(riga.casa, gol_casa, riga.logo_casa)}"
+        f"{_squadra(riga.trasferta, gol_trasf, riga.logo_trasferta)}</div>"
         f'<div class="cr-arbitro">{escape(arbitro)}</div>'
         f"{calore}"
         f'<div class="cr-badges">{"".join(badges)}</div>'
@@ -723,12 +798,8 @@ def titolo_menu(etichetta: str, partite: int) -> str:
     )
 
 
-def _mini_squadra(nome: str) -> str:
-    return (
-        f'<span class="cr-voce-sq"><span class="cr-stemma cr-stemma--mini" '
-        f'style="background:{_colore_stemma(nome)}">{escape(iniziali(nome))}</span>'
-        f"{escape(nome)}</span>"
-    )
+def _mini_squadra(nome: str, logo: str | None = None) -> str:
+    return f'<span class="cr-voce-sq">{stemma(nome, logo, "mini")}{escape(nome)}</span>'
 
 
 def voce_menu(riga: componenti.RigaPartita) -> str:
@@ -746,7 +817,8 @@ def voce_menu(riga: componenti.RigaPartita) -> str:
     fuoco = '<span class="cr-voce-fuoco" title="Partita calda">🔥</span>' if riga.calda else ""
     return (
         f'<div class="cr-voce-menu"><span class="cr-voce-ora">{quando}</span>'
-        f'<span class="cr-voce-squadre">{_mini_squadra(riga.casa)}{_mini_squadra(riga.trasferta)}</span>'
+        f'<span class="cr-voce-squadre">{_mini_squadra(riga.casa, riga.logo_casa)}'
+        f"{_mini_squadra(riga.trasferta, riga.logo_trasferta)}</span>"
         f"{fuoco}</div>"
     )
 
@@ -754,17 +826,23 @@ def voce_menu(riga: componenti.RigaPartita) -> str:
 def riquadro_home(
     etichetta: str, titolo: str, sotto: str = "", righe: list[str] | tuple = (),
     badges: list[str] | tuple = (),
+    squadre: tuple[tuple[str, str | None], ...] = (),
 ) -> str:
     """Riquadro in cima alla Home: etichetta piccola, titolo grande, sottotitolo, qualche
-    riga e badge (già HTML, da `badge`). Tutto il testo ha l'escape."""
+    riga e badge (già HTML, da `badge`). `squadre` ((nome, stemma), ...) mette gli stemmi
+    accanto al titolo. Tutto il testo ha l'escape."""
     elenco = (
         '<ul class="cr-home-righe">' + "".join(f"<li>{escape(r)}</li>" for r in righe) + "</ul>"
         if righe else ""
     )
+    stemmi = "".join(stemma(nome, logo) for nome, logo in squadre)
+    titolo_html = f'<div class="cr-home-titolo">{escape(titolo)}</div>'
+    if stemmi:
+        titolo_html = f'<div class="cr-con-stemma"><span class="cr-stemmi">{stemmi}</span>{titolo_html}</div>'
     return (
         '<div class="cr-home-riquadro">'
         f'<div class="cr-home-etichetta">{escape(etichetta)}</div>'
-        f'<div class="cr-home-titolo">{escape(titolo)}</div>'
+        f"{titolo_html}"
         + (f'<div class="cr-tessera-sotto">{escape(sotto)}</div>' if sotto else "")
         + elenco
         + (f'<div class="cr-badges">{"".join(badges)}</div>' if badges else "")
@@ -946,11 +1024,23 @@ def testa_giocatore(nome: str, sotto: str, badges: list[str]) -> str:
     )
 
 
-def risultato_ricerca(titolo: str, sotto: str) -> str:
-    """Contenuto di una scheda cliccabile dei risultati di ricerca (giocatore o squadra)."""
-    return (
+def risultato_ricerca(titolo: str, sotto: str, logo: str | None = None, squadra: bool = False) -> str:
+    """Contenuto di una scheda cliccabile dei risultati di ricerca (giocatore o squadra);
+    per una squadra lo stemma (o le iniziali) accanto al nome."""
+    testo = (
         f'<div class="cr-tessera-titolo">{escape(titolo)}</div>'
         f'<div class="cr-tessera-sotto">{escape(sotto)}</div>'
+    )
+    if not squadra:
+        return testo
+    return f'<div class="cr-con-stemma">{stemma(titolo, logo)}<div>{testo}</div></div>'
+
+
+def titolo_squadra(nome: str, logo: str | None = None) -> str:
+    """Titolo della pagina di una squadra (Cerca): stemma grande e nome."""
+    return (
+        f'<div class="cr-con-stemma cr-titolo-squadra">{stemma(nome, logo, "grande")}'
+        f'<h2>{escape(nome)}</h2></div>'
     )
 
 
