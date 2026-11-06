@@ -54,7 +54,8 @@ def test_css_carica_i_font_web():
 
 
 def test_sfondo_cartellini_tenue_gialli_e_qualche_rosso():
-    for tema, (minimo, massimo) in (("scuro", (0.04, 0.07)), ("chiaro", (0.06, 0.09))):
+    # circa il doppio di prima (5,5% e 8%), sempre sotto il 15%
+    for tema, (minimo, massimo) in (("scuro", (0.09, 0.15)), ("chiaro", (0.12, 0.15))):
         svg = unquote(stile.sfondo_svg(tema).removeprefix("data:image/svg+xml,"))
         p = stile.PALETTE[tema]
         gialli, rossi = svg.count(p["giallo"]), svg.count(p["rosso"])
@@ -66,6 +67,87 @@ def test_sfondo_cartellini_tenue_gialli_e_qualche_rosso():
     fitto = unquote(stile.sfondo_svg("scuro")).count("<rect")
     rado = unquote(stile.sfondo_svg("scuro", telefono=True)).count("<rect")
     assert rado < fitto
+
+
+def _variabili_3d(html):
+    import re
+
+    return [dict(re.findall(r"(--[a-z]+):([^;\"]+)", stile_card))
+            for stile_card in re.findall(r'style="([^"]+)"', html)]
+
+
+@pytest.mark.parametrize("tema", ["scuro", "chiaro"])
+def test_sfondo_3d_cartellini_su_livelli_diversi(tema):
+    html = stile.sfondo_3d_html(tema)
+    assert html == stile.sfondo_3d_html(tema)  # seme fisso
+    assert 'aria-hidden="true"' in html and "<script" not in html
+    carte = _variabili_3d(html)
+    assert 12 <= len(carte) <= 18
+    assert html.count("cr-c3d--r") >= 2 and html.count("cr-c3d--g") > html.count("cr-c3d--r")
+    durate = [float(c["--d"].rstrip("s")) for c in carte]
+    assert all(20 <= d <= 45 for d in durate) and len(set(durate)) > 10
+    assert len({c["--ritardo"] for c in carte}) > 10  # ritardi sfalsati
+    profondita = [int(c["--z"].rstrip("px")) for c in carte]
+    lontano, vicino = carte[profondita.index(min(profondita))], carte[profondita.index(max(profondita))]
+    assert float(lontano["--s"]) < float(vicino["--s"])  # i lontani più piccoli...
+    assert float(lontano["--b"].rstrip("px")) > float(vicino["--b"].rstrip("px")) == 0  # ...e sfocati
+    opacita = [float(c["--o"]) for c in carte]
+    assert max(opacita) <= stile.OPACITA_SFONDO[tema] < stile.OPACITA_MASSIMA_SFONDO
+    # su telefono resta visibile la metà dispari: i rossi ci sono anche lì
+    assert any("cr-c3d--r" in pezzo for pezzo in html.split("<i ")[1::2])
+
+
+def test_css_sfondo_3d_solo_css_con_prospettiva_movimento_ridotto_e_telefono():
+    css = stile.css_sfondo_3d("scuro")
+    assert "perspective:" in css and "translate3d" in css and "rotateX" in css and "rotateY" in css
+    assert "@keyframes cr-fluttua" in css and "will-change: transform" in css
+    assert "linear-gradient" in css  # riflesso lucido
+    assert "@media (prefers-reduced-motion: reduce) { .cr-c3d { animation: none; } }" in css
+    telefono = css[css.index("@media (max-width: 640px)"):]
+    assert ":nth-child(2n) { display: none; }" in telefono and "* 1.6" in telefono
+    # nelle animazioni solo transform (niente proprietà che ridisegnano la pagina)
+    animazione = css[css.index("@keyframes cr-fluttua"):css.index("@media (max-width")]
+    assert "left" not in animazione and "top" not in animazione and "filter" not in animazione
+    # colori adattati al tema: sul chiaro più saturi
+    assert stile.COLORI_SFONDO_3D["chiaro"]["giallo"] in stile.css_sfondo_3d("chiaro")
+    assert stile.COLORI_SFONDO_3D["chiaro"] != stile.COLORI_SFONDO_3D["scuro"]
+
+
+def test_css_tema_animato_toglie_lo_sfondo_fisso():
+    fermo, animato = stile.css_tema("scuro"), stile.css_tema("scuro", animato=True)
+    assert "data:image/svg+xml" in fermo and "cr-fluttua" not in fermo
+    assert "data:image/svg+xml" not in animato and "cr-fluttua" in animato
+    assert "background-image: none" in animato
+
+
+def test_anim_dal_parametro():
+    assert stile.anim_da_parametro(None) is True
+    assert stile.anim_da_parametro("1") is True
+    assert stile.anim_da_parametro("0") is False and stile.anim_da_parametro("off") is False
+
+
+def test_sfondo_animato_acceso_di_default_e_spento_dalle_impostazioni(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert not at.exception
+    assert at.session_state["anim"] is True and "anim" not in at.query_params
+    assert any("cr-sfondo3d" in h.proto.body for h in at.get("html"))
+    interruttore = at.toggle(key="interruttore_sfondo_animato")
+    assert interruttore.label == "Sfondo animato" and interruttore.value is True
+    interruttore.set_value(False).run()
+    assert at.session_state["anim"] is False and at.query_params.get("anim") == "0"
+    assert not any("cr-sfondo3d" in h.proto.body for h in at.get("html"))
+    at.toggle(key="interruttore_sfondo_animato").set_value(True).run()
+    assert at.session_state["anim"] is True and "anim" not in at.query_params
+
+
+def test_sfondo_fermo_letto_dall_url(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+    at = avvia(PAGINA_PARTITE, anim="0")
+    assert not at.exception and at.session_state["anim"] is False
+    assert not any("cr-sfondo3d" in h.proto.body for h in at.get("html"))
 
 
 def test_css_sfondo_fisso_e_schede_arrotondate():
