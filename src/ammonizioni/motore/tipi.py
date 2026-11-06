@@ -102,6 +102,7 @@ class DatiPartita:
     panchina: list[Titolare] = field(default_factory=list)
     tendenza_cambi: dict[int, dict[str, float]] = field(default_factory=dict)  # squadra -> ruolo -> quota
     prob_vittoria: dict[int, float] = field(default_factory=dict)  # dalle quote 1X2 ESPN
+    formazioni_ufficiali: bool = False  # solo per l'affidabilità: titolari ufficiali o probabili
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,10 @@ class Candidato:
     prob_implicita: float | None
     valore: float | None
     subentro: "InfoSubentro | None" = None  # solo per i probabili subentranti
+    # affidabilità 0-100 (vedi motore.affidabilita) e i suoi motivi in chiaro; il campo
+    # `affidabilita` sopra ne è ricavato. Non influisce sulla probabilità.
+    affidabilita_punti: int = 0
+    affidabilita_motivi: tuple[str, ...] = ()
 
     @property
     def subentrante(self) -> bool:

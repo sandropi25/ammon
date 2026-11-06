@@ -635,4 +635,5 @@ def carica_dati(
         panchina=panchina,
         tendenza_cambi=tendenze,
         prob_vittoria=prob_vittoria,
+        formazioni_ufficiali=partita.stato_formazioni == "ufficiali",
     )

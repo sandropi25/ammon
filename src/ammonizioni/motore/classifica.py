@@ -2,7 +2,7 @@ import math
 from dataclasses import replace
 
 from ammonizioni.config import campionato_di
-from ammonizioni.motore import subentranti
+from ammonizioni.motore import affidabilita as aff, subentranti
 from ammonizioni.motore.fattori.base import (
     MOTIVAZIONE_RITARDO,
     base_giocatore,
@@ -21,11 +21,8 @@ from ammonizioni.motore.tipi import (
     Fattore,
     InfoSubentro,
     RigaPresenza,
-    StatArbitro,
 )
 
-MINUTI_DATI_INSUFFICIENTI = 270
-MINUTI_AFFIDABILE = 900
 MAX_MOTIVAZIONI = 3
 
 
@@ -39,18 +36,6 @@ def converti_quota(testo: str) -> float:
     if not math.isfinite(quota) or quota <= 1:
         raise errore
     return quota
-
-
-def affidabilita(base: Fattore, arbitro: StatArbitro | None, pesi: Pesi) -> str:
-    if base.n_dati < MINUTI_DATI_INSUFFICIENTI:
-        return "dati insufficienti"
-    if (
-        base.n_dati >= MINUTI_AFFIDABILE
-        and arbitro is not None
-        and arbitro.partite >= pesi.soglia_partite_arbitro
-    ):
-        return "alto"
-    return "medio"
 
 
 def _motivazioni(fattori: list[Fattore], pesi: Pesi) -> list[str]:
@@ -124,6 +109,22 @@ def classifica(
             p *= f.valore
         p = max(basso, min(alto, p))
 
+        if avv_id is None:
+            certezza = aff.INCERTO
+        elif dati.duelli_manuali.get(t.giocatore_id) is not None or dati.formazioni_ufficiali:
+            certezza = aff.CERTO
+        else:
+            certezza = aff.PROBABILE
+        affidabile = aff.calcola(
+            storico=storico,
+            data=dati.data,
+            arbitro=dati.arbitro,
+            formazione_ufficiale=dati.formazioni_ufficiali,
+            avversario_squadra_id=avversario_squadra,
+            nome_avversario=dati.nomi_squadre.get(avversario_squadra, ""),
+            derby=dati.contesto.rivalita,
+            avversario_diretto=certezza,
+        )
         quota = quote.get(t.giocatore_id)
         prob_implicita = 1 / quota if quota else None
         risultato.append(
@@ -134,12 +135,14 @@ def classifica(
                 ruolo=t.ruolo,
                 probabilita=p,
                 motivazioni=_motivazioni(fattori, pesi),
-                affidabilita=affidabilita(base, dati.arbitro, pesi),
+                affidabilita=aff.vecchia_etichetta(affidabile.punti),
                 avversario_diretto_id=avv_id,
                 fattori=fattori,
                 quota=quota if prob_implicita is not None else None,
                 prob_implicita=prob_implicita,
                 valore=p - prob_implicita if prob_implicita is not None else None,
+                affidabilita_punti=affidabile.punti,
+                affidabilita_motivi=affidabile.motivi,
             )
         )
 
@@ -241,6 +244,17 @@ def classifica_subentranti(
             sopra_media=sopra,
             sfavorita=e_sfavorita,
         )
+        affidabile = aff.calcola(
+            storico=storico,
+            data=dati.data,
+            arbitro=dati.arbitro,
+            formazione_ufficiale=dati.formazioni_ufficiali,
+            avversario_squadra_id=avversario_squadra,
+            nome_avversario=dati.nomi_squadre.get(avversario_squadra, ""),
+            derby=dati.contesto.rivalita,
+            subentro=info,
+            tendenza_nota=bool(dati.tendenza_cambi.get(b.squadra_id)),
+        )
         candidato = Candidato(
             giocatore_id=b.giocatore_id,
             nome=b.nome,
@@ -248,13 +262,15 @@ def classifica_subentranti(
             ruolo=b.ruolo,
             probabilita=p,
             motivazioni=_motivazioni([f for f in fattori if f.nome != "ingresso"], pesi),
-            affidabilita=affidabilita(base, dati.arbitro, pesi),
+            affidabilita=aff.vecchia_etichetta(affidabile.punti),
             avversario_diretto_id=None,
             fattori=fattori,
             quota=quota if prob_implicita is not None else None,
             prob_implicita=prob_implicita,
             valore=p - prob_implicita if prob_implicita is not None else None,
             subentro=info,
+            affidabilita_punti=affidabile.punti,
+            affidabilita_motivi=affidabile.motivi,
         )
         risultato.append((grezza, candidato))
     # molti subentranti stanno al 2% minimo: l'ordine usa la probabilità prima del limite

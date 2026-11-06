@@ -211,4 +211,8 @@ def test_la_classifica_cambia_solo_per_il_derby_riconosciuto(sessione, monkeypat
     assert {c.giocatore_id for c in con} == {c.giocatore_id for c in senza}
     # spenti i derby predefiniti, torna esattamente la classifica di prima
     monkeypatch.setattr(rivalita, "DERBY_PREDEFINITI", {})
-    assert _classifica(sessione) == senza
+    # (i motivi dell'affidabilità citano i nomi delle squadre, che qui sono cambiati)
+    ora = _classifica(sessione)
+    assert [(c.giocatore_id, c.probabilita) for c in ora] == [
+        (c.giocatore_id, c.probabilita) for c in senza
+    ]

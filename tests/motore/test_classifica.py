@@ -3,13 +3,12 @@ from datetime import datetime, timezone
 import pytest
 from costruttori import medie_standard, riga
 
-from ammonizioni.motore.classifica import affidabilita, classifica, converti_quota
+from ammonizioni.motore.classifica import classifica, converti_quota
 from ammonizioni.motore.fattori.base import MOTIVAZIONE_RITARDO
 from ammonizioni.motore.pesi import Pesi
 from ammonizioni.motore.tipi import (
     ContestoInfo,
     DatiPartita,
-    Fattore,
     MedieCampionato,
     MedieRuolo,
     StatArbitro,
@@ -168,21 +167,6 @@ def test_giocatore_senza_storico_in_classifica_con_dati_insufficienti():
     cand = next(x for x in c if x.giocatore_id == 10)
     assert cand.affidabilita == "dati insufficienti"
     assert 0.02 <= cand.probabilita <= 0.70
-
-
-def _base(n_dati):
-    return Fattore("base", 0.1, None, n_dati)
-
-
-def test_affidabilita():
-    arb = StatArbitro("R", 10, 4.0, 25.0, {})
-    poco = StatArbitro("R", 2, 4.0, 25.0, {})
-    p = Pesi()
-    assert affidabilita(_base(269), arb, p) == "dati insufficienti"
-    assert affidabilita(_base(270), arb, p) == "medio"
-    assert affidabilita(_base(900), arb, p) == "alto"
-    assert affidabilita(_base(900), poco, p) == "medio"
-    assert affidabilita(_base(900), None, p) == "medio"
 
 
 @pytest.mark.parametrize("t,atteso", [("2,10", 2.10), ("2.10", 2.10), (" 3 ", 3.0)])
