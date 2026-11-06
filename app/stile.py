@@ -805,6 +805,7 @@ def css_arbitri(tema: str) -> str:
 }
 .cr-ar-partita .cr-squadre { margin-top: .5rem; }
 .cr-ar-nota { font-size: .85rem; color: var(--cr-testo2); margin: .2rem 0 1rem; }
+[class*="st-key-scheda_partita_"] [class*="st-key-link_arbitro_"] { margin-top: .85rem; }
 [class*="st-key-scheda_partita_"] [class*="st-key-link_arbitro_"] [data-testid="stPageLink"] a {
   position: relative !important; z-index: 2; justify-content: flex-start; padding: 0 !important;
 }

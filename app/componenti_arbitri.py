@@ -25,8 +25,7 @@ from ammonizioni.db.modelli import Arbitro, Partita, Squadra
 PRIMA_STAGIONE = 2023
 ULTIME_PARTITE = 10
 NOTA_CARRIERA = (
-    "In carriera = dal 2023-24: i dati coprono le stagioni dal 2023-24 in poi "
-    "(prima non sono disponibili)."
+    "\"In carriera\" vuol dire dal 2023-24: prima di quella stagione i dati non sono disponibili."
 )
 NOTA_TOTALI = (
     "Cartellini di tutta la partita, entrambe le squadre, anche quelli dalla panchina. "

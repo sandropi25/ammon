@@ -17,6 +17,7 @@ from pathlib import Path
 RADICE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RADICE / "src"))
 
+from ammonizioni.caricamento.totali import riempi_da_presenze  # noqa: E402
 from ammonizioni.config import STAGIONE_CORRENTE  # noqa: E402
 from ammonizioni.db.modelli import (  # noqa: E402
     Arbitro, Formazione, Giocata, Giocatore, Partita, Presenza, Squadra, UltimoAggiornamento,
@@ -255,6 +256,29 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                     "risparmia e gli arbitri lo conoscono bene."
                 )
                 giocatore.bio_aggiornata = adesso
+
+        # cartellini totali delle partite con le statistiche (dalle presenze, panchina compresa)
+        s.flush()
+        riempi_da_presenze(s)
+
+        # stagione 2023-24 come la carica il passo una tantum: solo calendario, arbitro e
+        # cartellini totali (nessun giocatore, statistiche non scaricate); generatore a parte
+        rnd_23 = random.Random(23)
+        for camp, ids in squadre.items():
+            for k in range(14):
+                casa, trasf = rnd_23.sample(ids, 2)
+                arbitro = arbitri[camp][k % len(arbitri[camp])]
+                gialli = rnd_23.randint(2, 8) + (2 if arbitro == arbitri[camp][0] else 0)
+                s.add(Partita(
+                    id=pid, data_utc=datetime(2023, 8, 20, 18, 45, tzinfo=timezone.utc)
+                    + timedelta(days=7 * k), competizione_id=camp, stagione=2023, giornata=k + 1,
+                    casa_id=casa, trasferta_id=trasf, arbitro_id=arbitro,
+                    gol_casa=rnd_23.randint(0, 3), gol_trasferta=rnd_23.randint(0, 3), stato="FT",
+                    stato_formazioni="ufficiali", statistiche_scaricate=False,
+                    gialli_totali=gialli, rossi_totali=int(rnd_23.random() < 0.18),
+                    falli_totali=rnd_23.randint(18, 34),
+                ))
+                pid += 1
 
 
 def main() -> None:
