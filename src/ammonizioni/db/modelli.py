@@ -87,6 +87,12 @@ class Partita(Base):
     prob_casa: Mapped[float | None] = mapped_column(Float, nullable=True)
     prob_pareggio: Mapped[float | None] = mapped_column(Float, nullable=True)
     prob_trasferta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Cartellini e falli totali della partita (entrambe le squadre, panchina compresa): dalle
+    # presenze se ci sono le statistiche dei giocatori, altrimenti dal tabellone ESPN.
+    # None = dato non noto (diverso da 0).
+    gialli_totali: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rossi_totali: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    falli_totali: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Presenza(Base):

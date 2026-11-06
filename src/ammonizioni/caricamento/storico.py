@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ammonizioni.caricamento import arbitri_fd
+from ammonizioni.caricamento import arbitri_fd, totali
 from ammonizioni.caricamento.notturno import (
     FonteContata,
     RiepilogoJob,
@@ -307,6 +307,9 @@ def avanza(
         _scarica_calendari(s, fonte, oggi, verifica_tempo)
         if fonte_fd is not None:
             completo = _collega_arbitri_stagioni(s, fonte_fd, oggi) and completo
+        # stagione 2023: solo calendario, cartellini totali e arbitri (una tantum, con flag)
+        completo = totali.carica_stagione_2023(s, fonte, fonte_fd) and completo
+        totali.riempi_da_presenze(s)
         for partita_id in prossime_da_scaricare(s, oggi):
             verifica_tempo()
             scarica_statistiche_partita(s, fonte, partita_id)

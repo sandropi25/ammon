@@ -52,6 +52,23 @@ def test_colonne_biografia_aggiunte_a_giocatori_esistenti_in_modo_idempotente(tm
     engine.dispose()
 
 
+def test_colonne_cartellini_totali_aggiunte_in_modo_idempotente(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'vecchio.db'}")
+    with engine.begin() as conn:  # database della vecchia versione
+        conn.execute(text("CREATE TABLE partite (id INTEGER PRIMARY KEY, stato VARCHAR)"))
+        conn.execute(text("INSERT INTO partite (id, stato) VALUES (1, 'FT')"))
+    modulo_sessione.crea_tabelle(engine)
+    modulo_sessione.crea_tabelle(engine)
+    colonne = {c["name"] for c in inspect(engine).get_columns("partite")}
+    assert {"gialli_totali", "rossi_totali", "falli_totali"} <= colonne
+    with engine.connect() as conn:  # le partite vecchie restano "non note", non zero
+        riga = conn.execute(
+            text("SELECT gialli_totali, rossi_totali, falli_totali FROM partite")
+        ).one()
+    assert tuple(riga) == (None, None, None)
+    engine.dispose()
+
+
 def test_database_nuovo_ha_le_colonne_delle_quote():
     engine = modulo_sessione.crea_engine("sqlite://")
     modulo_sessione.crea_tabelle(engine)

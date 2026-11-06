@@ -53,6 +53,10 @@ COLONNE_AGGIUNTE: tuple[tuple[str, str, str], ...] = (
     ("squadre", "colore_alt", "VARCHAR"),
     ("presenze", "maglia", "INTEGER"),
     ("formazioni", "maglia", "INTEGER"),
+    # cartellini e falli totali della partita (pagina Arbitri)
+    ("partite", "gialli_totali", "INTEGER"),
+    ("partite", "rossi_totali", "INTEGER"),
+    ("partite", "falli_totali", "INTEGER"),
 )
 
 

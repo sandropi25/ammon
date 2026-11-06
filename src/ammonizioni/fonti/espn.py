@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from ammonizioni.config import COMPETIZIONI, SLUG_ESPN
+from ammonizioni.config import COMPETIZIONI, SLUG_ESPN, STATI_FINITI
 from ammonizioni.fonti.base import ErroreFonte
 from ammonizioni.fonti.limite import LimiteRichieste, Priorita
 from ammonizioni.fonti.tipi import FormazioneDati, PartitaDati, PresenzaDati, StileSquadra
@@ -229,6 +229,52 @@ def crea_limite_espn(sessione) -> LimiteRichieste:
     return LimiteRichieste(sessione, max_giorno=5000, max_minuto=30, riserva_oggi=0)
 
 
+def cartellini_tabellone(competizione: dict) -> tuple[int, int] | None:
+    """(gialli, rossi) di una partita dagli eventi `details` del tabellone ESPN (tutta la
+    partita, panchina compresa). Un secondo giallo ESPN lo riporta come un giallo e un
+    rosso: si conta com'e' riportato. None se `details` manca (dato non noto, non zero)."""
+    eventi = competizione.get("details")
+    if not isinstance(eventi, list):
+        return None
+    gialli = rossi = 0
+    for evento in eventi:
+        if not isinstance(evento, dict):
+            continue
+        testo = str(((evento.get("type") or {}).get("text")) or "").strip().lower()
+        if testo == "yellow card":
+            gialli += 1
+        elif testo == "red card":
+            rossi += 1
+        elif not testo:  # tipo assente: si va sui segnalibri dell'evento
+            if evento.get("redCard") is True:
+                rossi += 1
+            elif evento.get("yellowCard") is True:
+                gialli += 1
+    return gialli, rossi
+
+
+def falli_tabellone(competizione: dict) -> int | None:
+    """Falli commessi dalle due squadre (statistica `foulsCommitted` di ciascuna) dal
+    tabellone ESPN; None se manca per una delle due."""
+    totale = 0
+    squadre = [c for c in competizione.get("competitors") or [] if isinstance(c, dict)]
+    if len(squadre) != 2:
+        return None
+    for squadra in squadre:
+        valore = None
+        for stat in squadra.get("statistics") or []:
+            if isinstance(stat, dict) and stat.get("name") == "foulsCommitted":
+                try:
+                    valore = int(float(stat.get("displayValue", stat.get("value"))))
+                except (TypeError, ValueError):
+                    valore = None
+                break
+        if valore is None:
+            return None
+        totale += valore
+    return totale
+
+
 class _Giocatore:
     """Giocatore di un roster ESPN già letto (id, nome, posizione, flag)."""
 
@@ -393,6 +439,9 @@ class Espn:
         stato_espn = (evento.get("status") or competizione["status"])["type"]["name"]
         stato = _STATI.get(stato_espn, stato_espn)
         senza_gol = stato in _STATI_SENZA_GOL
+        # cartellini e falli totali solo per le partite finite (prima non sono definitivi)
+        cartellini = cartellini_tabellone(competizione) if stato in STATI_FINITI else None
+        falli = falli_tabellone(competizione) if stato in STATI_FINITI else None
         return PartitaDati(
             id=int(evento["id"]),
             data_utc=data.astimezone(timezone.utc),
@@ -409,6 +458,9 @@ class Espn:
             stato=stato,
             casa_stile=stile_squadra(casa["team"]),
             trasferta_stile=stile_squadra(trasferta["team"]),
+            gialli_totali=cartellini[0] if cartellini else None,
+            rossi_totali=cartellini[1] if cartellini else None,
+            falli_totali=falli,
         )
 
     def summary(self, partita_id: int) -> dict:

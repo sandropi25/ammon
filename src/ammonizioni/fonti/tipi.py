@@ -32,6 +32,10 @@ class PartitaDati:
     # stemma e colori delle due squadre, se la fonte li dà (ESPN: nello scoreboard)
     casa_stile: StileSquadra | None = None
     trasferta_stile: StileSquadra | None = None
+    # cartellini e falli totali della partita dal tabellone ESPN (None: il tabellone non li dà)
+    gialli_totali: int | None = None
+    rossi_totali: int | None = None
+    falli_totali: int | None = None
 
 
 @dataclass(frozen=True)

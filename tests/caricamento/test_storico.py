@@ -13,6 +13,7 @@ from ammonizioni.caricamento.notturno import salva_partita
 OGGI = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
 CARICATE = tuple(COMPETIZIONI.values())  # tutte e 7: due campionati, due coppe, tre europee
 CALENDARI = len(CARICATE) * len(STAGIONI) - 2  # tutti tranne i campionati della stagione corrente
+E2023 = 2  # stagione 2023: calendario di Serie A e Liga (una richiesta ciascuno), una tantum
 
 
 def _salva(s, *partite):
@@ -178,9 +179,9 @@ def test_avanza_scarica_calendari_poi_statistiche(sessione):
     r = storico.avanza(sessione, fonte)
     assert r.completo is True
     assert r.partite_aggiornate == 2
-    assert r.richieste_usate == CALENDARI + 2
+    assert r.richieste_usate == CALENDARI + E2023 + 2
     nomi = [c[0] for c in fonte.chiamate]
-    assert nomi == ["partite"] * CALENDARI + ["statistiche"] * 2
+    assert nomi == ["partite"] * (CALENDARI + E2023) + ["statistiche"] * 2
     assert [c[1] for c in fonte.chiamate if c[0] == "statistiche"] == [2, 1]  # più recente prima
     assert len(repo.leggi_impostazione(sessione, "calendari_scaricati")) == CALENDARI
     assert repo.ultimo_aggiornamento(sessione, "storico") is not None
@@ -194,7 +195,7 @@ def test_avanza_scarica_calendari_poi_statistiche(sessione):
 def test_avanza_limite_a_meta_salva_il_parziale(sessione):
     base = datetime(2026, 2, 1, 18, 0, tzinfo=timezone.utc)
     calendari = {(135, 2025): [partita_dati(i, base + timedelta(days=i), stagione=2025) for i in (1, 2, 3)]}
-    fonte = FonteFinta(calendari=calendari, limite_dopo=CALENDARI + 1)  # tutti i calendari + 1 partita
+    fonte = FonteFinta(calendari=calendari, limite_dopo=CALENDARI + E2023 + 1)  # tutti i calendari + 1 partita
     r = storico.avanza(sessione, fonte)
     assert r.completo is False
     assert r.partite_aggiornate == 1

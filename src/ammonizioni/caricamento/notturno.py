@@ -122,6 +122,13 @@ def salva_partita(s: Session, dati: PartitaDati) -> Partita:
     partita.gol_casa = dati.gol_casa
     partita.gol_trasferta = dati.gol_trasferta
     partita.stato = dati.stato
+    # totali dal tabellone solo se non ci sono le statistiche dei giocatori (che sono
+    # complete e hanno la precedenza); un dato assente non cancella quello salvato
+    if not partita.statistiche_scaricate:
+        for campo in ("gialli_totali", "rossi_totali", "falli_totali"):
+            valore = getattr(dati, campo)
+            if valore is not None:
+                setattr(partita, campo, valore)
     s.flush()
     return partita
 
@@ -206,6 +213,9 @@ def scarica_statistiche_partita(s: Session, fonte: Fonte, partita_id: int) -> bo
     for dati in presenze:
         _salva_presenza(s, dati)
     salva_stili_fonte(s, fonte)  # stemmi e colori dallo stesso summary
+    partita.gialli_totali = sum(p.gialli for p in presenze)  # panchina compresa
+    partita.rossi_totali = sum(p.rossi for p in presenze)
+    partita.falli_totali = sum(p.falli_commessi for p in presenze)
     partita.statistiche_scaricate = True
     if tentativi.pop(str(partita_id), None) is not None:
         repo.scrivi_impostazione(s, TENTATIVI_VUOTI, tentativi)
