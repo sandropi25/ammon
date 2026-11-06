@@ -64,6 +64,34 @@ def test_i_valori_predefiniti_puntano_al_motore_vero():
     assert "componenti_calde" in aggiorna.MODULI_APP
 
 
+def test_moduli_app_sono_tutti_i_file_dell_app():
+    attesi = {
+        f.stem for f in aggiorna.CARTELLA_APP.glob("*.py") if f.stem not in ("Partite", "aggiorna")
+    }
+    assert set(aggiorna.MODULI_APP) == attesi
+
+
+def test_la_firma_cambia_anche_se_cambia_un_modulo_dell_app(tmp_path):
+    motore = tmp_path / "motore"
+    app = tmp_path / "app"
+    motore.mkdir()
+    app.mkdir()
+    (motore / "dati.py").write_text("x = 1\n")
+    modulo = app / "cache_dati.py"
+    modulo.write_text("y = 1\n")
+    (app / "Partite.py").write_text("z = 1\n")
+    prima = aggiorna.firma_sorgenti(motore, app)
+    stat = modulo.stat()
+    os.utime(modulo, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10_000_000_000))
+    assert aggiorna.firma_sorgenti(motore, app) != prima
+    # il punto d'ingresso non conta (lo ricarica gia' Streamlit)
+    dopo = aggiorna.firma_sorgenti(motore, app)
+    ingresso = app / "Partite.py"
+    stat = ingresso.stat()
+    os.utime(ingresso, ns=(stat.st_atime_ns, stat.st_mtime_ns + 20_000_000_000))
+    assert aggiorna.firma_sorgenti(motore, app) == dopo
+
+
 def test_ogni_pagina_lo_chiama_prima_degli_import_dell_app():
     radice = Path(aggiorna.__file__).resolve().parent
     for pagina in [radice / "Partite.py", *sorted((radice / "pagine").glob("*.py"))]:

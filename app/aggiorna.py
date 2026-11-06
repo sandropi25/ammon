@@ -13,16 +13,28 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-SORGENTI = Path(__file__).resolve().parents[1] / "src" / "ammonizioni"
-MODULI_APP = ("componenti", "componenti_giocate", "componenti_cerca",
-              "componenti_calendario", "componenti_calde", "cache_dati", "stile", "auth")
+CARTELLA_APP = Path(__file__).resolve().parent
+SORGENTI = CARTELLA_APP.parent / "src" / "ammonizioni"
+# tutti i moduli dell'app tranne il punto d'ingresso e questo file: ricavati dai file, così
+# un modulo nuovo non può essere dimenticato
+MODULI_APP = tuple(
+    sorted(f.stem for f in CARTELLA_APP.glob("*.py") if f.stem not in ("Partite", "aggiorna"))
+)
 
 _firma: tuple[int, int] | None = None
 
 
-def firma_sorgenti(cartella: Path = SORGENTI) -> tuple[int, int]:
-    """(ultima modifica, numero di file) dei sorgenti Python del motore."""
-    tempi = [p.stat().st_mtime_ns for p in cartella.rglob("*.py")]
+def firma_sorgenti(
+    cartella: Path = SORGENTI, cartella_app: Path | None = CARTELLA_APP
+) -> tuple[int, int]:
+    """(ultima modifica, numero di file) dei sorgenti Python del motore e dei moduli
+    dell'app. Anche l'app conta: Streamlit ricarica solo il file cambiato, non i moduli che
+    lo usano (es. cache_dati teneva la versione vecchia di componenti_calde e la cache non
+    riusciva più a salvare i suoi oggetti: PicklingError)."""
+    file = list(cartella.rglob("*.py"))
+    if cartella_app is not None:
+        file += [f for f in cartella_app.glob("*.py") if f.stem not in ("Partite", "aggiorna")]
+    tempi = [f.stat().st_mtime_ns for f in file]
     return (max(tempi, default=0), len(tempi))
 
 
@@ -44,7 +56,7 @@ def ricarica_se_cambiato(
     comunque il motore eventualmente già in memoria: non si sa con quale versione era
     stato importato."""
     global _firma
-    attuale = firma_sorgenti(cartella)
+    attuale = firma_sorgenti(cartella, CARTELLA_APP if cartella == SORGENTI else None)
     if _firma == attuale:
         return False
     _firma = attuale
