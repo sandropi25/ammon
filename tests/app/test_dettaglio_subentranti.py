@@ -72,9 +72,12 @@ def test_pagina_mostra_i_subentranti_sotto_i_titolari(sessione_db):
     assert set(sub["Giocatore"]) == {"Punta Riserva Casa", "Mediano Riserva Trasf"}
     riga = sub[sub["Giocatore"] == "Punta Riserva Casa"].iloc[0]
     assert riga["Al posto di"] == "Punta Casa"
-    t = visibile(at)
+    # fuori dal campo (dove c'è tutta la panchina ufficiale) i non probabili non compaiono
+    t = "\n".join(m.value for m in at.markdown if 'class="cr-campo"' not in m.value)
     assert "Terzo Portiere Casa" not in t and "Difensore Mai Casa" not in t
     assert "può entrare al posto di Punta Casa" in t
+    campo = next(m.value for m in at.markdown if 'class="cr-campo"' in m.value)
+    assert "Portiere" in campo and "Mai" in campo  # cognomi in panchina
 
 
 def test_pagina_senza_panchina_nessuna_sezione(sessione_db):

@@ -641,6 +641,11 @@ def css_campo(tema: str) -> str:
 .cr-panca-vuota {{ font-size: .78rem; color: var(--cr-testo2); }}
 .cr-candidato {{ scroll-margin-top: 5.5rem; }}
 .cr-candidato:target {{ outline: 2px solid var(--cr-giallo); outline-offset: 2px; }}
+.cr-scommetti {{ display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin: .2rem 0 .5rem; }}
+.cr-scommetti-prob {{ display: flex; gap: 1rem; }}
+.cr-scommetti-prob div {{ display: flex; flex-direction: column; line-height: 1.1; }}
+.cr-scommetti-prob span {{ font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--cr-testo2); font-weight: 600; }}
+.cr-scommetti-prob b {{ font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; font-weight: 800; color: var(--cr-testo); }}
 .cr-legenda {{ display: flex; flex-wrap: wrap; gap: .7rem; margin-top: .45rem; font-size: .72rem; color: var(--cr-testo2); }}
 .cr-legenda i {{ display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .25rem;
   vertical-align: -1px; border: 2px solid; }}
@@ -913,7 +918,7 @@ def barra_probabilita(candidato, squadra: str, tipster: list[str] | tuple = ()) 
     motivi = " · ".join(c.motivazioni)
     classe = "cr-candidato cr-subentrante" if subentro is not None else "cr-candidato"
     return (
-        f'<div class="{classe}">'
+        f'<div class="{classe}" id="cand-{int(c.giocatore_id)}">'  # ancora del campo
         '<div class="cr-cand-testa"><div>'
         f'<div class="cr-cand-nome">{escape(c.nome)}</div>'
         f'<div class="cr-cand-info">{escape(info)}</div></div>'
@@ -950,6 +955,20 @@ def riquadro_puntata_solida(candidato, squadra: str) -> str:
         + badge(componenti.testo_affidabilita(c), componenti.tipo_badge_affidabilita(c))
         + "</div>"
         + _riga_affidabilita(c)
+        + "</div>"
+    )
+
+
+def riquadro_scommetti(v) -> str:
+    """Confronto della quota (componenti_giocate.Valutazione): probabilità del bookmaker
+    (1/quota) e del modello affiancate, badge verde "Conviene" o rosso "Non conviene"."""
+    return (
+        '<div class="cr-scommetti">'
+        '<div class="cr-scommetti-prob">'
+        f'<div><span>Bookmaker</span><b>{escape(componenti.percentuale(v.prob_bookmaker))}</b></div>'
+        f'<div><span>Modello</span><b>{escape(componenti.percentuale(v.prob_modello))}</b></div>'
+        "</div>"
+        + badge(v.testo, "verde" if v.conviene else "rosso")
         + "</div>"
     )
 

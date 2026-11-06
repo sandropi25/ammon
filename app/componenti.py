@@ -23,6 +23,7 @@ from ammonizioni.db.modelli import (
     Arbitro,
     DuelloManuale,
     Formazione,
+    Giocata,
     Giocatore,
     Partita,
     Presenza,
@@ -517,6 +518,9 @@ class PaginaDettaglio:
     dettaglio: Dettaglio
     cambi: list[str]
     extra: dict[int, dict]
+    campo: object | None = None  # componenti_campo.DatiCampo
+    # giocate già registrate in questa partita: giocatore_id -> (puntata, quota)
+    giocate: dict[int, tuple[float, float]] = field(default_factory=dict)
 
 
 def etichetta_formazioni(stato: str) -> str:
@@ -575,7 +579,29 @@ def carica_pagina_dettaglio(s: Session, partita_id: int) -> PaginaDettaglio | No
             "link": link_esterni(giocatori[c.giocatore_id]),
             "avversari": avversari_possibili(dati, c),
         }
-    return PaginaDettaglio(dettaglio=det, cambi=cambi, extra=extra)
+    import componenti_campo  # qui: componenti_campo importa questo modulo
+
+    campo = componenti_campo.carica_campo(
+        s, s.get(Partita, partita_id), dati.titolari, det.candidati, det.subentranti
+    )
+    return PaginaDettaglio(
+        dettaglio=det, cambi=cambi, extra=extra, campo=campo,
+        giocate=giocate_partita(s, partita_id),
+    )
+
+
+def giocate_partita(s: Session, partita_id: int) -> dict[int, tuple[float, float]]:
+    """Prima giocata registrata per ogni giocatore della partita: (puntata, quota)."""
+    righe = s.execute(
+        select(Giocata.giocatore_id, Giocata.puntata, Giocata.quota)
+        .where(Giocata.partita_id == partita_id)
+        .order_by(Giocata.id)
+    ).all()
+    giocate: dict[int, tuple[float, float]] = {}
+    for gid, puntata, quota in righe:
+        # Postgres può dare Decimal: sempre float (la cache vuole dati semplici)
+        giocate.setdefault(int(gid), (float(puntata), float(quota)))
+    return giocate
 
 
 def carica_dettaglio(s: Session, partita_id: int, quote: dict[int, float]) -> Dettaglio | None:

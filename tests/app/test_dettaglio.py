@@ -69,8 +69,7 @@ def test_quota_con_virgola_accettata_e_valore_mostrato(sessione_db):
     with sessione_db() as s:
         popola(s)
     at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
-    at.text_input(key="quota_12").set_value("2,10")
-    at.button(key="salva_quota_12").click().run()
+    at.text_input(key="quota_12").set_value("2,10").run()
     assert not at.exception
     assert not at.error
     riga = _riga(at, "Terzino Casa")
@@ -83,13 +82,12 @@ def test_quota_con_virgola_accettata_e_valore_mostrato(sessione_db):
         assert s.execute(select(Segnalazione)).first() is None
 
 
-@pytest.mark.parametrize("quota", ["abc", "1", "0", ""])
+@pytest.mark.parametrize("quota", ["abc", "1", "0", "-2"])
 def test_quota_non_valida_mostra_errore_senza_eccezioni(sessione_db, quota):
     with sessione_db() as s:
         popola(s)
     at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
-    at.text_input(key="quota_12").set_value(quota)
-    at.button(key="salva_quota_12").click().run()
+    at.text_input(key="quota_12").set_value(quota).run()
     assert not at.exception
     assert any("Quota non valida" in e.value for e in at.error)
     assert _riga(at, "Terzino Casa")["Quota"] == ""

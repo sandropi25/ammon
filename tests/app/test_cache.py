@@ -58,8 +58,7 @@ def test_quota_non_ricarica_dal_db(sessione_db, monkeypatch):
         popola(s)
     chiamate = _contatore(monkeypatch, "carica_pagina_dettaglio")
     at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
-    at.text_input(key="quota_12").set_value("3,00")
-    at.button(key="salva_quota_12").click().run()
+    at.text_input(key="quota_12").set_value("3,00").run()
     assert not at.exception
     assert len(chiamate) == 1  # le quote stanno in sessione: niente query
 

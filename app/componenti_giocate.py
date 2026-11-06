@@ -3,7 +3,7 @@ le pagine si limitano a mostrare quello che restituiscono queste funzioni."""
 from __future__ import annotations
 
 import math
-from dataclasses import fields, replace
+from dataclasses import dataclass, fields, replace
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
@@ -148,6 +148,57 @@ def registra_giocata(
     quota = converti_quota(quota_testo)
     puntata = converti_puntata(puntata_testo)
     return aggiungi_giocata(s, partita_id, giocatore_id, fonte, quota, puntata, giorno)
+
+
+# ---------------------------------------------------------------- riquadro "Scommetti"
+
+FONTE_MIA = "io"
+
+
+@dataclass(frozen=True)
+class Valutazione:
+    """Quota del bookmaker confrontata con il modello."""
+    quota: float
+    prob_bookmaker: float  # 1 / quota
+    prob_modello: float
+    valore: float  # prob_modello - prob_bookmaker
+    conviene: bool
+
+    @property
+    def testo(self) -> str:
+        """"Conviene · valore +8%" oppure "Non conviene · −5%" (meno tipografico)."""
+        punti = round(self.valore * 100)
+        if self.conviene:
+            return f"Conviene · valore +{punti}%"
+        return f"Non conviene · {'−' if punti < 0 else ''}{abs(punti)}%"
+
+
+def valuta_quota(probabilita: float, quota: float) -> Valutazione:
+    implicita = 1 / quota
+    valore = probabilita - implicita
+    return Valutazione(quota, implicita, probabilita, valore, conviene=round(valore * 100) > 0)
+
+
+def testo_giocata(puntata: float, quota: float) -> str:
+    """"Giocata registrata: 10 € a 4,50"."""
+    importo = f"{puntata:g}".replace(".", ",") if float(puntata).is_integer() else decimale(puntata, 2)
+    return f"Giocata registrata: {importo} € a {decimale(quota, 2)}"
+
+
+def registra_scommessa(
+    s: Session, partita_id: int, giocatore_id: int, quota: float, puntata_testo: str, giorno: date
+) -> Giocata:
+    """"L'ho giocata": fonte "io", data di oggi, quota e puntata. Una sola giocata per
+    giocatore e partita da qui: il doppione è rifiutato (ValueError con messaggio)."""
+    puntata = converti_puntata(puntata_testo)
+    esiste = s.scalars(
+        select(Giocata.id).where(
+            Giocata.partita_id == partita_id, Giocata.giocatore_id == giocatore_id
+        ).limit(1)
+    ).first()
+    if esiste is not None:
+        raise ValueError("Hai già registrato una giocata su questo giocatore in questa partita")
+    return aggiungi_giocata(s, partita_id, giocatore_id, FONTE_MIA, quota, puntata, giorno)
 
 
 def partite_con_giocate(s: Session, campionati: tuple[int, ...] | None) -> set[int] | None:
