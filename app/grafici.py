@@ -65,20 +65,21 @@ def dispersione(dati: list[dict], tema: str) -> alt.Chart:
         alt.Chart(alt.Data(values=dati))
         .mark_point(size=70, strokeWidth=2)
         .encode(
-            x=alt.X("Falli 90':Q", title="Falli commessi per 90'"),
-            y=alt.Y("Gialli 90':Q", title="Gialli per 90'"),
+            x=alt.X("Falli90:Q", title="Falli commessi per 90'"),
+            y=alt.Y("Gialli90:Q", title="Gialli per 90'"),
             color=alt.Color(
                 "Gruppo:N", title=None,
                 scale=alt.Scale(domain=["In ritardo", "Altri"], range=[p["rosso"], p["testo2"]]),
             ),
             fill=alt.Fill(
-                "Gruppo:N", legend=None,
+                "Gruppo:N", title=None,
                 scale=alt.Scale(domain=["In ritardo", "Altri"], range=[p["rosso"], "transparent"]),
             ),
             opacity=alt.condition("datum.Gruppo == 'In ritardo'", alt.value(1), alt.value(0.55)),
             tooltip=[
                 alt.Tooltip("Giocatore:N"), alt.Tooltip("Squadra:N"),
-                alt.Tooltip("Falli 90':Q", format=".2f"), alt.Tooltip("Gialli 90':Q", format=".2f"),
+                alt.Tooltip("Falli90:Q", title="Falli per 90'", format=".2f"),
+                alt.Tooltip("Gialli90:Q", title="Gialli per 90'", format=".2f"),
                 alt.Tooltip("Gialli:Q"), alt.Tooltip("Minuti:Q"),
             ],
         )

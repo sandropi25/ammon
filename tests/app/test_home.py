@@ -134,6 +134,12 @@ def test_dati_primi_solo_ammoniti():
     righe = [_riga(i, f"G{i}", gialli=20 - i) for i in range(20)]
     assert len(home.dati_primi(righe)) == 15
     assert home.dati_primi([_riga(1, gialli=0)]) == []
+    # omonimi: etichette diverse, così le barre non si sommano
+    omonimi = [_riga(1, "Raúl García", gialli=3, squadra="Milan"),
+               _riga(2, "Raúl García", gialli=3, squadra="Lazio"),
+               _riga(3, "Raúl García", gialli=2, squadra="Lazio")]
+    etichette = [d["Giocatore"] for d in home.dati_primi(omonimi)]
+    assert etichette == ["Raúl García (Milan)", "Raúl García (Lazio)", "Raúl García (Lazio) #3"]
 
 
 def test_gialli_per_giornata_e_per_squadra(sessione_db):
@@ -164,6 +170,31 @@ def test_grafici_con_i_colori_del_tema(tema):
     assert grafici.BLU[tema] in spec
     spec = str(grafici.per_squadra([{"Squadra": "A", "Gialli": 4, "Partite": 2, "Media": 2.0}], tema).to_dict())
     assert p["giallo"] in spec
+
+
+def _campi(spec):
+    if isinstance(spec, dict):
+        for k, v in spec.items():
+            if k == "field":
+                yield v
+            yield from _campi(v)
+    elif isinstance(spec, list):
+        for v in spec:
+            yield from _campi(v)
+
+
+def test_nessun_campo_vega_con_apostrofo():
+    """Vega legge i nomi dei campi come percorsi: "Falli 90'" non si disegnava."""
+    righe = [_riga(i, f"G{i}", gialli=i, falli=10 + i) for i in range(1, 6)]
+    giornate = [{"Campionato": "Serie A", "Giornata": 1, "Gialli": 4, "Media a partita": 2.0}]
+    for grafico in (
+        grafici.barre_primi(home.dati_primi(righe), "scuro"),
+        grafici.dispersione(home.dati_dispersione(righe), "scuro"),
+        grafici.per_giornata(giornate, "scuro"),
+        grafici.per_squadra([{"Squadra": "A", "Gialli": 4, "Partite": 2, "Media": 2.0}], "scuro"),
+    ):
+        campi = list(_campi(grafico.to_dict()))
+        assert campi and all("'" not in c for c in campi)
 
 
 # ---------------------------------------------------------------- riquadri

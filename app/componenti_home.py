@@ -171,8 +171,9 @@ def dati_dispersione(righe: list[RigaClassifica]) -> list[dict[str, object]]:
     ritardo = in_ritardo(righe)
     return [
         {
-            "Giocatore": r.nome, "Squadra": r.squadra, "Falli 90'": round(r.falli_90, 2),
-            "Gialli 90'": round(r.gialli_90, 2), "Gialli": r.gialli, "Minuti": r.minuti,
+            # nomi dei campi senza apostrofo: Vega li legge come percorsi ("Falli 90'" rompe)
+            "Giocatore": r.nome, "Squadra": r.squadra, "Falli90": round(r.falli_90, 2),
+            "Gialli90": round(r.gialli_90, 2), "Gialli": r.gialli, "Minuti": r.minuti,
             "Gruppo": "In ritardo" if r.giocatore_id in ritardo else "Altri",
         }
         for r in righe if r.minuti >= MINUTI_DISPERSIONE
@@ -180,11 +181,23 @@ def dati_dispersione(righe: list[RigaClassifica]) -> list[dict[str, object]]:
 
 
 def dati_primi(righe: list[RigaClassifica], quanti: int = PRIMI_GRAFICO) -> list[dict[str, object]]:
+    """I più ammoniti per il grafico a barre. L'etichetta è unica (gli omonimi hanno anche la
+    squadra, o l'id): il grafico raggruppa per etichetta e sommerebbe due omonimi."""
     primi = [r for r in righe if r.gialli][:quanti]
-    return [
-        {"Giocatore": r.nome, "Squadra": r.squadra, "Gialli": r.gialli, "Rossi": r.rossi}
-        for r in primi
-    ]
+    conta: dict[str, int] = {}
+    for r in primi:
+        conta[r.nome] = conta.get(r.nome, 0) + 1
+    etichette: set[str] = set()
+    voci = []
+    for r in primi:
+        etichetta = r.nome if conta[r.nome] == 1 else f"{r.nome} ({r.squadra})"
+        if etichetta in etichette:
+            etichetta = f"{etichetta} #{r.giocatore_id}"
+        etichette.add(etichetta)
+        voci.append({
+            "Giocatore": etichetta, "Squadra": r.squadra, "Gialli": r.gialli, "Rossi": r.rossi,
+        })
+    return voci
 
 
 def gialli_per_giornata(

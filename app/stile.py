@@ -250,7 +250,8 @@ html, body, .stApp {{
 }}
 .stButton button:hover, .stFormSubmitButton button:hover {{ border-color: var(--cr-giallo) !important; }}
 .stButton button *, .stFormSubmitButton button * {{ color: inherit !important; }}
-[data-testid^="stBaseButton-primary"] {{
+[data-testid^="stBaseButton-primary"], .stButton [data-testid^="stBaseButton-primary"],
+.stFormSubmitButton [data-testid^="stBaseButton-primary"], [data-testid="stPopover"] [data-testid^="stBaseButton-primary"] {{
   background: var(--cr-giallo) !important; color: var(--cr-su-giallo) !important;
   border-color: var(--cr-giallo) !important;
 }}
@@ -271,6 +272,12 @@ html, body, .stApp {{
 
 /* menu dei campionati: "Serie A ▾" e "Liga ▾" con la tendina delle partite, "Tutti" */
 .st-key-menu_campionati {{ margin: 0 0 .5rem; }}
+[data-testid="stPopoverButton"] {{
+  background: var(--cr-superficie) !important; color: var(--cr-testo) !important;
+  border: 1px solid var(--cr-bordo) !important;
+}}
+[data-testid="stPopoverButton"] * {{ color: inherit !important; }}
+[data-testid="stPopoverButton"]:hover {{ border-color: var(--cr-giallo) !important; }}
 .st-key-menu_campionati button {{
   min-height: 44px; border-radius: 999px !important; padding: 0 1.1rem !important;
   font-weight: 700; font-size: 1rem;
@@ -288,6 +295,8 @@ html, body, .stApp {{
 }}
 .cr-menu-sotto {{ font-family: 'Barlow', sans-serif; font-weight: 500; font-size: .9rem; color: var(--cr-testo2); }}
 [class*="st-key-voce_menu_"] {{ position: relative; border-radius: 10px; padding: 6px 8px; gap: 0 !important; }}
+[class*="st-key-voce_menu_"] [data-testid="stMarkdownContainer"] {{ margin-bottom: 0 !important; }}
+[data-testid="stPopoverBody"] [data-testid="stPageLink"] a * {{ color: var(--cr-link) !important; font-weight: 700; }}
 [class*="st-key-voce_menu_"]:hover, [class*="st-key-voce_menu_"]:focus-within {{ background: var(--cr-giallo-tenue); }}
 [class*="st-key-voce_menu_"] > [data-testid="stElementContainer"]:last-child {{
   position: absolute !important; inset: 0; margin: 0 !important; width: 100% !important;
@@ -509,6 +518,7 @@ html, body, .stApp {{
 [class*="st-key-riquadro_home_"] {{ gap: .3rem; padding: 14px 16px 10px; }}
 [class*="st-key-riquadro_home_"] [data-testid="stPageLink"] a {{ padding-left: 0 !important; background: transparent !important; }}
 [class*="st-key-riquadro_home_"] [data-testid="stPageLink"] a * {{ color: var(--cr-link) !important; font-weight: 700; font-size: .9rem; }}
+.cr-home-riquadro {{ margin-bottom: 1rem; }}  /* compensa il margine negativo del markdown */
 .cr-home-etichetta {{
   font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--cr-testo2);
 }}
@@ -521,6 +531,8 @@ html, body, .stApp {{
 .st-key-bio_home {{
   display: grid !important; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;
 }}
+[class*="st-key-bio_"] [data-testid="stPageLink"] a {{ padding-left: 0 !important; background: transparent !important; }}
+[class*="st-key-bio_"] [data-testid="stPageLink"] a * {{ color: var(--cr-link) !important; font-weight: 700; font-size: .9rem; }}
 .cr-bio-testo {{ margin: .55rem 0 .3rem; font-size: .9rem; line-height: 1.45; color: var(--cr-testo); }}
 .cr-bio-fonte {{ font-size: .78rem; color: var(--cr-testo2); }}
 .cr-bio-fonte a {{ color: var(--cr-link); font-weight: 600; }}
@@ -1104,16 +1116,29 @@ def _voci_menu(campionato: int, nome: str) -> None:
     )
 
 
+def css_menu_scelto(chiave: str) -> str:
+    """Il pulsante della tendina del campionato scelto, in giallo come i pulsanti primari."""
+    return (
+        f".st-key-{chiave} button {{ background: var(--cr-giallo) !important; "
+        "color: var(--cr-su-giallo) !important; border-color: var(--cr-giallo) !important; }"
+        f" .st-key-{chiave} button * {{ color: var(--cr-su-giallo) !important; }}"
+    )
+
+
 def menu_campionati() -> None:
     """Barra dei campionati sotto il menu: "Serie A ▾" e "Liga ▾" aprono la tendina con le
     partite della giornata (e scelgono il campionato), "Tutti" mostra entrambi. Su telefono
     la tendina occupa la larghezza dello schermo."""
     corrente = campionato_corrente()
+    if corrente in NOMI_CAMPIONATI.values():
+        # campionato scelto in giallo: con il CSS e non con type="primary", perché cambiare
+        # il tipo della tendina la ricrea chiusa (si chiudeva subito dopo il clic)
+        st.html(f"<style>{css_menu_scelto(chiave_menu(corrente))}</style>")
     with st.container(key="menu_campionati", horizontal=True, gap="small"):
         for campionato, nome in NOMI_CAMPIONATI.items():
             chiave = chiave_menu(nome)
             tendina = st.popover(
-                nome, type="primary" if corrente == nome else "secondary", key=chiave,
+                nome, key=chiave,
                 on_change=_menu_aperto, args=(chiave, nome),
                 help=f"Partite della giornata di {nome}",
             )
