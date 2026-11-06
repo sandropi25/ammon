@@ -130,6 +130,8 @@ def _candidato(**kw):
     base = dict(
         giocatore_id=1, nome="Nicolò Barella", squadra_id=5, ruolo="M", probabilita=0.35,
         motivazioni=["Tanti falli", "Arbitro severo"], affidabilita="alto",
+        affidabilita_punti=86,
+        affidabilita_motivi=("2.430 minuti in 3 stagioni", "formazione ufficiale"),
         avversario_diretto_id=None, fattori=[], quota=2.5, prob_implicita=0.4, valore=0.12,
     )
     base.update(kw)
@@ -139,8 +141,10 @@ def _candidato(**kw):
 def test_barra_probabilita_dati_e_larghezza():
     h = stile.barra_probabilita(_candidato(), "Inter", ["Luca"])
     for atteso in ("Nicolò Barella", "Inter", "Centrocampista", "35%", "Tanti falli · Arbitro severo",
-                   "Affidabilità alta", "Valore +12%", "Quota 2,50", "Luca"):
+                   "🟢 Alta 86", "Valore +12%", "Quota 2,50", "Luca",
+                   "Affidabilità: 2.430 minuti in 3 stagioni · formazione ufficiale"):
         assert atteso in h
+    assert '<span class="cr-badge cr-badge--verde">🟢 Alta 86</span>' in h
     assert "width: 50%" in h  # 35% su una scala che arriva al 70%
     assert '<span class="cr-badge cr-badge--verde">Valore +12%</span>' in h
     piena = stile.barra_probabilita(_candidato(probabilita=0.9), "Inter")
@@ -153,8 +157,30 @@ def test_barra_probabilita_valore_negativo_e_senza_quota():
     h = stile.barra_probabilita(_candidato(valore=-0.03), "Inter")
     assert '<span class="cr-badge cr-badge--neutro">Valore -3%</span>' in h
     h = stile.barra_probabilita(_candidato(quota=None, prob_implicita=None, valore=None,
-                                           affidabilita="dati insufficienti"), "Inter")
-    assert "Valore" not in h and "Quota" not in h and "Dati insufficienti" in h
+                                           affidabilita="dati insufficienti",
+                                           affidabilita_punti=12, affidabilita_motivi=()), "Inter")
+    assert "Valore" not in h and "Quota" not in h and "🔴 Bassa 12" in h
+    assert "cr-affid" not in h  # senza motivi niente riga di dettaglio
+
+
+def test_livelli_di_affidabilita_nei_badge():
+    for punti, atteso in ((70, "🟢 Alta 70"), (69, "🟡 Media 69"), (40, "🟡 Media 40"),
+                          (39, "🔴 Bassa 39")):
+        assert atteso in stile.barra_probabilita(_candidato(affidabilita_punti=punti), "Inter")
+    assert "cr-badge--giallo\">🟡 Media 55" in stile.barra_probabilita(
+        _candidato(affidabilita_punti=55), "Inter")
+    assert "cr-badge--rosso\">🔴 Bassa 5" in stile.barra_probabilita(
+        _candidato(affidabilita_punti=5), "Inter")
+
+
+def test_riquadro_puntata_solida():
+    h = stile.riquadro_puntata_solida(_candidato(), "Inter")
+    for atteso in ("Puntata più solida", "Nicolò Barella", "35%", "🟢 Alta 86", "2.430 minuti"):
+        assert atteso in h
+    h = stile.riquadro_puntata_solida(
+        _candidato(nome="<b>x</b>", affidabilita_motivi=("<i>",)), "<Sq>"
+    )
+    assert "<b>" not in h and "<i>" not in h and "<Sq>" not in h
 
 
 def test_barra_probabilita_escape():

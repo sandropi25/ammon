@@ -1,3 +1,4 @@
+import re
 import pytest
 from ayuda_app import PAGINA_DETTAGLIO, avvia, sessione_db, url_db, visibile
 from db_prova import CASA, PARTITA_FUTURA, TRASF, popola
@@ -166,3 +167,28 @@ def test_probabili_calcolate_senza_correzione_manuale(sessione_db):
     assert not at.multiselect  # niente più modifica a mano delle probabili
     assert not [b for b in at.button if b.key == "salva_probabili"]
     assert len(at.dataframe[0].value) == 6  # stessi candidati dell'ultimo XI
+
+
+# --- affidabilità precisa --------------------------------------------------------
+
+
+def test_dettaglio_mostra_affidabilita_e_ordine_alternativo(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+    at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
+    assert not at.exception
+    df = at.dataframe[0].value
+    assert all(x.split()[1] in ("Alta", "Media", "Bassa") for x in df["Affidabilità"])
+    assert all(x.split()[0] in ("🟢", "🟡", "🔴") and x.split()[2].isdigit() for x in df["Affidabilità"])
+    html = " ".join(m.value for m in at.markdown)
+    assert 'class="cr-affid"' in html and "minuti in" in html and "formazione ufficiale" in html
+    assert [t.label for t in at.toggle] == ["Ordina per affidabilità"]
+    assert at.toggle[0].value is False  # predefinito: per probabilità
+    prima = _percentuali(at.dataframe[0].value)
+    assert prima == sorted(prima, reverse=True)
+
+    at.toggle(key="ordina_affidabilita").set_value(True).run()
+    assert not at.exception
+    html = [m.value for m in at.markdown if "cr-candidato" in m.value][0]
+    punti = [int(p) for p in re.findall(r"cr-badge--\w+\">[^<]*?(?:Alta|Media|Bassa) (\d+)<", html)]
+    assert punti == sorted(punti, reverse=True) and len(punti) == 6

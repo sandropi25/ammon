@@ -30,6 +30,7 @@ from ammonizioni.db.modelli import (
     Squadra,
     UltimoAggiornamento,
 )
+from ammonizioni.motore import affidabilita
 from ammonizioni.motore.classifica import classifica, classifica_subentranti, converti_quota
 from ammonizioni.motore.dati import carica_dati, carica_dati_calda
 from ammonizioni.motore.fattori.arbitro import fattore_arbitro
@@ -71,6 +72,55 @@ def data_breve(dt_utc: datetime) -> str:
 
 def percentuale(p: float) -> str:
     return f"{round(p * 100)}%"
+
+
+# livello di affidabilità -> (pallino, nome, tipo di badge)
+LIVELLI_AFFIDABILITA = {
+    "alta": ("🟢", "Alta", "verde"),
+    "media": ("🟡", "Media", "giallo"),
+    "bassa": ("🔴", "Bassa", "rosso"),
+}
+# "Puntata più solida": affidabilità alta e probabilità non lontana dalla migliore
+SOGLIA_PROB_SOLIDA = 0.5  # almeno metà della probabilità più alta tra i candidati
+
+
+def testo_affidabilita(c: Candidato) -> str:
+    """"🟢 Alta 86": livello e punteggio 0-100."""
+    pallino, nome, _ = LIVELLI_AFFIDABILITA[affidabilita.livello(c.affidabilita_punti)]
+    return f"{pallino} {nome} {c.affidabilita_punti}"
+
+
+def tipo_badge_affidabilita(c: Candidato) -> str:
+    return LIVELLI_AFFIDABILITA[affidabilita.livello(c.affidabilita_punti)][2]
+
+
+def motivi_affidabilita(c: Candidato) -> str:
+    """La riga con i motivi del punteggio, in chiaro."""
+    return " · ".join(c.affidabilita_motivi)
+
+
+def ordina_candidati(candidati: list[Candidato], per_affidabilita: bool) -> list[Candidato]:
+    """Per probabilità (come arriva dalla classifica) oppure per affidabilità decrescente,
+    a parità la probabilità più alta per prima."""
+    if not per_affidabilita:
+        return list(candidati)
+    return sorted(candidati, key=lambda c: (-c.affidabilita_punti, -c.probabilita, c.giocatore_id))
+
+
+def puntata_piu_solida(candidati: list[Candidato]) -> Candidato | None:
+    """Il candidato con probabilità e affidabilità alte insieme: tra quelli con affidabilità
+    alta (70 o più) e probabilità almeno metà della più alta, il maggior prodotto
+    probabilità × affidabilità. None se nessuno ha i requisiti."""
+    if not candidati:
+        return None
+    soglia = max(c.probabilita for c in candidati) * SOGLIA_PROB_SOLIDA
+    adatti = [
+        c for c in candidati
+        if c.affidabilita_punti >= affidabilita.SOGLIA_ALTA and c.probabilita >= soglia
+    ]
+    if not adatti:
+        return None
+    return max(adatti, key=lambda c: (c.probabilita * c.affidabilita_punti, -c.giocatore_id))
 
 
 def valore_testo(v: float) -> str:
@@ -630,7 +680,7 @@ def righe_tabella(
             "Squadra": nomi_squadre.get(c.squadra_id, ""),
             "Probabilità": percentuale(c.probabilita),
             "Motivazioni": " · ".join(c.motivazioni),
-            "Affidabilità": c.affidabilita,
+            "Affidabilità": testo_affidabilita(c),
             "Quota": decimale(c.quota, 2) if c.quota else "",
             "Implicita": percentuale(c.prob_implicita) if c.prob_implicita else "",
             "Valore": valore_testo(c.valore) if c.valore is not None else "",

@@ -58,6 +58,19 @@ if cambi:
 
 st.subheader("Candidati all'ammonizione")
 righe = componenti.righe_tabella(candidati, dati.nomi_squadre, det.tipster)
+subentranti = componenti.applica_quote(det.subentranti, quote)
+per_affidabilita = st.toggle(
+    "Ordina per affidabilità",
+    key="ordina_affidabilita",
+    help="Predefinito: per probabilità. L'affidabilità dice quanto sono solidi i dati dietro "
+    "la probabilità (0-100); non la cambia.",
+)
+solida = componenti.puntata_piu_solida(candidati + subentranti)
+if solida is not None:
+    st.markdown(
+        stile.riquadro_puntata_solida(solida, dati.nomi_squadre.get(solida.squadra_id, "")),
+        unsafe_allow_html=True,
+    )
 if not righe:
     st.info("Nessun candidato: mancano le formazioni e lo storico dei titolari.")
 else:
@@ -67,7 +80,7 @@ else:
             stile.barra_probabilita(
                 c, dati.nomi_squadre.get(c.squadra_id, ""), det.tipster.get(c.giocatore_id, [])
             )
-            for c in candidati
+            for c in componenti.ordina_candidati(candidati, per_affidabilita)
         ),
         unsafe_allow_html=True,
     )
@@ -81,7 +94,6 @@ else:
             )
 
 # probabili subentranti: tabella a parte sotto i titolari, ordinati per probabilità
-subentranti = componenti.applica_quote(det.subentranti, quote)
 if subentranti:
     st.subheader("Probabili subentranti")
     st.caption(
@@ -92,7 +104,7 @@ if subentranti:
     st.markdown(
         "".join(
             stile.barra_probabilita(c, dati.nomi_squadre.get(c.squadra_id, ""))
-            for c in subentranti
+            for c in componenti.ordina_candidati(subentranti, per_affidabilita)
         ),
         unsafe_allow_html=True,
     )

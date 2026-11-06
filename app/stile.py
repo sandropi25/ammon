@@ -62,11 +62,6 @@ OMBRA = {
 }
 TIPI_BADGE = ("giallo", "rosso", "verde", "neutro")
 RUOLI = {"G": "Portiere", "D": "Difensore", "M": "Centrocampista", "F": "Attaccante"}
-AFFIDABILITA = {
-    "alto": ("Affidabilità alta", "verde"),
-    "medio": ("Affidabilità media", "giallo"),
-    "dati insufficienti": ("Dati insufficienti", "neutro"),
-}
 ESITI_BADGE = {"vinta": "verde", "persa": "rosso"}
 PROBABILITA_MASSIMA = 0.70  # la barra piena corrisponde al 70%
 LARGHEZZA_MINIMA = 3  # percento: anche il 2% resta visibile
@@ -421,6 +416,15 @@ html, body, .stApp {{
   background: linear-gradient(90deg, var(--cr-giallo), #FFD84D);
 }}
 .cr-motivi {{ font-size: .85rem; color: var(--cr-testo2); }}
+.cr-affid {{ font-size: .8rem; color: var(--cr-testo2); margin-top: .45rem; line-height: 1.35; }}
+.cr-solida {{
+  background: var(--cr-giallo-tenue); border: 1px solid var(--cr-giallo); border-radius: 14px;
+  box-shadow: var(--cr-ombra); padding: 12px 14px; margin-bottom: 14px;
+}}
+.cr-solida-titolo {{
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1rem;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--cr-testo2); margin-bottom: .3rem;
+}}
 
 /* giocate e statistiche */
 .cr-griglia {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-bottom: 1rem; }}
@@ -594,8 +598,7 @@ def barra_probabilita(candidato, squadra: str, tipster: list[str] | tuple = ()) 
     subentro = getattr(c, "subentro", None)
     etichetta = componenti.etichetta_subentro(c) if subentro is not None else ""
     info = " · ".join(x for x in (squadra, ruolo, etichetta) if x)
-    testo_aff, tipo_aff = AFFIDABILITA.get(c.affidabilita, (str(c.affidabilita), "neutro"))
-    badges = [badge(testo_aff, tipo_aff)]
+    badges = [badge(componenti.testo_affidabilita(c), componenti.tipo_badge_affidabilita(c))]
     if subentro is not None:
         # subentrante: quanto entra, e gialli/falli per 90' accanto alla media del ruolo
         badges.append(badge(componenti.ingresso_subentro(c), "neutro"))
@@ -622,7 +625,36 @@ def barra_probabilita(candidato, squadra: str, tipster: list[str] | tuple = ()) 
         f'<div class="cr-barra"><span style="width: {larghezza_barra(c.probabilita)}%"></span></div>'
         + (f'<div class="cr-motivi">{escape(motivi)}</div>' if motivi else "")
         + f'<div class="cr-badges">{"".join(badges)}</div>'
-        "</div>"
+        + _riga_affidabilita(c)
+        + "</div>"
+    )
+
+
+def _riga_affidabilita(c) -> str:
+    """Riga di dettaglio con i motivi del punteggio di affidabilità (vuota se non ci sono)."""
+    motivi = componenti.motivi_affidabilita(c)
+    return f'<div class="cr-affid">Affidabilità: {escape(motivi)}</div>' if motivi else ""
+
+
+def riquadro_puntata_solida(candidato, squadra: str) -> str:
+    """Riquadro in evidenza con la puntata più solida: probabilità e affidabilità alte."""
+    c = candidato
+    ruolo = RUOLI.get(c.ruolo or "", "")
+    subentro = getattr(c, "subentro", None)
+    etichetta = componenti.etichetta_subentro(c) if subentro is not None else ""
+    info = " · ".join(x for x in (squadra, ruolo, etichetta) if x)
+    return (
+        '<div class="cr-solida">'
+        '<div class="cr-solida-titolo">Puntata più solida</div>'
+        '<div class="cr-cand-testa"><div>'
+        f'<div class="cr-cand-nome">{escape(c.nome)}</div>'
+        f'<div class="cr-cand-info">{escape(info)}</div></div>'
+        f'<div class="cr-perc">{escape(componenti.percentuale(c.probabilita))}</div></div>'
+        '<div class="cr-badges">'
+        + badge(componenti.testo_affidabilita(c), componenti.tipo_badge_affidabilita(c))
+        + "</div>"
+        + _riga_affidabilita(c)
+        + "</div>"
     )
 
 

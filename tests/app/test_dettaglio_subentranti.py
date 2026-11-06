@@ -84,3 +84,41 @@ def test_pagina_senza_panchina_nessuna_sezione(sessione_db):
     assert not at.exception
     assert "Probabili subentranti" not in [h.value for h in at.subheader]
     assert len(at.dataframe) == 1
+
+
+# --- affidabilità: ordinamento e puntata più solida -----------------------------
+
+
+def _cand(i, prob, punti):
+    return replace(_subentrante(), giocatore_id=i, nome=f"G{i}", probabilita=prob,
+                   affidabilita_punti=punti, subentro=None)
+
+
+def test_ordina_per_probabilita_o_per_affidabilita():
+    cs = [_cand(1, 0.30, 50), _cand(2, 0.25, 90), _cand(3, 0.20, 90), _cand(4, 0.10, 20)]
+    assert [c.giocatore_id for c in componenti.ordina_candidati(cs, False)] == [1, 2, 3, 4]
+    assert [c.giocatore_id for c in componenti.ordina_candidati(cs, True)] == [2, 3, 1, 4]
+
+
+def test_puntata_piu_solida_serve_affidabilita_alta_e_probabilita_vicina_alla_migliore():
+    assert componenti.puntata_piu_solida([]) is None
+    # il più probabile è poco affidabile: vince il secondo (alta affidabilità, prob. >= metà)
+    cs = [_cand(1, 0.40, 55), _cand(2, 0.30, 85), _cand(3, 0.10, 99)]
+    assert componenti.puntata_piu_solida(cs).giocatore_id == 2
+    # affidabile ma troppo improbabile (meno di metà della migliore): escluso
+    assert componenti.puntata_piu_solida([_cand(1, 0.40, 60), _cand(3, 0.10, 99)]) is None
+    # nessuno con affidabilità alta
+    assert componenti.puntata_piu_solida([_cand(1, 0.40, 69), _cand(2, 0.35, 40)]) is None
+    # più candidati adatti: il maggior prodotto probabilità x affidabilità
+    assert componenti.puntata_piu_solida([_cand(1, 0.40, 70), _cand(2, 0.38, 90)]).giocatore_id == 2
+
+
+def test_dettaglio_mostra_la_puntata_piu_solida_se_c_e(sessione_db):
+    with sessione_db() as s:
+        popola(s)
+    at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
+    assert not at.exception
+    html = " ".join(m.value for m in at.markdown)
+    assert html.count("Puntata più solida") <= 1
+    if "Puntata più solida" in html:
+        assert html.index("Puntata più solida") < html.index("cr-candidato")
