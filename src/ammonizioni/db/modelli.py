@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -43,6 +43,17 @@ class Giocatore(Base):
     nome: Mapped[str] = mapped_column(String)
     ruolo: Mapped[str | None] = mapped_column(String(1), nullable=True)  # G, D, M, F
     sofascore_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Biografia (job notturno, al più una volta al mese): anagrafica da ESPN, breve profilo
+    # da Wikipedia (testo CC BY-SA: si mostra sempre con link e "Fonte: Wikipedia").
+    data_nascita: Mapped[date | None] = mapped_column(Date, nullable=True)
+    nazionalita: Mapped[str | None] = mapped_column(String, nullable=True)
+    altezza_cm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    posizione: Mapped[str | None] = mapped_column(String, nullable=True)
+    wiki_titolo: Mapped[str | None] = mapped_column(String, nullable=True)
+    wiki_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    wiki_estratto: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ultimo tentativo (anche senza risultati): si riprova solo dopo un mese
+    bio_aggiornata: Mapped[datetime | None] = mapped_column(DataOraUTC, nullable=True)
 
 
 class Arbitro(Base):

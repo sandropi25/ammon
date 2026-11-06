@@ -18,6 +18,22 @@ from ammonizioni.giocate.registro import aggiungi_giocata
 from ammonizioni.scheduler import notte
 
 ADESSO = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+AGGIORNA_BIO_VERA = notte.aggiorna_biografie  # prima che la fixture la sostituisca
+
+
+@pytest.fixture(autouse=True)
+def _biografie_senza_rete(monkeypatch):
+    """Il passo delle biografie andrebbe in rete (ESPN, Wikipedia): nei test non fa nulla."""
+    from ammonizioni.caricamento.biografie import RiepilogoBio
+
+    chiamate = []
+
+    def finto(s):
+        chiamate.append(s)
+        return RiepilogoBio()
+
+    monkeypatch.setattr(notte, "aggiorna_biografie", finto)
+    return chiamate
 INIZIO = ADESSO - timedelta(days=1)  # Juventus-Inter di ieri sera
 
 
@@ -271,4 +287,37 @@ def test_main_notte_struttura_cambiata_completo_false_e_prosegue(db_file, caplog
     with leggi_db(db_file) as s:
         assert s.get(UltimoAggiornamento, "notte").completo is False
         assert s.get(Partita, 7).statistiche_scaricate is True
+
+
+def test_main_notte_aggiorna_le_biografie(db_file, _biografie_senza_rete):
+    notte.main([], crea_fonte=lambda s, p: FonteFinta(), crea_fd=lambda s: None, controllo=lambda f: [])
+    assert len(_biografie_senza_rete) == 1
+
+
+def test_main_notte_errore_biografie_non_ferma_lo_storico(db_file, caplog):
+    def guasto(s):
+        raise RuntimeError("wikipedia giu'")
+
+    with caplog.at_level(logging.ERROR):
+        assert notte.main(
+            [], crea_fonte=lambda s, p: FonteFinta(), crea_fd=lambda s: None,
+            controllo=lambda f: [], biografie=guasto,
+        ) == 0
+    assert any("Biografie non aggiornate" in x.getMessage() for x in caplog.records)
+    with leggi_db(db_file) as s:
+        assert s.get(UltimoAggiornamento, "storico") is not None
+
+
+def test_biografie_della_notte_usano_espn_solo_con_fonte_espn(sessione, monkeypatch):
+    usati = []
+    monkeypatch.setattr(
+        notte.biografie_giocatori, "aggiorna",
+        lambda s, client, usa_espn: usati.append((client.limite is not None, usa_espn)),
+    )
+    monkeypatch.delenv("FONTE_DATI", raising=False)
+    AGGIORNA_BIO_VERA(sessione)
+    monkeypatch.setenv("FONTE_DATI", "api_football")
+    AGGIORNA_BIO_VERA(sessione)
+    assert usati == [(True, True), (False, False)]
+
 

@@ -38,6 +38,15 @@ COLONNE_AGGIUNTE: tuple[tuple[str, str, str], ...] = (
     ("partite", "prob_casa", "DOUBLE PRECISION"),
     ("partite", "prob_pareggio", "DOUBLE PRECISION"),
     ("partite", "prob_trasferta", "DOUBLE PRECISION"),
+    # biografie dei giocatori (ESPN + Wikipedia)
+    ("giocatori", "data_nascita", "DATE"),
+    ("giocatori", "nazionalita", "VARCHAR"),
+    ("giocatori", "altezza_cm", "INTEGER"),
+    ("giocatori", "posizione", "VARCHAR"),
+    ("giocatori", "wiki_titolo", "VARCHAR"),
+    ("giocatori", "wiki_url", "VARCHAR"),
+    ("giocatori", "wiki_estratto", "TEXT"),
+    ("giocatori", "bio_aggiornata", "TIMESTAMP WITH TIME ZONE"),
 )
 
 
