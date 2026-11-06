@@ -16,6 +16,7 @@ from ammonizioni.caricamento.formazioni import (
     ultimo_xi,
 )
 from ammonizioni.caricamento.notturno import indica_competizione
+from ammonizioni.caricamento.stemmi import salva_stili_fonte
 from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A
 from ammonizioni.db import repo
 from ammonizioni.db import sessione as modulo_sessione
@@ -85,6 +86,8 @@ def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> bool:
     for formazione in formazioni:
         titolari = [(g, n, r, gr, "ufficiale") for g, n, r, gr in formazione.titolari]
         xi = {g for g, *_ in titolari}
+        maglie = getattr(formazione, "maglie", None)
+        maglie = maglie if isinstance(maglie, dict) else {}
         # la panchina in distinta (tipo "panchina"): i probabili subentranti
         panchina = [
             (g, n, r, None, "panchina")
@@ -105,6 +108,7 @@ def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> bool:
                     giocatore_id=giocatore_id,
                     tipo=tipo,
                     griglia=griglia,
+                    maglia=maglie.get(giocatore_id),
                 )
             )
     if not _complete(partita, formazioni):
@@ -152,6 +156,7 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
             log.warning("Formazioni della partita %s non lette: %s", partita_id, errore)
             continue
         _salva_quote(s, partita, fonte)
+        salva_stili_fonte(s, fonte)  # stemmi e colori dallo stesso summary
         if not formazioni:
             continue
         complete = _salva_ufficiali(s, partita, formazioni)

@@ -15,7 +15,7 @@ import httpx
 from ammonizioni.config import COMPETIZIONI, SLUG_ESPN
 from ammonizioni.fonti.base import ErroreFonte
 from ammonizioni.fonti.limite import LimiteRichieste, Priorita
-from ammonizioni.fonti.tipi import FormazioneDati, PartitaDati, PresenzaDati
+from ammonizioni.fonti.tipi import FormazioneDati, PartitaDati, PresenzaDati, StileSquadra
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +69,45 @@ def _id(valore) -> int | None:
         return int(valore)
     except (TypeError, ValueError):
         return None
+
+
+def _maglia(valore) -> int | None:
+    """Numero di maglia ESPN ("10") se è un intero da 0 a 99, altrimenti None."""
+    if isinstance(valore, bool):
+        return None
+    numero = _id(valore.strip() if isinstance(valore, str) else valore)
+    return numero if numero is not None and 0 <= numero <= 99 else None
+
+
+def _colore(valore) -> str | None:
+    """Colore ESPN ("4169E1", senza #) come "#4169E1"; None se non è un esadecimale valido."""
+    if isinstance(valore, str) and re.fullmatch(r"[0-9A-Fa-f]{6}", valore.strip()):
+        return "#" + valore.strip().upper()
+    return None
+
+
+def _https(valore) -> str | None:
+    return valore if isinstance(valore, str) and valore.startswith("https://") else None
+
+
+def _logo(team: dict) -> str | None:
+    """Stemma: `team.logo` (scoreboard) oppure, nel summary, il logo "default" di `logos`."""
+    logo = _https(team.get("logo"))
+    if logo:
+        return logo
+    loghi = [l for l in team.get("logos") or [] if isinstance(l, dict) and _https(l.get("href"))]
+    for l in loghi:
+        if "default" in (l.get("rel") or []):
+            return l["href"]
+    return loghi[0]["href"] if loghi else None
+
+
+def stile_squadra(team) -> StileSquadra | None:
+    """Stemma e colori di un `team` ESPN; None se non c'è nessuno dei tre."""
+    if not isinstance(team, dict):
+        return None
+    stile = StileSquadra(_logo(team), _colore(team.get("color")), _colore(team.get("alternateColor")))
+    return stile if any((stile.logo_url, stile.colore, stile.colore_alt)) else None
 
 
 def _probabilita_moneyline(valore) -> float | None:
@@ -204,6 +243,7 @@ class _Giocatore:
             else ((voce.get("position") or {}).get("abbreviation") or "SUB")
         )
         self.ordine = _id(voce.get("formationPlace")) or 0
+        self.maglia = _maglia(voce.get("jersey"))
         self.voce = voce
         # (ruolo, riga, posto); i panchinari hanno posizione "SUB": nessuna classe, nessun log
         self.classe = _classifica(self.abbreviazione)
@@ -226,6 +266,18 @@ class Espn:
         self._partite: dict[int, PartitaDati] = {}
         self._slug: dict[int, str] = {}
         self._quote: dict[int, tuple[float, float, float]] = {}
+        self._stili: dict[int, StileSquadra] = {}
+
+    def stili_squadre(self) -> dict[int, StileSquadra]:
+        """Stemma e colori delle squadre viste nei summary già letti (statistiche e
+        formazioni): nessuna richiesta in più."""
+        return dict(self._stili)
+
+    def _ricorda_stile(self, squadra: dict) -> None:
+        team = squadra.get("team") or {}
+        squadra_id, stile = _id(team.get("id")), stile_squadra(team)
+        if squadra_id is not None and stile is not None:
+            self._stili[squadra_id] = stile
 
     # --- Fonte ---------------------------------------------------------
 
@@ -278,6 +330,7 @@ class Espn:
         entrate, uscite = self._minuti_eventi(corpo.get("keyEvents"))
         presenze: list[PresenzaDati] = []
         for squadra in self._rosters(corpo, partita_id):
+            self._ricorda_stile(squadra)
             squadra_id = _id((squadra.get("team") or {}).get("id"))
             giocatori = self._giocatori(squadra, partita_id)
             if squadra_id is None or giocatori is None:
@@ -301,6 +354,7 @@ class Espn:
             self._quote[partita_id] = quote
         formazioni = []
         for squadra in self._rosters(corpo, partita_id):
+            self._ricorda_stile(squadra)
             squadra_id = _id((squadra.get("team") or {}).get("id"))
             giocatori = self._giocatori(squadra, partita_id)
             if squadra_id is None or giocatori is None:
@@ -321,6 +375,7 @@ class Espn:
                 FormazioneDati(
                     partita_id=partita_id, squadra_id=squadra_id, titolari=elenco,
                     panchina=panchina,
+                    maglie={g.id: g.maglia for g in giocatori if g.maglia is not None},
                 )
             )
         return formazioni
@@ -352,6 +407,8 @@ class Espn:
             gol_casa=None if senza_gol else int(casa["score"]),
             gol_trasferta=None if senza_gol else int(trasferta["score"]),
             stato=stato,
+            casa_stile=stile_squadra(casa["team"]),
+            trasferta_stile=stile_squadra(trasferta["team"]),
         )
 
     def summary(self, partita_id: int) -> dict:
@@ -467,6 +524,7 @@ class Espn:
             gol=_int(valori.get("totalGoals")),
             assist=_int(valori.get("goalAssists")),
             voto=None,  # ESPN non lo fornisce
+            maglia=g.maglia,
         )
 
     @staticmethod

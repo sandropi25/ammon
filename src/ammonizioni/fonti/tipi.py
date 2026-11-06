@@ -6,6 +6,15 @@ from datetime import datetime
 
 
 @dataclass(frozen=True)
+class StileSquadra:
+    """Stemma e colori di una squadra (ESPN `team.logo`, `color`, `alternateColor`): URL
+    https e colori "#RRGGBB"; None dove la fonte non li dà."""
+    logo_url: str | None = None
+    colore: str | None = None
+    colore_alt: str | None = None
+
+
+@dataclass(frozen=True)
 class PartitaDati:
     id: int
     data_utc: datetime  # aware UTC
@@ -20,6 +29,9 @@ class PartitaDati:
     gol_casa: int | None
     gol_trasferta: int | None
     stato: str
+    # stemma e colori delle due squadre, se la fonte li dà (ESPN: nello scoreboard)
+    casa_stile: StileSquadra | None = None
+    trasferta_stile: StileSquadra | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +54,7 @@ class PresenzaDati:
     gol: int
     assist: int
     voto: float | None
+    maglia: int | None = None  # numero di maglia (ESPN `jersey`), se noto
 
 
 @dataclass(frozen=True)
@@ -52,3 +65,5 @@ class FormazioneDati:
     titolari: list[tuple[int, str, str | None, str | None]]
     # panchinari in distinta (giocatore_id, nome, ruolo): servono per i probabili subentranti
     panchina: list[tuple[int, str, str | None]] = field(default_factory=list)
+    # numeri di maglia (giocatore_id -> numero) di titolari e panchina, se noti
+    maglie: dict[int, int] = field(default_factory=dict)

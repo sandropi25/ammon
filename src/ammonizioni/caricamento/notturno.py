@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ammonizioni.caricamento import arbitri_fd
 from ammonizioni.caricamento.arbitri import trova_o_crea
+from ammonizioni.caricamento.stemmi import campi_stile, salva_stili_fonte
 from ammonizioni.config import (
     CAMPIONATI,
     NOMI_CAMPIONATI,
@@ -77,6 +78,11 @@ class FonteContata:
     def formazioni(self, partita_id):
         return self._chiama("formazioni", partita_id)
 
+    def stili_squadre(self):
+        """Stemmi e colori già letti dalla fonte (nessuna richiesta, non conta)."""
+        leggi = getattr(self._fonte, "stili_squadre", None)
+        return leggi() if callable(leggi) else {}
+
     def indica_competizione(self, partita_id, competizione_id):
         """Passa alla fonte (se lo sa usare) la competizione di una partita; non è una richiesta."""
         indica_competizione(self._fonte, partita_id, competizione_id)
@@ -92,8 +98,12 @@ def indica_competizione(fonte, partita_id: int, competizione_id: int) -> None:
 
 def salva_partita(s: Session, dati: PartitaDati) -> Partita:
     """Crea o aggiorna squadre, arbitro e partita (senza toccare `statistiche_scaricate`)."""
-    repo.upsert(s, Squadra(id=dati.casa_id, nome=dati.casa_nome))
-    repo.upsert(s, Squadra(id=dati.trasferta_id, nome=dati.trasferta_nome))
+    # stemma e colori solo se la fonte li dà: un dato mancante non cancella quello salvato
+    repo.upsert(s, Squadra(id=dati.casa_id, nome=dati.casa_nome, **campi_stile(dati.casa_stile)))
+    repo.upsert(
+        s,
+        Squadra(id=dati.trasferta_id, nome=dati.trasferta_nome, **campi_stile(dati.trasferta_stile)),
+    )
     s.flush()
     arbitro = trova_o_crea(s, dati.arbitro_nome, campionato_di(dati.competizione_id))
     partita = s.get(Partita, dati.id)
@@ -138,9 +148,12 @@ def _salva_presenza(s: Session, dati: PresenzaDati) -> None:
     repo.upsert(s, Giocatore(**giocatore))
     s.flush()
     griglia = _griglia(s, dati)
+    # il numero di maglia solo se noto: una fonte senza numero non cancella quello salvato
+    maglia = {"maglia": dati.maglia} if dati.maglia is not None else {}
     repo.upsert(
         s,
         Presenza(
+            **maglia,
             partita_id=dati.partita_id,
             giocatore_id=dati.giocatore_id,
             squadra_id=dati.squadra_id,
@@ -192,6 +205,7 @@ def scarica_statistiche_partita(s: Session, fonte: Fonte, partita_id: int) -> bo
         return False
     for dati in presenze:
         _salva_presenza(s, dati)
+    salva_stili_fonte(s, fonte)  # stemmi e colori dallo stesso summary
     partita.statistiche_scaricate = True
     if tentativi.pop(str(partita_id), None) is not None:
         repo.scrivi_impostazione(s, TENTATIVI_VUOTI, tentativi)

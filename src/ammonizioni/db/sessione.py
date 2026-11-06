@@ -47,6 +47,12 @@ COLONNE_AGGIUNTE: tuple[tuple[str, str, str], ...] = (
     ("giocatori", "wiki_url", "VARCHAR"),
     ("giocatori", "wiki_estratto", "TEXT"),
     ("giocatori", "bio_aggiornata", "TIMESTAMP WITH TIME ZONE"),
+    # stemmi e colori delle squadre, numeri di maglia (campo con le formazioni)
+    ("squadre", "logo_url", "VARCHAR"),
+    ("squadre", "colore", "VARCHAR"),
+    ("squadre", "colore_alt", "VARCHAR"),
+    ("presenze", "maglia", "INTEGER"),
+    ("formazioni", "maglia", "INTEGER"),
 )
 
 

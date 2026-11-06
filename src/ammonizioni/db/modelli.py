@@ -35,6 +35,10 @@ class Squadra(Base):
     __tablename__ = "squadre"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     nome: Mapped[str] = mapped_column(String)
+    # stemma (URL del CDN ESPN, caricato dal browser) e colori "#RRGGBB" della squadra
+    logo_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    colore: Mapped[str | None] = mapped_column(String, nullable=True)
+    colore_alt: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Giocatore(Base):
@@ -104,6 +108,7 @@ class Presenza(Base):
     gol: Mapped[int] = mapped_column(Integer, default=0)
     assist: Mapped[int] = mapped_column(Integer, default=0)
     voto: Mapped[float | None] = mapped_column(Float, nullable=True)
+    maglia: Mapped[int | None] = mapped_column(Integer, nullable=True)  # numero di maglia
 
 
 class Formazione(Base):
@@ -115,6 +120,7 @@ class Formazione(Base):
     # probabile | ufficiale | panchina (panchinari in distinta con la formazione ufficiale)
     tipo: Mapped[str] = mapped_column(String, primary_key=True)
     griglia: Mapped[str | None] = mapped_column(String, nullable=True)
+    maglia: Mapped[int | None] = mapped_column(Integer, nullable=True)  # numero di maglia
 
 
 class ListaManuale(Base):
