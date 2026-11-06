@@ -350,4 +350,4 @@ def test_menu_in_ordine():
         t for t, riga in zip(titoli, re.findall(r"st\.Page\([^)]*\)", sorgente))
         if 'visibility="hidden"' not in riga
     ]
-    assert visibili == ["Partite", "Partite calde", "Calendario", "Cerca", "Giocate", "Impostazioni"]
+    assert visibili == ["Home", "Partite", "Partite calde", "Calendario", "Cerca", "Giocate", "Impostazioni"]

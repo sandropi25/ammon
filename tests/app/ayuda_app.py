@@ -14,7 +14,8 @@ from streamlit.testing.v1 import AppTest  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
 
 PAGINA_APP = str(RADICE / "app" / "Partite.py")  # punto d'ingresso con il menu
-PAGINA_PARTITE = PAGINA_APP  # finché la Home non diventa la pagina iniziale
+PAGINA_HOME = str(RADICE / "app" / "pagine" / "7_Home.py")  # pagina iniziale
+PAGINA_PARTITE = str(RADICE / "app" / "pagine" / "0_Partite.py")
 PAGINA_DETTAGLIO = str(RADICE / "app" / "pagine" / "1_Dettaglio_partita.py")
 PAGINA_CERCA = str(RADICE / "app" / "pagine" / "4_Cerca.py")
 PAGINA_CALENDARIO = str(RADICE / "app" / "pagine" / "5_Calendario.py")
@@ -53,9 +54,12 @@ def campionato_scelto(at: AppTest) -> str:
 
 
 def avvia(pagina: str, **query) -> AppTest:
-    if pagina in (PAGINA_DETTAGLIO, PAGINA_CERCA, PAGINA_CALENDARIO, PAGINA_CALDE):
-        # si parte dalla pagina principale, cosi' st.page_link trova le altre pagine
-        at = AppTest.from_file(PAGINA_PARTITE, default_timeout=30)
+    if pagina in (
+        PAGINA_HOME, PAGINA_PARTITE, PAGINA_DETTAGLIO, PAGINA_CERCA, PAGINA_CALENDARIO,
+        PAGINA_CALDE,
+    ):
+        # si parte dal punto d'ingresso, cosi' st.page_link trova le altre pagine
+        at = AppTest.from_file(PAGINA_APP, default_timeout=30)
         at.switch_page("pagine/" + Path(pagina).name)
     else:
         at = AppTest.from_file(pagina, default_timeout=30)

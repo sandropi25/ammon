@@ -2,7 +2,7 @@
 
 Le pagine restano file separati in pagine/ (non "pages/": con quella cartella Streamlit
 userebbe il vecchio menu automatico e ignorerebbe st.navigation); la pagina iniziale è
-pagine/0_Partite.py.
+pagine/7_Home.py (la Home), le Partite sono in /Partite.
 Gli indirizzi delle pagine non cambiano (es. /Dettaglio_partita?partita=123)."""
 import sys
 from pathlib import Path
@@ -26,7 +26,8 @@ st.set_page_config(
 menu = "top" if auth.accesso_valido() else "hidden"
 
 pagine = [
-    st.Page("pagine/0_Partite.py", title="Partite", icon="📅", default=True),
+    st.Page("pagine/7_Home.py", title="Home", icon="🏠", default=True),
+    st.Page("pagine/0_Partite.py", title="Partite", icon="📅"),
     st.Page("pagine/6_Partite_calde.py", title="Partite calde", icon="🔥"),
     st.Page("pagine/5_Calendario.py", title="Calendario", icon="🗓️"),
     st.Page("pagine/4_Cerca.py", title="Cerca", icon="🔎"),

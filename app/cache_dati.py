@@ -14,6 +14,7 @@ import componenti
 import componenti_calde
 import componenti_calendario
 import componenti_cerca
+import componenti_home
 from ammonizioni import config
 from ammonizioni.db.sessione import apri
 
@@ -161,6 +162,49 @@ def _elenco_rivalita(db: str, blocco: datetime):
 def elenco_rivalita(adesso: datetime):
     """Derby riconosciuti e campi caldi calcolati (sola lettura), in cache per ora intera."""
     return _elenco_rivalita(config.url_database(), adesso.replace(minute=0, second=0, microsecond=0))
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)
+def _statistiche_stagione(db: str, campionati: tuple[int, ...], stagione: int):
+    with apri(db) as s:
+        return componenti_home.statistiche_stagione(s, campionati, stagione)
+
+
+def statistiche_stagione(campionati: tuple[int, ...], stagione: int = config.STAGIONE_CORRENTE):
+    """Classifica degli ammoniti e dati dei grafici della Home (tre query raggruppate)."""
+    return _statistiche_stagione(config.url_database(), tuple(campionati), stagione)
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)
+def _piu_a_rischio(db: str, partite: tuple[int, ...]):
+    with apri(db) as s:
+        return componenti_home.piu_a_rischio(s, list(partite))
+
+
+def piu_a_rischio(partite: list[int]):
+    """Giocatore più a rischio tra le partite date (modello del Dettaglio), in cache."""
+    return _piu_a_rischio(config.url_database(), tuple(partite))
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)
+def _riepilogo_giocate(db: str, campionati: tuple[int, ...]):
+    with apri(db) as s:
+        return componenti_home.riepilogo_giocate(s, campionati)
+
+
+def riepilogo_giocate(campionati: tuple[int, ...]):
+    return _riepilogo_giocate(config.url_database(), tuple(campionati))
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)
+def _biografie(db: str, candidati: tuple[tuple[int, str], ...], oggi):
+    with apri(db) as s:
+        return componenti_home.biografie(s, candidati, oggi)
+
+
+def biografie(righe, oggi):
+    """Biografie (ESPN + Wikipedia) dei primi della classifica `righe` che ne hanno una."""
+    return _biografie(config.url_database(), componenti_home.candidati_bio(righe), oggi)
 
 
 def svuota() -> None:

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from ayuda_app import (
-    PAGINA_PARTITE, avvia, campionato_scelto, scegli_campionato, sessione_db, url_db, visibile,
+    PAGINA_APP, PAGINA_PARTITE, avvia, campionato_scelto, scegli_campionato, sessione_db, url_db, visibile,
 )
 from db_prova import PARTITA_FUTURA, popola
 import pytest
@@ -151,7 +151,7 @@ def test_nessun_aggiornamento_e_nessuna_partita(sessione_db):
 
 def test_password_richiesta_se_configurata(sessione_db):
     _prepara(sessione_db)
-    at = AppTest.from_file(PAGINA_PARTITE, default_timeout=30)
+    at = AppTest.from_file(PAGINA_APP, default_timeout=30)
     at.secrets["password"] = "x"
     at.switch_page("pagine/0_Partite.py")
     at.run()
@@ -176,7 +176,7 @@ def _avvia_con_secrets_rotti(tmp_path, monkeypatch):
     cartella.mkdir()
     (cartella / "secrets.toml").write_text('password = "x\n', encoding="utf-8")  # TOML non valido
     monkeypatch.chdir(tmp_path)
-    return AppTest.from_file(PAGINA_PARTITE, default_timeout=30).run()
+    return AppTest.from_file(PAGINA_APP, default_timeout=30).run()
 
 
 def test_secrets_illeggibili_bloccano_l_app(sessione_db, tmp_path, monkeypatch):
@@ -211,7 +211,7 @@ def test_errore_imprevisto_nei_segreti_blocca_l_app(sessione_db, monkeypatch, co
 
     monkeypatch.setattr(Secrets, "get", guasto)
     _prepara(sessione_db)
-    at = AppTest.from_file(PAGINA_PARTITE, default_timeout=30).run()
+    at = AppTest.from_file(PAGINA_APP, default_timeout=30).run()
     assert not at.exception
     assert any("configurazione della password" in e.value for e in at.error)
     assert "Casa FC" not in visibile(at)

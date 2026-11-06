@@ -501,6 +501,30 @@ html, body, .stApp {{
   color: var(--cr-testo);
 }}
 
+/* Home: riquadri in alto, biografie */
+.st-key-riquadri_home {{
+  display: grid !important; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px;
+  margin-bottom: .6rem;
+}}
+[class*="st-key-riquadro_home_"] {{ gap: .3rem; padding: 14px 16px 10px; }}
+[class*="st-key-riquadro_home_"] [data-testid="stPageLink"] a {{ padding-left: 0 !important; background: transparent !important; }}
+[class*="st-key-riquadro_home_"] [data-testid="stPageLink"] a * {{ color: var(--cr-link) !important; font-weight: 700; font-size: .9rem; }}
+.cr-home-etichetta {{
+  font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--cr-testo2);
+}}
+.cr-home-titolo {{
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1.55rem; line-height: 1.1;
+  color: var(--cr-testo); margin: .15rem 0;
+}}
+.cr-home-righe {{ margin: .35rem 0 0; padding-left: 1rem; font-size: .9rem; color: var(--cr-testo); }}
+.cr-home-righe li {{ margin: .1rem 0; }}
+.st-key-bio_home {{
+  display: grid !important; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;
+}}
+.cr-bio-testo {{ margin: .55rem 0 .3rem; font-size: .9rem; line-height: 1.45; color: var(--cr-testo); }}
+.cr-bio-fonte {{ font-size: .78rem; color: var(--cr-testo2); }}
+.cr-bio-fonte a {{ color: var(--cr-link); font-weight: 600; }}
+
 /* telefono: una colonna, sfondo più rado, niente tabelle larghe */
 @media (max-width: 640px) {{
   [data-testid="stAppViewContainer"] {{ background-image: url("{sfondo_tel}"); }}
@@ -509,6 +533,7 @@ html, body, .stApp {{
   [class*="st-key-solo_desktop"] {{ display: none !important; }}
   .cr-intestazione .cr-nome-app {{ font-size: 1.6rem; }}
   .cr-griglia {{ grid-template-columns: 1fr; }}
+  .st-key-riquadri_home, .st-key-bio_home {{ grid-template-columns: 1fr; }}
   [data-testid="stButtonGroup"] button {{ padding: 0 .9rem; }}
 }}
 @media (min-width: 641px) {{
@@ -711,6 +736,57 @@ def voce_menu(riga: componenti.RigaPartita) -> str:
         f'<div class="cr-voce-menu"><span class="cr-voce-ora">{quando}</span>'
         f'<span class="cr-voce-squadre">{_mini_squadra(riga.casa)}{_mini_squadra(riga.trasferta)}</span>'
         f"{fuoco}</div>"
+    )
+
+
+def riquadro_home(
+    etichetta: str, titolo: str, sotto: str = "", righe: list[str] | tuple = (),
+    badges: list[str] | tuple = (),
+) -> str:
+    """Riquadro in cima alla Home: etichetta piccola, titolo grande, sottotitolo, qualche
+    riga e badge (già HTML, da `badge`). Tutto il testo ha l'escape."""
+    elenco = (
+        '<ul class="cr-home-righe">' + "".join(f"<li>{escape(r)}</li>" for r in righe) + "</ul>"
+        if righe else ""
+    )
+    return (
+        '<div class="cr-home-riquadro">'
+        f'<div class="cr-home-etichetta">{escape(etichetta)}</div>'
+        f'<div class="cr-home-titolo">{escape(titolo)}</div>'
+        + (f'<div class="cr-tessera-sotto">{escape(sotto)}</div>' if sotto else "")
+        + elenco
+        + (f'<div class="cr-badges">{"".join(badges)}</div>' if badges else "")
+        + "</div>"
+    )
+
+
+def scheda_bio(bio) -> str:
+    """Biografia di un giocatore: età, nazionalità, altezza, ruolo (ESPN) e il breve
+    profilo di Wikipedia con "Fonte: Wikipedia" e il link alla voce (licenza CC BY-SA)."""
+    sotto = " · ".join(x for x in (bio.squadra, bio.posizione) if x)
+    voci = []
+    if bio.eta is not None:
+        voci.append(("Età", f"{bio.eta} anni"))
+    if bio.nazionalita:
+        voci.append(("Nazionalità", bio.nazionalita))
+    if bio.altezza_cm:
+        voci.append(("Altezza", f"{bio.altezza_cm / 100:.2f} m".replace(".", ",")))
+    testo = ""
+    if bio.estratto:
+        fonte = ""
+        if bio.wiki_url and bio.wiki_url.startswith("https://") and ".wikipedia.org/" in bio.wiki_url:
+            fonte = (
+                f'<div class="cr-bio-fonte">Fonte: <a href="{escape(bio.wiki_url)}" '
+                'target="_blank" rel="noopener noreferrer">Wikipedia</a> · testo CC BY-SA</div>'
+            )
+        testo = f'<p class="cr-bio-testo">{escape(bio.estratto)}</p>{fonte}'
+    return (
+        '<div class="cr-tessera cr-bio">'
+        f'<div class="cr-tessera-titolo">{escape(bio.nome)}</div>'
+        f'<div class="cr-tessera-sotto">{escape(sotto)}</div>'
+        + (_voci(voci) if voci else "")
+        + testo
+        + "</div>"
     )
 
 
