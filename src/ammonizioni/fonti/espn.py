@@ -312,8 +312,16 @@ class Espn:
             elenco = []
             for g in sorted(titolari, key=lambda g: (g.classe[1], g.ordine, g.id)):
                 elenco.append((g.id, g.nome, g.classe[0], griglie[g.id]))
+            # il resto del roster è la panchina (posizione "SUB": ruolo da altre partite)
+            panchina = [
+                (g.id, g.nome, g.classe[0] if g.classe else None)
+                for g in sorted(giocatori, key=lambda g: g.id) if not g.titolare
+            ]
             formazioni.append(
-                FormazioneDati(partita_id=partita_id, squadra_id=squadra_id, titolari=elenco)
+                FormazioneDati(
+                    partita_id=partita_id, squadra_id=squadra_id, titolari=elenco,
+                    panchina=panchina,
+                )
             )
         return formazioni
 

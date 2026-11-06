@@ -130,6 +130,29 @@ def test_ufficiali_salvate_e_stato_aggiornato(sessione):
     assert pre_partita.partite_da_controllare(sessione, adesso) == []
 
 
+def test_panchina_salvata_con_le_ufficiali(sessione):
+    """La panchina in distinta resta salvata (tipo "panchina"), anche con un giocatore
+    nuovo; un secondo controllo la sostituisce senza duplicarla."""
+    prepara(sessione)
+    arrivate = {100: [
+        FormazioneDati(100, 1, [(1, "G1", "D", "2:1")], panchina=[(3, "G3", None), (99, "Nuovo", None)]),
+        FormazioneDati(100, 2, [(5, "G5", "D", "2:1")], panchina=[(6, "G6", None)]),
+    ]}
+    adesso = INIZIO - timedelta(minutes=30)
+    assert pre_partita.esegui(sessione, FonteFinta(formazioni_uscite=arrivate), adesso) == 1
+    righe = sessione.scalars(
+        select(Formazione).where(Formazione.tipo == "panchina").order_by(Formazione.giocatore_id)
+    ).all()
+    assert [(f.squadra_id, f.giocatore_id, f.griglia) for f in righe] == [
+        (1, 3, None), (2, 6, None), (1, 99, None),
+    ]
+    assert sessione.get(Giocatore, 99).nome == "Nuovo"
+    # ricontrollo (stato rimesso a probabili): righe sostituite, non duplicate
+    sessione.get(Partita, 100).stato_formazioni = "probabili"
+    assert pre_partita.esegui(sessione, FonteFinta(formazioni_uscite=arrivate), adesso) == 1
+    assert len(sessione.scalars(select(Formazione).where(Formazione.tipo == "panchina")).all()) == 3
+
+
 def test_formazioni_non_uscite_resta_probabili(sessione):
     prepara(sessione)
     fonte = FonteFinta()

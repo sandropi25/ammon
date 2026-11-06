@@ -1,7 +1,7 @@
 """Tipi di scambio tra le fonti dati e il resto dell'applicazione."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -50,3 +50,5 @@ class FormazioneDati:
     squadra_id: int
     # (giocatore_id, nome, ruolo, griglia)
     titolari: list[tuple[int, str, str | None, str | None]]
+    # panchinari in distinta (giocatore_id, nome, ruolo): servono per i probabili subentranti
+    panchina: list[tuple[int, str, str | None]] = field(default_factory=list)

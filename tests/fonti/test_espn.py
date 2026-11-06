@@ -575,6 +575,22 @@ def test_formazioni_nomi_e_ruoli_come_api_football(espn):
 
 
 @respx.mock
+def test_formazioni_con_la_panchina(espn):
+    """Il resto del roster (non titolari) è la panchina in distinta: senza griglia."""
+    corpo = carica("summary_sassuolo_fiorentina.json")
+    rotta_summary(corpo)
+    f = titolari_per_squadra(espn.formazioni(PARTITA_SF))
+    roster = next(
+        sq["roster"] for sq in corpo["rosters"] if int(sq["team"]["id"]) == SASSUOLO
+    )
+    attesi = {int(r["athlete"]["id"]) for r in roster if not r.get("starter")}
+    panchina = f[SASSUOLO].panchina
+    assert attesi and {g for g, _, _ in panchina} == attesi
+    assert not {g for g, _, _ in panchina} & {t[0] for t in f[SASSUOLO].titolari}
+    assert all(isinstance(nome, str) and nome for _, nome, _ in panchina)
+
+
+@respx.mock
 def test_formazioni_griglia_3_4_1_2(espn):
     rotta_summary(carica("summary_con_espulsione.json"))
     f = titolari_per_squadra(espn.formazioni(PARTITA_ROSSO))

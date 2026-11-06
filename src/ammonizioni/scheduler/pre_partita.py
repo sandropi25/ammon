@@ -72,14 +72,23 @@ def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> bool:
     (altrimenti resta "probabili" e il controllo successivo riprova). True se complete."""
     s.execute(
         delete(Formazione).where(
-            Formazione.partita_id == partita.id, Formazione.tipo == "ufficiale"
+            Formazione.partita_id == partita.id, Formazione.tipo.in_(("ufficiale", "panchina"))
         )
     )
     for formazione in formazioni:
-        for giocatore_id, nome, ruolo, griglia in formazione.titolari:
+        titolari = [(g, n, r, gr, "ufficiale") for g, n, r, gr in formazione.titolari]
+        xi = {g for g, *_ in titolari}
+        # la panchina in distinta (tipo "panchina"): i probabili subentranti
+        panchina = [
+            (g, n, r, None, "panchina")
+            for g, n, r in formazione.panchina
+            if g not in xi
+        ]
+        for giocatore_id, nome, ruolo, griglia, tipo in titolari + panchina:
             giocatore = s.get(Giocatore, giocatore_id)
             if giocatore is None:
                 s.add(Giocatore(id=giocatore_id, nome=nome, ruolo=ruolo))
+                s.flush()
             elif giocatore.ruolo is None and ruolo is not None:
                 giocatore.ruolo = ruolo
             s.add(
@@ -87,7 +96,7 @@ def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> bool:
                     partita_id=partita.id,
                     squadra_id=formazione.squadra_id,
                     giocatore_id=giocatore_id,
-                    tipo="ufficiale",
+                    tipo=tipo,
                     griglia=griglia,
                 )
             )

@@ -101,7 +101,8 @@ class Formazione(Base):
     partita_id: Mapped[int] = mapped_column(ForeignKey("partite.id"), primary_key=True)
     squadra_id: Mapped[int] = mapped_column(ForeignKey("squadre.id"), primary_key=True)
     giocatore_id: Mapped[int] = mapped_column(ForeignKey("giocatori.id"), primary_key=True)
-    tipo: Mapped[str] = mapped_column(String, primary_key=True)  # probabile | ufficiale
+    # probabile | ufficiale | panchina (panchinari in distinta con la formazione ufficiale)
+    tipo: Mapped[str] = mapped_column(String, primary_key=True)
     griglia: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
