@@ -7,3 +7,4 @@ __pycache__/
 .superpowers/
 .streamlit/secrets.toml
 *.egg-info/
+.claude/
