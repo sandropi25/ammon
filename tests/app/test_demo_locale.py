@@ -47,6 +47,11 @@ def test_demo_popola_e_le_pagine_funzionano(url_db, sessione_db):
     assert "Probabili subentranti" in [h.value for h in at.subheader]
     assert any("cr-subentrante" in m.value and "subentrante · può entrare" in m.value
                for m in at.markdown)
+    # campo: stemmi ESPN, colori sociali, numeri di maglia e panchina ufficiale
+    campo = next(m.value for m in at.markdown if 'class="cr-campo"' in m.value)
+    assert "https://a.espncdn.com/i/teamlogos/soccer/500/110.png" in campo  # Inter
+    assert 'fill="#0068A8"' in campo and ">10<" not in campo and ">14<" in campo
+    assert "Panchina · Inter" in campo and ">19 " in campo
     # anche con le formazioni probabili (panchina calcolata dalle ultime partite)
     at = avvia(PAGINA_DETTAGLIO, partita=future[1])
     assert not at.exception

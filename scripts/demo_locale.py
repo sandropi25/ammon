@@ -43,6 +43,19 @@ SCHIERAMENTO = [("G", "1:1"), ("D", "2:1"), ("D", "2:2"), ("D", "2:3"), ("D", "2
 PROB_GIALLO = {"G": 0.02, "D": 0.16, "M": 0.2, "F": 0.08}
 # panchina di ogni squadra: (ruolo, minuti possibili quando è in distinta; 0 = non entra)
 PANCHINA = [("F", (0, 15, 25, 30)), ("M", (0, 0, 20, 30)), ("D", (0, 0, 0, 0, 20)), ("G", (0,))]
+# numeri di maglia dei titolari (stesso ordine di SCHIERAMENTO) e dei panchinari
+MAGLIE = [1, 2, 4, 5, 3, 8, 6, 14, 7, 9, 11]
+MAGLIE_PANCHINA = [19, 21, 15, 12]
+# stemmi (CDN ESPN, id ESPN veri delle squadre) e colori sociali (colore, alternativo)
+STILI = {
+    "Inter": (110, "#0068A8", "#000000"), "Milan": (103, "#FB090B", "#000000"),
+    "Juventus": (111, "#FFFFFF", "#000000"), "Napoli": (114, "#12A0D7", "#FFFFFF"),
+    "Roma": (104, "#8E1F2F", "#F0BC42"), "Lazio": (112, "#87D8F7", "#FFFFFF"),
+    "Atalanta": (105, "#1E71B8", "#000000"), "Fiorentina": (109, "#482E92", "#FFFFFF"),
+    "Real Madrid": (86, "#FFFFFF", "#00529F"), "Barcelona": (83, "#A50044", "#004D98"),
+    "Atlético de Madrid": (1068, "#CB3524", "#FFFFFF"), "Sevilla": (243, "#FFFFFF", "#D81B21"),
+}
+URL_STEMMA = "https://a.espncdn.com/i/teamlogos/soccer/500/{}.png"
 
 
 def popola_demo(url: str, adesso: datetime | None = None) -> None:
@@ -55,7 +68,9 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
         for camp, nomi in SQUADRE.items():
             squadre[camp] = []
             for nome in nomi:
-                s.add(Squadra(id=sid, nome=nome))
+                espn, colore, alternativo = STILI[nome]
+                s.add(Squadra(id=sid, nome=nome, logo_url=URL_STEMMA.format(espn),
+                              colore=colore, colore_alt=alternativo))
                 squadre[camp].append(sid)
                 rose[sid] = []
                 for ruolo, griglia in SCHIERAMENTO:
@@ -108,19 +123,21 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
                     ))
                     s.flush()
                     for sq in (casa, trasf):
-                        for g, ruolo, griglia in rose[sq]:
+                        for n, (g, ruolo, griglia) in enumerate(rose[sq]):
                             spinta = 1.8 if severo else 1.0
                             s.add(Presenza(
+                                maglia=MAGLIE[n],
                                 partita_id=pid, giocatore_id=g, squadra_id=sq, titolare=True,
                                 ruolo=ruolo, griglia=griglia, minuti=rnd.choice((90, 90, 90, 75, 62)),
                                 gialli=int(rnd.random() < PROB_GIALLO[ruolo] * spinta),
                                 falli_commessi=rnd.randint(0, 4 if ruolo in "DM" else 2),
                                 falli_subiti=rnd.randint(0, 3), dribbling_tentati=rnd.randint(0, 4),
                             ))
-                        for g, ruolo, minuti_possibili in panchine[sq]:
+                        for n, (g, ruolo, minuti_possibili) in enumerate(panchine[sq]):
                             # in distinta: chi entra gioca qualche minuto (probabili subentranti)
                             entrato = rnd_p.choice(minuti_possibili)
                             s.add(Presenza(
+                                maglia=MAGLIE_PANCHINA[n],
                                 partita_id=pid, giocatore_id=g, squadra_id=sq, titolare=False,
                                 minuti=entrato,
                                 gialli=int(entrato > 0 and rnd_p.random() < 0.12),
@@ -189,15 +206,16 @@ def popola_demo(url: str, adesso: datetime | None = None) -> None:
             ))
             s.flush()
             for sq in (casa, trasf):
-                for g, _, griglia in rose[sq]:
+                for n, (g, _, griglia) in enumerate(rose[sq]):
                     tipi = ("probabile", "ufficiale") if ufficiali else ("probabile",)
                     for tipo in tipi:
                         s.add(Formazione(partita_id=pid, squadra_id=sq, giocatore_id=g,
-                                         tipo=tipo, griglia=griglia))
+                                         tipo=tipo, griglia=griglia,
+                                         maglia=MAGLIE[n] if tipo == "ufficiale" else None))
                 if ufficiali:  # con le ufficiali arriva anche la panchina in distinta
-                    for g, _, _ in panchine[sq]:
+                    for n, (g, _, _) in enumerate(panchine[sq]):
                         s.add(Formazione(partita_id=pid, squadra_id=sq, giocatore_id=g,
-                                         tipo="panchina"))
+                                         tipo="panchina", maglia=MAGLIE_PANCHINA[n]))
             if (casa, trasf) == (inter, milan):
                 # quote 1X2 (probabilità implicite): il Milan è sfavorito
                 partita = s.get(Partita, pid)
