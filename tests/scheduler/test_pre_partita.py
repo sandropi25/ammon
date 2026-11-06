@@ -456,3 +456,110 @@ def test_main_notte_con_limite_raggiunto_restituisce_0(db_file):
     assert notte.main(
         [], crea_fonte=lambda s, p: FonteFinta(partite_ft=3, limite_dopo=1), controllo=lambda f: []
     ) == 0
+
+
+# --- arbitri delle prossime partite (Task R1) ----------------------------------
+
+
+class FdFinta:
+    """football-data.org finto: restituisce l'arbitro per ogni partita richiesta."""
+
+    chiave = "chiave-di-prova"
+
+    def __init__(self, arbitro="Daniele Doveri", errore=None):
+        self.chiamate = []
+        self.arbitro = arbitro
+        self.errore = errore
+
+    def arbitri(self, codice, dal, al):
+        from ammonizioni.fonti.football_data import ArbitroPartita
+
+        self.chiamate.append(codice)
+        if self.errore:
+            raise self.errore
+        return [ArbitroPartita(INIZIO, "Casa", "Trasferta", 1, self.arbitro, 12)]
+
+
+ADESSO_A = INIZIO - timedelta(days=2)
+
+
+def test_arbitri_prossimi_collegati_e_poi_per_3_ore_nessuna_richiesta(sessione):
+    from ammonizioni.db import repo
+
+    prepara(sessione)
+    fd = FdFinta()
+    assert pre_partita.collega_arbitri_prossimi(sessione, fd, ADESSO_A) == 1
+    assert fd.chiamate == ["SA"]
+    assert sessione.get(Partita, 100).arbitro_id is not None
+    assert repo.leggi_impostazione(sessione, pre_partita.CHIAVE_ARBITRI_PROSSIMI)
+    prepara(sessione, 101, data=INIZIO + timedelta(days=1))  # altra partita senza arbitro
+    assert pre_partita.collega_arbitri_prossimi(
+        sessione, fd, ADESSO_A + timedelta(hours=2, minutes=59)
+    ) == 0
+    assert fd.chiamate == ["SA"]  # nessuna nuova richiesta
+    pre_partita.collega_arbitri_prossimi(sessione, fd, ADESSO_A + timedelta(hours=3))
+    assert fd.chiamate == ["SA", "SA"]  # dopo 3 ore si riprova
+
+
+def test_arbitri_partite_con_arbitro_gia_presente_non_toccate(sessione):
+    from ammonizioni.caricamento.arbitri import trova_o_crea
+
+    prepara(sessione)
+    sessione.get(Partita, 100).arbitro_id = trova_o_crea(sessione, "Maurizio Mariani").id
+    sessione.flush()
+    fd = FdFinta()
+    assert pre_partita.collega_arbitri_prossimi(sessione, fd, ADESSO_A) == 0
+    assert fd.chiamate == []  # nessuna partita senza arbitro: nessuna richiesta
+    from ammonizioni.db.modelli import Arbitro
+
+    arbitro = sessione.get(Arbitro, sessione.get(Partita, 100).arbitro_id)
+    assert arbitro.nome_visualizzato == "Maurizio Mariani"
+
+
+def test_arbitri_una_richiesta_per_campionato_solo_se_servono(sessione):
+    prepara(sessione, 100)
+    prepara(sessione, 101, competizione=140)
+    prepara(sessione, 102, competizione=143)  # Coppa: ignorata
+    fd = FdFinta(arbitro=None)
+    pre_partita.collega_arbitri_prossimi(sessione, fd, ADESSO_A)
+    assert sorted(fd.chiamate) == ["PD", "SA"]
+
+
+def test_arbitri_oltre_7_giorni_o_senza_chiave_nessuna_richiesta(sessione):
+    prepara(sessione)
+    fd = FdFinta()
+    assert pre_partita.collega_arbitri_prossimi(sessione, fd, INIZIO - timedelta(days=8)) == 0
+    fd_senza_chiave = FdFinta()
+    fd_senza_chiave.chiave = None
+    assert pre_partita.collega_arbitri_prossimi(sessione, fd_senza_chiave, ADESSO_A) == 0
+    assert pre_partita.collega_arbitri_prossimi(sessione, None, ADESSO_A) == 0
+    assert fd.chiamate == fd_senza_chiave.chiamate == []
+
+
+def test_arbitri_errore_della_fonte_non_ferma_il_job(sessione, caplog):
+    from ammonizioni.fonti.base import ErroreFonte
+
+    prepara(sessione)
+    fd = FdFinta(errore=ErroreFonte("rete"))
+    with caplog.at_level(logging.WARNING):
+        assert pre_partita.collega_arbitri_prossimi(sessione, fd, ADESSO_A) == 0
+    assert any("non collegati" in r.message for r in caplog.records)
+
+
+def test_main_pre_partita_collega_gli_arbitri_anche_senza_formazioni(db_file):
+    dentro_db(db_file, lambda s: prepara(s, data=datetime.now(timezone.utc) + timedelta(days=2)))
+    fd = FdFinta()
+
+    def arbitri(codice, dal, al):
+        from ammonizioni.fonti.football_data import ArbitroPartita
+
+        fd.chiamate.append(codice)
+        return [ArbitroPartita(
+            datetime.now(timezone.utc) + timedelta(days=2), "Casa", "Trasferta", 1, "Doveri", 3
+        )]
+
+    fd.arbitri = arbitri
+    fonte = FonteFinta()
+    assert pre_partita.main([], crea_fonte=lambda s, p: fonte, crea_fd=lambda s: fd) == 0
+    assert fd.chiamate == ["SA"]
+    assert fonte.chiamate == []

@@ -8,13 +8,16 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from ammonizioni import config
+from ammonizioni.caricamento import arbitri_fd
 from ammonizioni.caricamento.formazioni import (
     probabili_automatiche,
     salva_probabili,
     ultimo_xi,
 )
 from ammonizioni.caricamento.notturno import indica_competizione
-from ammonizioni.config import CAMPIONATI, SERIE_A
+from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A
+from ammonizioni.db import repo
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
@@ -22,6 +25,7 @@ from ammonizioni.fonti.limite import LimiteSuperato, Priorita
 from ammonizioni.scheduler.comune import (
     ErroreConfigurazione,
     configura_log,
+    crea_football_data,
     crea_fonte as crea_fonte_predefinita,
 )
 
@@ -29,6 +33,9 @@ log = logging.getLogger(__name__)
 
 MINUTI_FINESTRA = 75
 STATI_ESCLUSI = ("PST", "CANC")
+CHIAVE_ARBITRI_PROSSIMI = "arbitri_prossimi_ultimo"  # Impostazione: ultimo tentativo (ISO UTC)
+INTERVALLO_ARBITRI = timedelta(hours=3)
+GIORNI_ARBITRI = 7
 
 
 def partite_da_controllare(s: Session, adesso_utc: datetime) -> list[Partita]:
@@ -156,7 +163,62 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     return diventate_ufficiali
 
 
-def main(argv=None, crea_fonte=crea_fonte_predefinita) -> int:
+def _ultimo_collegamento(s: Session) -> datetime | None:
+    valore = repo.leggi_impostazione(s, CHIAVE_ARBITRI_PROSSIMI, None)
+    if not isinstance(valore, str):
+        return None
+    try:
+        quando = datetime.fromisoformat(valore)
+    except ValueError:
+        return None
+    return quando if quando.tzinfo else quando.replace(tzinfo=timezone.utc)
+
+
+def collega_arbitri_prossimi(s: Session, fonte_fd, adesso_utc: datetime) -> int:
+    """Collega gli arbitri delle partite di campionato dei prossimi 7 giorni ancora senza
+    arbitro (football-data.org li designa pochi giorni prima), al massimo ogni 3 ore (momento
+    dell'ultimo tentativo in Impostazione): una richiesta per campionato che ha partite senza
+    arbitro, nessuna altrimenti. Un errore della fonte e' scritto nel log e non ferma il job.
+    Restituisce gli arbitri collegati."""
+    if fonte_fd is None or not getattr(fonte_fd, "chiave", None):
+        return 0
+    ultimo = _ultimo_collegamento(s)
+    if ultimo is not None and adesso_utc - ultimo < INTERVALLO_ARBITRI:
+        return 0
+    fine = adesso_utc + timedelta(days=GIORNI_ARBITRI)
+    collegati = 0
+    tentato = False
+    for campionato in CAMPIONATI:
+        senza_arbitro = s.scalars(
+            select(Partita.id)
+            .where(
+                Partita.competizione_id == campionato,
+                Partita.arbitro_id.is_(None),
+                Partita.stato.not_in(STATI_ESCLUSI),
+                Partita.data_utc > adesso_utc,
+                Partita.data_utc <= fine,
+            )
+            .limit(1)
+        ).first()
+        if senza_arbitro is None:
+            continue
+        tentato = True
+        try:
+            collegati += arbitri_fd.collega(
+                s, fonte_fd, campionato, adesso_utc.date(), fine.date()
+            )
+        except (ErroreFonte, LimiteSuperato) as errore:
+            s.rollback()
+            log.warning("Arbitri %s non collegati: %s", NOMI_CAMPIONATI[campionato], errore)
+    if tentato:
+        repo.scrivi_impostazione(s, CHIAVE_ARBITRI_PROSSIMI, adesso_utc.isoformat())
+        s.commit()
+    return collegati
+
+
+def main(
+    argv=None, crea_fonte=crea_fonte_predefinita, crea_fd=crea_football_data
+) -> int:
     configura_log()
     with modulo_sessione.apri() as s:
         try:
@@ -165,6 +227,10 @@ def main(argv=None, crea_fonte=crea_fonte_predefinita) -> int:
             log.error("%s", errore)
             return 2
         adesso = datetime.now(timezone.utc)
+        if config.fonte_dati() == "espn":  # con API-Football l'arbitro arriva dalla fonte
+            n_arbitri = collega_arbitri_prossimi(s, crea_fd(s), adesso)
+            if n_arbitri:
+                log.info("Arbitri collegati alle prossime partite: %s", n_arbitri)
         if not partite_da_controllare(s, adesso):
             log.info("Nessuna partita nella finestra di controllo")
             return 0
