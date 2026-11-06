@@ -2,7 +2,7 @@
 le pagine si limitano a mostrare quello che restituiscono queste funzioni."""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
@@ -30,7 +30,7 @@ from ammonizioni.db.modelli import (
     Squadra,
     UltimoAggiornamento,
 )
-from ammonizioni.motore.classifica import classifica, converti_quota
+from ammonizioni.motore.classifica import classifica, classifica_subentranti, converti_quota
 from ammonizioni.motore.dati import carica_dati, carica_dati_calda
 from ammonizioni.motore.fattori.arbitro import fattore_arbitro
 from ammonizioni.motore.pesi import carica_pesi
@@ -49,6 +49,10 @@ FONTI_NON_TIPSTER = ("io", "modello")
 COLONNE_TABELLA = (
     "Giocatore", "Squadra", "Probabilità", "Motivazioni", "Affidabilità",
     "Quota", "Implicita", "Valore", "Tipster",
+)
+COLONNE_SUBENTRANTI = (
+    "Giocatore", "Squadra", "Ruolo", "Probabilità", "Entra", "Minuti", "Al posto di",
+    "Gialli 90'", "Falli 90'", "Sopra la media",
 )
 
 
@@ -410,6 +414,7 @@ class Dettaglio:
     candidati: list[Candidato]
     tipster: dict[int, list[str]]
     nomi_giocatori: dict[int, str]
+    subentranti: list[Candidato] = field(default_factory=list)  # tabella a parte
 
 
 def id_partita(valore) -> int | None:
@@ -491,16 +496,67 @@ def carica_dettaglio(s: Session, partita_id: int, quote: dict[int, float]) -> De
     partita = s.get(Partita, partita_id)
     if partita is None:
         return None
-    dati = carica_dati(s, partita_id)
-    # una sola lettura dei dati: la classifica lavora sullo snapshot gia' caricato
-    candidati = classifica(dati, carica_pesi(s), quote or None)
+    dati = carica_dati(s, partita_id, con_panchina=True)
+    # una sola lettura dei dati: le classifiche lavorano sullo snapshot gia' caricato
+    pesi = carica_pesi(s)
+    candidati = classifica(dati, pesi, quote or None)
     return Dettaglio(
         partita=InfoPartita(partita.id, partita.data_utc, partita.giornata, partita.stato_formazioni),
         dati=dati,
         candidati=candidati,
         tipster=tipster_per_giocatore(s, partita_id),
         nomi_giocatori={t.giocatore_id: t.nome for t in dati.titolari},
+        subentranti=classifica_subentranti(dati, pesi, quote or None),
     )
+
+
+def etichetta_subentro(c: Candidato) -> str:
+    """"subentrante · può entrare al posto di X" (senza nome se nessun titolare dello stesso
+    ruolo viene sostituito)."""
+    nome = c.subentro.al_posto_di_nome if c.subentro else None
+    return f"subentrante · può entrare al posto di {nome}" if nome else "subentrante · può entrare"
+
+
+def _numero(x: float | None, cifre: int) -> str:
+    return "n.d." if x is None else decimale(x, cifre)
+
+
+def medie_subentro(c: Candidato) -> str:
+    """Gialli e falli per 90' del subentrante accanto alla media del suo ruolo."""
+    s = c.subentro
+    return (
+        f"Gialli 90' {_numero(s.gialli90, 2)} (ruolo {decimale(s.media_gialli90, 2)}) · "
+        f"Falli 90' {_numero(s.falli90, 1)} (ruolo {decimale(s.media_falli90, 1)})"
+    )
+
+
+def ingresso_subentro(c: Candidato) -> str:
+    s = c.subentro
+    return f"Entra {percentuale(s.probabilita_ingresso)} · {round(s.minuti_medi)}' di media"
+
+
+RUOLI_ESTESI = {"G": "Portiere", "D": "Difensore", "M": "Centrocampista", "F": "Attaccante"}
+
+
+def righe_subentranti(
+    subentranti: list[Candidato], nomi_squadre: dict[int, str]
+) -> list[dict[str, str]]:
+    """Righe della tabella dei probabili subentranti (già ordinati per probabilità)."""
+    return [
+        {
+            "Giocatore": c.nome,
+            "Squadra": nomi_squadre.get(c.squadra_id, ""),
+            "Ruolo": RUOLI_ESTESI.get(c.ruolo, ""),
+            "Probabilità": percentuale(c.probabilita),
+            "Entra": percentuale(c.subentro.probabilita_ingresso),
+            "Minuti": f"{round(c.subentro.minuti_medi)}'",
+            "Al posto di": c.subentro.al_posto_di_nome or "",
+            "Gialli 90'": _numero(c.subentro.gialli90, 2),
+            "Falli 90'": _numero(c.subentro.falli90, 1),
+            "Sopra la media": "sì" if c.subentro.sopra_media else "",
+        }
+        for c in subentranti
+    ]
 
 
 def tipster_per_giocatore(s: Session, partita_id: int) -> dict[int, list[str]]:

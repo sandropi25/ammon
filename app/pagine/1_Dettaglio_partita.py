@@ -79,6 +79,35 @@ else:
                 hide_index=True,
                 width="stretch",
             )
+
+# probabili subentranti: tabella a parte sotto i titolari, ordinati per probabilità
+subentranti = componenti.applica_quote(det.subentranti, quote)
+if subentranti:
+    st.subheader("Probabili subentranti")
+    st.caption(
+        "Panchinari che entrano almeno il 15% delle volte: probabilità ridotta dai minuti "
+        "che giocano di solito. \"Sopra la media\" = gialli o falli per 90' sopra la media "
+        "del ruolo (solo un'evidenza, non un filtro)."
+    )
+    st.markdown(
+        "".join(
+            stile.barra_probabilita(c, dati.nomi_squadre.get(c.squadra_id, ""))
+            for c in subentranti
+        ),
+        unsafe_allow_html=True,
+    )
+    with st.container(key="solo_desktop_tabella_subentranti"):
+        with st.expander("Tabella dei subentranti"):
+            st.dataframe(
+                pd.DataFrame(
+                    componenti.righe_subentranti(subentranti, dati.nomi_squadre),
+                    columns=list(componenti.COLONNE_SUBENTRANTI),
+                ),
+                hide_index=True,
+                width="stretch",
+            )
+
+if candidati:
     st.subheader("Duelli, storia e quote")
 
 nomi = {c.giocatore_id: c.nome for c in candidati}

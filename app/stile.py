@@ -407,6 +407,7 @@ html, body, .stApp {{
   background: var(--cr-superficie); border: 1px solid var(--cr-bordo); border-radius: 14px;
   box-shadow: var(--cr-ombra); padding: 12px 14px; margin-bottom: 10px;
 }}
+.cr-subentrante {{ border-style: dashed; }}
 .cr-cand-testa {{ display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem; }}
 .cr-cand-nome {{ font-weight: 700; font-size: 1.08rem; color: var(--cr-testo); }}
 .cr-cand-info {{ font-size: .85rem; color: var(--cr-testo2); }}
@@ -590,9 +591,17 @@ def barra_probabilita(candidato, squadra: str, tipster: list[str] | tuple = ()) 
     motivazioni, affidabilità, quota e valore (verde se positivo), tipster."""
     c = candidato
     ruolo = RUOLI.get(c.ruolo or "", "")
-    info = " · ".join(x for x in (squadra, ruolo) if x)
+    subentro = getattr(c, "subentro", None)
+    etichetta = componenti.etichetta_subentro(c) if subentro is not None else ""
+    info = " · ".join(x for x in (squadra, ruolo, etichetta) if x)
     testo_aff, tipo_aff = AFFIDABILITA.get(c.affidabilita, (str(c.affidabilita), "neutro"))
     badges = [badge(testo_aff, tipo_aff)]
+    if subentro is not None:
+        # subentrante: quanto entra, e gialli/falli per 90' accanto alla media del ruolo
+        badges.append(badge(componenti.ingresso_subentro(c), "neutro"))
+        badges.append(badge(componenti.medie_subentro(c), "neutro"))
+        if subentro.sopra_media:
+            badges.append(badge("Sopra la media", "giallo"))
     if c.quota:
         implicita = f" · implicita {componenti.percentuale(c.prob_implicita)}" if c.prob_implicita else ""
         badges.append(badge(f"Quota {decimale(c.quota, 2)}{implicita}", "neutro"))
@@ -603,8 +612,9 @@ def barra_probabilita(candidato, squadra: str, tipster: list[str] | tuple = ()) 
     if tipster:
         badges.append(badge("Tipster: " + ", ".join(tipster), "giallo"))
     motivi = " · ".join(c.motivazioni)
+    classe = "cr-candidato cr-subentrante" if subentro is not None else "cr-candidato"
     return (
-        '<div class="cr-candidato">'
+        f'<div class="{classe}">'
         '<div class="cr-cand-testa"><div>'
         f'<div class="cr-cand-nome">{escape(c.nome)}</div>'
         f'<div class="cr-cand-info">{escape(info)}</div></div>'
