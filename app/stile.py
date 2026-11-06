@@ -15,6 +15,7 @@ from urllib.parse import quote
 import streamlit as st
 
 import componenti
+import componenti_classifica as cc
 from ammonizioni.config import NOMI_CAMPIONATI
 from ammonizioni.motore.tipi import decimale
 
@@ -54,8 +55,17 @@ PALETTE: dict[str, dict[str, str]] = {
         "traccia": "#E9E9E5",
     },
 }
-# opacità dei cartellini dello sfondo: 4-7% sul tema scuro, 6-9% sul chiaro
-OPACITA_SFONDO = {"scuro": 0.055, "chiaro": 0.08}
+# opacità dei cartellini dello sfondo: circa il doppio di prima (5,5% e 8%), sempre sotto il
+# 15% (le schede hanno il fondo pieno: il testo resta leggibile)
+OPACITA_SFONDO = {"scuro": 0.11, "chiaro": 0.14}
+OPACITA_MASSIMA_SFONDO = 0.15
+# colori dei cartellini animati: sul chiaro un po' più saturi (sul bianco sbiadiscono)
+COLORI_SFONDO_3D = {
+    "scuro": {"giallo": "#F5C518", "rosso": "#E5484D"},
+    "chiaro": {"giallo": "#F0B400", "rosso": "#E8262D"},
+}
+CARTELLINI_3D = 16  # su telefono la metà
+CHIAVE_ANIM = "anim"  # session_state e parametro dell'URL (?anim=0: sfondo fermo)
 OMBRA = {
     "scuro": "0 1px 2px rgba(0,0,0,.35), 0 6px 18px rgba(0,0,0,.28)",
     "chiaro": "0 1px 2px rgba(20,22,28,.06), 0 6px 18px rgba(20,22,28,.07)",
@@ -136,10 +146,81 @@ def sfondo_svg(tema: str, telefono: bool = False) -> str:
     return "data:image/svg+xml," + quote(svg)
 
 
+def sfondo_3d_html(tema: str, quanti: int = CARTELLINI_3D) -> str:
+    """Livello dei cartellini che fluttuano in 3D dietro la pagina (solo CSS: nessun
+    JavaScript). Ogni cartellino ha profondità, posizione, rotazioni, durata (20-45 s) e
+    ritardo propri come variabili CSS, con un seme fisso: lontani piccoli, sfocati e più
+    tenui, vicini grandi e nitidi. Un rosso ogni quattro, gli altri gialli."""
+    rnd = random.Random(2026)
+    massima = OPACITA_SFONDO[tema]
+    pezzi = []
+    for i in range(quanti):
+        vicinanza = i / max(quanti - 1, 1)  # 0 = lontanissimo, 1 = vicinissimo
+        # posizioni su una griglia 4 x 4 mescolata: coprono tutto lo schermo senza ammucchiarsi
+        cella = (i * 7) % 16
+        x = (cella % 4) * 25 + rnd.uniform(2, 19)
+        y = (cella // 4) * 25 + rnd.uniform(2, 17)
+        variabili = {
+            "--x": f"{x:.1f}%",
+            "--y": f"{y:.1f}%",
+            "--z": f"{-420 + 520 * vicinanza:.0f}px",
+            "--s": f"{0.7 + 0.75 * vicinanza:.2f}",
+            "--o": f"{massima * (0.6 + 0.4 * vicinanza):.3f}",
+            "--b": f"{2.4 * (1 - vicinanza) ** 2:.1f}px",
+            "--rx": f"{rnd.uniform(-40, 40):.0f}deg",
+            "--ry": f"{rnd.uniform(-50, 50):.0f}deg",
+            "--rz": f"{rnd.uniform(-35, 35):.0f}deg",
+            "--dx": f"{rnd.uniform(-90, 90):.0f}px",
+            "--dy": f"{rnd.uniform(-120, 120):.0f}px",
+            "--d": f"{rnd.uniform(20, 45):.1f}s",
+            "--ritardo": f"{-rnd.uniform(0, 40):.1f}s",
+        }
+        stile_in_linea = ";".join(f"{k}:{v}" for k, v in variabili.items())
+        colore = "r" if i % 4 == 2 else "g"  # i rossi restano anche su telefono (metà dispari)
+        pezzi.append(f'<i class="cr-c3d cr-c3d--{colore}" style="{stile_in_linea}"></i>')
+    return '<div class="cr-sfondo3d" aria-hidden="true">' + "".join(pezzi) + "</div>"
+
+
+def css_sfondo_3d(tema: str) -> str:
+    """CSS dei cartellini animati: prospettiva sul contenitore fisso dietro al contenuto,
+    solo `transform` animato (GPU), riflesso lucido a gradiente. Su telefono metà dei
+    cartellini e moto più lento; con "riduci movimento" restano fermi."""
+    colori = COLORI_SFONDO_3D[tema]
+    return f"""
+[data-testid="stMain"] {{ position: relative; z-index: 1; }}
+.cr-sfondo3d {{
+  position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;
+  perspective: 900px; perspective-origin: 50% 40%;
+}}
+.cr-c3d {{
+  position: absolute; left: var(--x); top: var(--y);
+  width: calc(42px * var(--s)); height: calc(58px * var(--s)); border-radius: calc(6px * var(--s));
+  opacity: var(--o); filter: blur(var(--b)); will-change: transform; backface-visibility: visible;
+  background: linear-gradient(135deg, rgba(255,255,255,.6) 0%, rgba(255,255,255,.12) 30%, rgba(255,255,255,0) 46%), var(--cr-c3d-colore);
+  transform: translate3d(0, 0, var(--z)) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
+  animation: cr-fluttua var(--d) ease-in-out var(--ritardo) infinite alternate;
+}}
+.cr-c3d--g {{ --cr-c3d-colore: {colori["giallo"]}; }}
+.cr-c3d--r {{ --cr-c3d-colore: {colori["rosso"]}; }}
+@keyframes cr-fluttua {{
+  0% {{ transform: translate3d(0, 0, var(--z)) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz)); }}
+  50% {{ transform: translate3d(calc(var(--dx) * .5), var(--dy), var(--z)) rotateX(calc(var(--rx) + 35deg)) rotateY(calc(var(--ry) - 45deg)) rotateZ(calc(var(--rz) + 10deg)); }}
+  100% {{ transform: translate3d(var(--dx), calc(var(--dy) * -.4), var(--z)) rotateX(calc(var(--rx) - 25deg)) rotateY(calc(var(--ry) + 55deg)) rotateZ(calc(var(--rz) - 8deg)); }}
+}}
+@media (max-width: 640px) {{
+  .cr-c3d:nth-child(2n) {{ display: none; }}
+  .cr-c3d {{ animation-duration: calc(var(--d) * 1.6); }}
+}}
+@media (prefers-reduced-motion: reduce) {{ .cr-c3d {{ animation: none; }} }}
+"""
+
+
 # ---------------------------------------------------------------- CSS
 
-def css_tema(tema: str) -> str:
-    """Tutto il CSS dell'app per il tema dato (variabili, sfondo, widget nativi, componenti)."""
+def css_tema(tema: str, animato: bool = False) -> str:
+    """Tutto il CSS dell'app per il tema dato (variabili, sfondo, widget nativi, componenti).
+    Con `animato` lo sfondo fisso a cartellini lascia il posto a quelli in 3D
+    (`sfondo_3d_html`, aggiunto dalla pagina)."""
     p = PALETTE[tema]
     chiaro = tema == TEMA_CHIARO
     variabili = "\n".join(f"  --cr-{nome}: {valore};" for nome, valore in p.items())
@@ -147,7 +228,11 @@ def css_tema(tema: str) -> str:
         f"  --cr-{nome}-tenue: {_rgba(p[nome], 0.16 if chiaro else 0.18)};"
         for nome in ("giallo", "rosso", "verde")
     )
-    sfondo, sfondo_tel = sfondo_svg(tema), sfondo_svg(tema, telefono=True)
+    if animato:
+        sfondo = sfondo_tel = "none"
+    else:
+        sfondo = f'url("{sfondo_svg(tema)}")'
+        sfondo_tel = f'url("{sfondo_svg(tema, telefono=True)}")'
     # il dataframe di Streamlit è disegnato su canvas con i colori del tema scuro di base:
     # nel tema chiaro lo si inverte (resta leggibile e chiaro)
     dataframe = (
@@ -170,7 +255,7 @@ html, body, .stApp {{
 }}
 [data-testid="stAppViewContainer"] {{
   background-color: var(--cr-sfondo) !important;
-  background-image: url("{sfondo}");
+  background-image: {sfondo};
   background-repeat: repeat;
   background-attachment: fixed;
 }}
@@ -543,10 +628,12 @@ img.cr-stemma--img {{ object-fit: contain; border-radius: 0; box-shadow: none; b
 .cr-bio-fonte a {{ color: var(--cr-link); font-weight: 600; }}
 {"" if chiaro else "img.cr-stemma--img { filter: drop-shadow(0 0 1px rgba(255,255,255,.75)) drop-shadow(0 0 2px rgba(255,255,255,.25)); }"}
 {css_campo(tema)}
+{css_classifica(tema)}
+{css_sfondo_3d(tema) if animato else ""}
 
 /* telefono: una colonna, sfondo più rado, niente tabelle larghe */
 @media (max-width: 640px) {{
-  [data-testid="stAppViewContainer"] {{ background-image: url("{sfondo_tel}"); }}
+  [data-testid="stAppViewContainer"] {{ background-image: {sfondo_tel}; }}
   [data-testid="stMainBlockContainer"] {{ padding-left: 16px !important; padding-right: 16px !important; padding-top: 4.2rem; }}
   [class*="st-key-giorno_"] {{ grid-template-columns: 1fr; }}
   [class*="st-key-solo_desktop"] {{ display: none !important; }}
@@ -600,6 +687,99 @@ def css_accesso(tema: str) -> str:
   [data-testid="stMainBlockContainer"] {{ padding-top: 1.2rem !important; }}
   .cr-benvenuto-titolo {{ font-size: 2rem; }}
   .cr-benvenuto svg {{ width: 76px; height: 76px; }}
+}}
+"""
+
+
+COLORI_ZONE = {
+    "scuro": {"champions": "#4C8DFF", "europa": "#FF8A3D", "conference": "#3DD68C", "retrocessione": "#E5484D"},
+    "chiaro": {"champions": "#1F5FD6", "europa": "#D9620F", "conference": "#1E9E5A", "retrocessione": "#D1343A"},
+}
+
+
+def css_classifica(tema: str) -> str:
+    """CSS della pagina Classifica: righe a griglia nella scheda, zona colorata a sinistra,
+    pallini della forma; su telefono colonne essenziali e il resto in <details>. Tutta la
+    riga porta alla squadra (link trasparente sopra), tranne il triangolino che espande."""
+    p = PALETTE[tema]
+    zone = "\n".join(
+        f".cr-cl-zona--{nome} {{ --cr-zona: {colore}; }}" for nome, colore in COLORI_ZONE[tema].items()
+    )
+    return f"""
+{zone}
+[class*="st-key-tabella_cl_"] {{
+  background: var(--cr-superficie); border: 1px solid var(--cr-bordo); border-radius: 14px;
+  box-shadow: var(--cr-ombra); padding: 6px 8px 8px; gap: 0 !important;
+}}
+[class*="st-key-tabella_cl_"] [data-testid="stMarkdownContainer"] {{ margin-bottom: 0 !important; }}
+[class*="st-key-tabella_cl_"] [data-testid="stElementContainer"] {{ margin: 0 !important; }}
+[class*="st-key-riga_cl_"] {{ position: relative; gap: 0 !important; border-radius: 10px; border-top: 1px solid var(--cr-bordo); }}
+[class*="st-key-riga_cl_"]:hover, [class*="st-key-riga_cl_"]:focus-within {{ background: var(--cr-giallo-tenue); }}
+[class*="st-key-riga_cl_"] > [data-testid="stElementContainer"]:last-child {{
+  position: absolute !important; inset: 0; margin: 0 !important; width: 100% !important; z-index: 1;
+}}
+[class*="st-key-riga_cl_"] [data-testid="stPageLink"], [class*="st-key-riga_cl_"] [data-testid="stPageLink"] div {{ height: 100%; }}
+[class*="st-key-riga_cl_"] [data-testid="stPageLink"] a {{
+  width: 100%; height: 100%; padding: 0 !important; background: transparent !important; border-radius: 10px;
+}}
+[class*="st-key-riga_cl_"] [data-testid="stPageLink"] a * {{ color: transparent !important; }}
+[class*="st-key-riga_cl_"] [data-testid="stPageLink"] a:focus-visible {{ outline: 2px solid var(--cr-giallo); }}
+.cr-cl-riga {{
+  display: grid; align-items: center; column-gap: 4px; min-height: 44px; padding: 0 6px 0 4px;
+  grid-template-columns: 2.1rem minmax(0, 1fr) 2.6rem repeat(7, 2.3rem) 7.2rem 3.3rem 3.3rem;
+  border-left: 4px solid var(--cr-zona, transparent); border-radius: 4px;
+  font-variant-numeric: tabular-nums; color: var(--cr-testo);
+}}
+.cr-cl-testa {{
+  min-height: 34px; border-left-color: transparent; font-size: .75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--cr-testo2);
+}}
+.cr-cl-testa span {{ color: var(--cr-testo2); }}
+.cr-cl-pos {{
+  justify-self: center; min-width: 1.6rem; text-align: center; font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800; font-size: 1.05rem; color: var(--cr-zona, var(--cr-testo2));
+}}
+.cr-cl-sq {{ display: flex; align-items: center; gap: .5rem; min-width: 0; font-weight: 700; }}
+.cr-cl-nome {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.cr-cl-n {{ text-align: center; color: var(--cr-testo); }}
+.cr-cl-testa .cr-cl-n {{ color: var(--cr-testo2); }}
+.cr-cl-pt {{ font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1.15rem; }}
+.cr-cl-testa .cr-cl-pt {{ font-family: 'Barlow', sans-serif; font-size: .75rem; }}
+.cr-cl-forma {{ display: inline-flex; gap: 4px; justify-content: center; }}
+.cr-forma {{
+  width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: .6rem; font-weight: 800; color: #FFFFFF; line-height: 1;
+}}
+.cr-forma--V {{ background: var(--cr-verde); }}
+.cr-forma--N {{ background: {"#8A8F98" if tema == TEMA_CHIARO else "#6B7079"}; }}
+.cr-forma--P {{ background: var(--cr-rosso); }}
+.cr-forma--vuota {{ border: 1.5px dashed var(--cr-bordo); }}
+.cr-cl-gialli {{ box-shadow: inset 0 -2px 0 {_rgba(p["giallo"], 0.55)}; }}
+.cr-cl-rossi {{ box-shadow: inset 0 -2px 0 {_rgba(p["rosso"], 0.55)}; }}
+.cr-cl-testa .cr-cl-gialli, .cr-cl-testa .cr-cl-rossi {{ box-shadow: none; }}
+.cr-cl-altro {{ display: none; }}
+.cr-cl-legenda {{ display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; margin: .7rem 0 .2rem; font-size: .85rem; color: var(--cr-testo2); }}
+.cr-cl-legenda span {{ display: inline-flex; align-items: center; gap: .4rem; }}
+.cr-cl-segno {{ width: 12px; height: 12px; border-radius: 3px; background: var(--cr-zona); display: inline-block; }}
+@media (max-width: 640px) {{
+  [class*="st-key-tabella_cl_"] {{ padding: 4px 4px 6px; }}
+  .cr-cl-riga {{ grid-template-columns: 1.5rem minmax(0, 1fr) 1.9rem 1.5rem 1.9rem 5rem 1.6rem; column-gap: 3px; padding: 0 2px; }}
+  .cr-cl-ext {{ display: none; }}
+  .cr-forma {{ width: 14px; height: 14px; font-size: .5rem; }}
+  .cr-cl-forma {{ gap: 2px; }}
+  .cr-cl-altro {{ display: block; }}
+  .cr-cl-altro summary {{
+    position: absolute; top: 6px; right: 2px; z-index: 3; width: 32px; height: 32px; list-style: none;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 8px;
+    color: var(--cr-testo2); font-size: .95rem; transition: transform .15s ease;
+  }}
+  .cr-cl-altro summary::-webkit-details-marker {{ display: none; }}
+  .cr-cl-altro[open] summary {{ transform: rotate(180deg); }}
+  .cr-cl-altro-voci {{
+    position: relative; z-index: 3; display: flex; flex-wrap: wrap; gap: .25rem .8rem;
+    padding: 0 8px 8px 1.9rem; font-size: .82rem; color: var(--cr-testo2);
+  }}
+  .cr-cl-altro-voci b {{ color: var(--cr-testo); }}
 }}
 """
 
@@ -1065,6 +1245,82 @@ def titolo_squadra(nome: str, logo: str | None = None) -> str:
     )
 
 
+# ---------------------------------------------------------------- classifica
+
+def _cella(valore: object, classe: str = "", titolo: str = "") -> str:
+    classi = "cr-cl-n" + (f" {classe}" if classe else "")
+    attributo = f' title="{escape(titolo)}"' if titolo else ""
+    return f'<span class="{classi}"{attributo}>{escape(str(valore))}</span>'
+
+
+def pallini_forma(forma) -> str:
+    """Ultime 5 partite: pallino verde (V), grigio (N), rosso (P), dalla meno recente; i posti
+    vuoti (meno di 5 partite) restano un cerchio tratteggiato."""
+    pallini = [
+        f'<span class="cr-forma cr-forma--{escape(esito)}" title="{escape(testo)}">'
+        f"{escape(esito)}</span>"
+        for esito, testo in forma
+    ]
+    vuoti = ['<span class="cr-forma cr-forma--vuota"></span>'] * (cc.PARTITE_FORMA - len(pallini))
+    return '<span class="cr-cl-forma">' + "".join(vuoti + pallini) + "</span>"
+
+
+def testa_classifica() -> str:
+    """Intestazione delle colonne della classifica (le colonne in più si nascondono su
+    telefono, come nelle righe)."""
+    celle = [
+        '<span class="cr-cl-pos">#</span>', '<span class="cr-cl-sq">Squadra</span>',
+        _cella("Pt", "cr-cl-pt", "Punti"), _cella("G", titolo="Partite giocate"),
+        _cella("V", "cr-cl-ext", "Vinte"), _cella("N", "cr-cl-ext", "Pareggiate"),
+        _cella("P", "cr-cl-ext", "Perse"), _cella("GF", "cr-cl-ext", "Gol fatti"),
+        _cella("GS", "cr-cl-ext", "Gol subiti"), _cella("DR", titolo="Differenza reti"),
+        '<span class="cr-cl-forma" title="Ultime 5 partite, la più recente a destra">Forma</span>',
+        _cella("🟨/P", "cr-cl-ext", "Gialli a partita (anche dalla panchina)"),
+        _cella("🟥/P", "cr-cl-ext", "Rossi a partita (anche dalla panchina)"),
+    ]
+    return '<div class="cr-cl-riga cr-cl-testa">' + "".join(celle) + "</div>"
+
+
+def riga_classifica(r) -> str:
+    """Una riga della classifica (`componenti_classifica.RigaTabella`): zona colorata a
+    sinistra, stemma, numeri, pallini della forma e cartellini a partita. Su telefono le
+    colonne in più stanno in una riga espandibile (<details>). Tutto con escape."""
+    zona = f" cr-cl-zona--{escape(r.zona)}" if r.zona else ""
+    titolo_zona = f' title="{escape(cc.NOMI_ZONE.get(r.zona, ""))}"' if r.zona else ""
+    gialli, rossi = cc.media(r.gialli_partita), cc.media(r.rossi_partita)
+    celle = [
+        f'<span class="cr-cl-pos"{titolo_zona}>{r.posizione}</span>',
+        f'<span class="cr-cl-sq">{stemma(r.nome, r.logo, "mini")}'
+        f'<span class="cr-cl-nome">{escape(r.nome)}</span></span>',
+        _cella(r.punti, "cr-cl-pt"), _cella(r.giocate),
+        _cella(r.vinte, "cr-cl-ext"), _cella(r.pari, "cr-cl-ext"), _cella(r.perse, "cr-cl-ext"),
+        _cella(r.gol_fatti, "cr-cl-ext"), _cella(r.gol_subiti, "cr-cl-ext"),
+        _cella(cc.differenza(r.differenza), "cr-cl-dr"),
+        pallini_forma(r.forma),
+        _cella(gialli, "cr-cl-ext cr-cl-gialli"), _cella(rossi, "cr-cl-ext cr-cl-rossi"),
+    ]
+    voci = (
+        f"<span><b>{r.vinte}</b> V</span><span><b>{r.pari}</b> N</span>"
+        f"<span><b>{r.perse}</b> P</span><span><b>{r.gol_fatti}</b> GF</span>"
+        f"<span><b>{r.gol_subiti}</b> GS</span><span>🟨 <b>{escape(gialli)}</b> a partita</span>"
+        f"<span>🟥 <b>{escape(rossi)}</b> a partita</span>"
+    )
+    return (
+        f'<div class="cr-cl-riga{zona}">' + "".join(celle) + "</div>"
+        '<details class="cr-cl-altro"><summary title="Altri dati">▾</summary>'
+        f'<div class="cr-cl-altro-voci">{voci}</div></details>'
+    )
+
+
+def legenda_zone(zone) -> str:
+    """Legenda delle zone colorate presenti nella classifica."""
+    voci = "".join(
+        f'<span><i class="cr-cl-segno cr-cl-zona--{escape(z)}"></i>{escape(cc.NOMI_ZONE.get(z, z))}</span>'
+        for z in zone
+    )
+    return f'<div class="cr-cl-legenda">{voci}</div>'
+
+
 def griglia(pezzi: list[str]) -> str:
     return '<div class="cr-griglia">' + "".join(pezzi) + "</div>"
 
@@ -1123,6 +1379,31 @@ def _scrivi_tema_nell_url(tema: str) -> None:
         del st.query_params[CHIAVE_TEMA]
 
 
+def anim_da_parametro(valore) -> bool:
+    """Sfondo animato acceso salvo ?anim=0 (o "no", "off", "false")."""
+    return str(valore).strip().lower() not in ("0", "no", "off", "false") if valore is not None else True
+
+
+def sfondo_animato() -> bool:
+    """Sfondo animato della sessione; al primo caricamento si legge da ?anim= (acceso)."""
+    if CHIAVE_ANIM not in st.session_state:
+        st.session_state[CHIAVE_ANIM] = anim_da_parametro(st.query_params.get(CHIAVE_ANIM))
+    return bool(st.session_state[CHIAVE_ANIM])
+
+
+def imposta_sfondo_animato(acceso: bool) -> None:
+    st.session_state[CHIAVE_ANIM] = bool(acceso)
+
+
+def _scrivi_anim_nell_url(acceso: bool) -> None:
+    """Come il tema: spento resta nell'URL (?anim=0), acceso (predefinito) non si scrive."""
+    if not acceso:
+        if st.query_params.get(CHIAVE_ANIM) != "0":
+            st.query_params[CHIAVE_ANIM] = "0"
+    elif CHIAVE_ANIM in st.query_params:
+        del st.query_params[CHIAVE_ANIM]
+
+
 def interruttore_tema() -> None:
     """Pulsante tondo ☀️/🌙 fisso in alto a destra (fuori dai menu)."""
     chiaro = tema_corrente() == TEMA_CHIARO
@@ -1150,7 +1431,11 @@ def applica_stile() -> None:
 
     tema = tema_corrente()
     _scrivi_tema_nell_url(tema)
-    st.html(f"<style>{css_tema(tema)}</style>")
+    animato = sfondo_animato()
+    _scrivi_anim_nell_url(animato)
+    st.html(
+        f"<style>{css_tema(tema, animato)}</style>" + (sfondo_3d_html(tema) if animato else "")
+    )
     interruttore_tema()
     testo, _ = cache_dati.stato_aggiornamento()
     st.markdown(intestazione(testo), unsafe_allow_html=True)

@@ -13,6 +13,7 @@ import streamlit as st
 import componenti
 import componenti_calde
 import componenti_calendario
+import componenti_classifica
 import componenti_cerca
 import componenti_home
 from ammonizioni import config
@@ -205,6 +206,17 @@ def _biografie(db: str, candidati: tuple[tuple[int, str], ...], oggi):
 def biografie(righe, oggi):
     """Biografie (ESPN + Wikipedia) dei primi della classifica `righe` che ne hanno una."""
     return _biografie(config.url_database(), componenti_home.candidati_bio(righe), oggi)
+
+
+@st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)
+def _classifiche(db: str, campionati: tuple[int, ...], stagione: int):
+    with apri(db) as s:
+        return componenti_classifica.carica_classifiche(s, campionati, stagione)
+
+
+def classifiche(campionati: tuple[int, ...], stagione: int = config.STAGIONE_CORRENTE):
+    """Classifiche dei campionati dati (tre query raggruppate in tutto), in cache."""
+    return _classifiche(config.url_database(), tuple(campionati), stagione)
 
 
 def svuota() -> None:

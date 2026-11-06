@@ -42,7 +42,7 @@ with apri() as s:
 
 rivalita = cache_dati.elenco_rivalita(datetime.now(timezone.utc))
 
-schede = st.tabs(["Derby e campi caldi", "Pesi del modello", "Chiavi API", "Immagini"])
+schede = st.tabs(["Derby e campi caldi", "Pesi del modello", "Chiavi API", "Immagini", "Sfondo"])
 
 # ---------------------------------------------------------------- derby e campi caldi
 
@@ -177,3 +177,24 @@ with schede[3], st.container(key="riquadro_impostazioni_3"):
         help="Spenta: iniziali al posto degli stemmi e maglietta al posto dei volti.",
     )
     st.caption(componenti.NOTA_IMMAGINI)
+
+
+# ---------------------------------------------------------------- sfondo
+
+
+def _salva_sfondo() -> None:
+    # solo per questo dispositivo, come il tema: resta nell'URL (?anim=0), non nel database
+    stile.imposta_sfondo_animato(st.session_state["interruttore_sfondo_animato"])
+
+
+with schede[4], st.container(key="riquadro_impostazioni_4"):
+    st.header("Sfondo")
+    st.toggle(
+        "Sfondo animato",
+        value=stile.sfondo_animato(), key="interruttore_sfondo_animato", on_change=_salva_sfondo,
+        help="Cartellini che fluttuano in 3D dietro la pagina. Spento: cartellini fermi.",
+    )
+    st.caption(
+        "Vale per questo dispositivo, come il tema chiaro/scuro. Con «riduci movimento» "
+        "attivo nel sistema i cartellini restano comunque fermi."
+    )
