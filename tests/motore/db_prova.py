@@ -27,6 +27,40 @@ GIOCATORI = {
 }
 
 
+# panchinari: (id, nome, ruolo, squadra, partite in cui entrano tra le 6 passate)
+PANCHINARI = [
+    (15, "Punta Riserva Casa", "F", CASA, (1, 2, 3, 4, 6)),
+    (16, "Terzo Portiere Casa", "G", CASA, ()),
+    (17, "Difensore Mai Casa", "D", CASA, ()),
+    (25, "Mediano Riserva Trasf", "M", TRASF, (2, 4, 5)),
+]
+
+
+def popola_panchina(s, *, salvata=True) -> None:
+    """Dopo `popola`: panchinari in distinta nelle 6 partite passate (entrati 20 minuti dove
+    indicato, un giallo dalla panchina per il 25 nella partita 3) e, con `salvata`, la
+    panchina della partita futura salvata con le ufficiali. Quote 1X2: Casa favorita."""
+    for gid, nome, ruolo, _, _ in PANCHINARI:
+        s.add(Giocatore(id=gid, nome=nome, ruolo=ruolo))
+    s.flush()
+    for i in range(1, 7):
+        for gid, _, _, sq, entra in PANCHINARI:
+            s.add(Presenza(
+                partita_id=i, giocatore_id=gid, squadra_id=sq, titolare=False, ruolo=None,
+                minuti=20 if i in entra else 0, falli_commessi=1 if i in entra else 0,
+                gialli=1 if (gid == 25 and i == 3) else 0,
+            ))
+        # la punta titolare di casa esce al 70' (sostituita)
+        s.get(Presenza, (i, 14)).minuti = 70
+    futura = s.get(Partita, PARTITA_FUTURA)
+    futura.prob_casa, futura.prob_pareggio, futura.prob_trasferta = 0.55, 0.25, 0.20
+    if salvata:
+        for gid, _, _, sq, _ in PANCHINARI:
+            s.add(Formazione(partita_id=PARTITA_FUTURA, squadra_id=sq, giocatore_id=gid,
+                             tipo="panchina"))
+    s.flush()
+
+
 def popola(s, *, con_formazione=True, con_arbitro=True) -> None:
     s.add_all([Squadra(id=CASA, nome="Casa FC"), Squadra(id=TRASF, nome="Trasferta FC")])
     for lista in GIOCATORI.values():

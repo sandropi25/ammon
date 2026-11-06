@@ -69,6 +69,17 @@ def tasso_base90(
     return _tasso_e_ritardo(storico, ruolo, medie, stagione, pesi)[0]
 
 
+def tasso_e_ritardo(
+    storico: list[RigaPresenza],
+    ruolo: str,
+    medie: MedieCampionato,
+    stagione: int,
+    pesi: Pesi,
+) -> tuple[float, bool]:
+    """(gialli per 90', "in ritardo"?) come in `base_giocatore`, per i subentranti."""
+    return _tasso_e_ritardo(storico, ruolo, medie, stagione, pesi)
+
+
 def _minuti_attesi(storico: list[RigaPresenza]) -> float:
     titolari = sorted((r for r in storico if r.titolare), key=lambda r: r.data, reverse=True)[:5]
     if not titolari:

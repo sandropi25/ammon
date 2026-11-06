@@ -21,7 +21,7 @@ from ammonizioni.db.modelli import (
     Squadra,
     Arbitro,
 )
-from ammonizioni.motore import rivalita
+from ammonizioni.motore import rivalita, subentranti
 from ammonizioni.motore.fattori.contesto import posta_in_classifica
 from ammonizioni.motore.tipi import (
     RUOLI,
@@ -350,6 +350,7 @@ def _contesto(
         ).all()
     ]
     posta = {sq: posta_in_classifica(giocate, sq) for sq in (partita.casa_id, partita.trasferta_id)}
+    punti_partita = _punti_partita(giocate, (partita.casa_id, partita.trasferta_id))
 
     precedenti = s.execute(
         select(Partita.id)
@@ -371,7 +372,28 @@ def _contesto(
         posta=posta,
         precedenti_n=len(totali),
         precedenti_gialli_medi=_media(gialli_prec),
+        punti_partita=punti_partita,
     )
+
+
+PARTITE_MINIME_PUNTI = 3
+
+
+def _punti_partita(
+    giocate: list[tuple[int, int, int, int]], squadre: tuple[int, int]
+) -> dict[int, float]:
+    """Punti per partita in campionato delle squadre con almeno 3 partite giocate."""
+    punti = {sq: 0 for sq in squadre}
+    partite = {sq: 0 for sq in squadre}
+    for casa, trasferta, gc, gt in giocate:
+        gc, gt = int(gc), int(gt)
+        for sq, fatti, subiti in ((casa, gc, gt), (trasferta, gt, gc)):
+            if sq in punti:
+                partite[sq] += 1
+                punti[sq] += 3 if fatti > subiti else 1 if fatti == subiti else 0
+    return {
+        sq: punti[sq] / partite[sq] for sq in squadre if partite[sq] >= PARTITE_MINIME_PUNTI
+    }
 
 
 def _da_formazione(s: Session, partita_id: int, squadra_id: int, tipo: str) -> list[Titolare]:
@@ -399,6 +421,99 @@ def _titolari(s: Session, partita: Partita, prima_di: datetime) -> list[Titolare
             or ultimo_xi(s, squadra, prima_di)
         )
         risultato.extend(scelti)
+    return risultato
+
+
+PARTITE_PANCHINA = 5  # con le probabili: entrati in almeno 2 delle ultime 5 di campionato
+INGRESSI_MINIMI_PANCHINA = 2
+
+
+def _panchina_salvata(s: Session, partita: Partita) -> dict[int, list[Titolare]]:
+    """Panchina in distinta salvata con le formazioni ufficiali (una query per le due squadre)."""
+    righe = s.execute(
+        select(Formazione.squadra_id, Giocatore)
+        .join(Giocatore, Giocatore.id == Formazione.giocatore_id)
+        .where(Formazione.partita_id == partita.id, Formazione.tipo == "panchina")
+        .order_by(Giocatore.id)
+    ).all()
+    risultato: dict[int, list[Titolare]] = {}
+    for squadra_id, g in righe:
+        risultato.setdefault(squadra_id, []).append(titolare_da(g, squadra_id, None, None))
+    return risultato
+
+
+def _panchina_automatica(
+    s: Session, squadre: list[int], prima_di: datetime, stagione: int
+) -> dict[int, list[Titolare]]:
+    """Senza panchina nota: i giocatori della squadra entrati in campo (anche 1 minuto) in
+    almeno 2 delle sue ultime 5 partite di campionato. Due query per tutte le squadre;
+    i titolari vanno tolti da chi chiama."""
+    risultato: dict[int, list[Titolare]] = {sq: [] for sq in squadre}
+    if not squadre:
+        return risultato
+    partite = s.execute(
+        select(Presenza.squadra_id, Presenza.partita_id, Partita.data_utc)
+        .join(Partita, Partita.id == Presenza.partita_id)
+        .where(
+            Presenza.squadra_id.in_(squadre),
+            Partita.competizione_id.in_(CAMPIONATI),
+            Partita.data_utc < prima_di,
+            Partita.stagione.in_((stagione, stagione - 1)),
+        )
+        .distinct()
+    ).all()
+    per_squadra: dict[int, list[tuple[datetime, int]]] = {}
+    for sq, pid, data in partite:
+        per_squadra.setdefault(sq, []).append((data, pid))
+    ultime = {
+        sq: {pid for _, pid in sorted(lista, reverse=True)[:PARTITE_PANCHINA]}
+        for sq, lista in per_squadra.items()
+    }
+    ids = set().union(*ultime.values()) if ultime else set()
+    if not ids:
+        return risultato
+    righe = s.execute(
+        select(Presenza.squadra_id, Presenza.partita_id, Presenza.ruolo, Giocatore)
+        .join(Giocatore, Giocatore.id == Presenza.giocatore_id)
+        .where(
+            Presenza.partita_id.in_(ids),
+            Presenza.squadra_id.in_(squadre),
+            Presenza.minuti > 0,
+        )
+        .order_by(Giocatore.id)
+    ).all()
+    volte: dict[tuple[int, int], int] = {}
+    giocatori: dict[int, Giocatore] = {}
+    ruoli: dict[int, str | None] = {}
+    for sq, pid, ruolo, g in righe:
+        if pid not in ultime.get(sq, set()):
+            continue
+        volte[(sq, g.id)] = volte.get((sq, g.id), 0) + 1
+        giocatori[g.id] = g
+        ruoli[g.id] = ruoli.get(g.id) or ruolo
+    for (sq, gid), n in sorted(volte.items()):
+        if n >= INGRESSI_MINIMI_PANCHINA:
+            risultato[sq].append(titolare_da(giocatori[gid], sq, None, ruoli.get(gid)))
+    return risultato
+
+
+def _panchina(
+    s: Session, partita: Partita, prima_di: datetime, titolari: list[Titolare]
+) -> list[Titolare]:
+    """Panchinari delle due squadre: quelli in distinta salvati con le formazioni ufficiali,
+    altrimenti (formazioni probabili) quelli calcolati dalle ultime partite. Mai un titolare."""
+    squadre = [partita.casa_id, partita.trasferta_id]
+    salvata = _panchina_salvata(s, partita)
+    mancanti = [sq for sq in squadre if not salvata.get(sq)]
+    automatica = (
+        _panchina_automatica(s, mancanti, prima_di, partita.stagione) if mancanti else {}
+    )
+    in_campo = {t.giocatore_id for t in titolari}
+    risultato: list[Titolare] = []
+    for sq in squadre:
+        for b in salvata.get(sq) or automatica.get(sq, []):
+            if b.giocatore_id not in in_campo:
+                risultato.append(b)
     return risultato
 
 
@@ -457,7 +572,13 @@ def carica_dati(
     partita_id: int,
     prima_di: datetime | None = None,
     titolari: list[Titolare] | None = None,
+    *,
+    con_panchina: bool = False,
+    panchina: list[Titolare] | None = None,
 ) -> DatiPartita:
+    """Snapshot della partita. Con `con_panchina` (o una `panchina` data, come nella prova
+    storica) carica anche i panchinari, il loro storico e la tendenza dei cambi; senza, i
+    dati dei titolari sono esattamente quelli di sempre."""
     partita = s.get(Partita, partita_id)
     if partita is None:
         raise ValueError(f"Partita {partita_id} non trovata")
@@ -467,6 +588,20 @@ def carica_dati(
 
     if titolari is None:
         titolari = _titolari(s, partita, prima_di)
+    if panchina is None and con_panchina:
+        panchina = _panchina(s, partita, prima_di, titolari)
+    panchina = panchina or []
+    tendenze = (
+        subentranti.tendenze_cambi(
+            s, [partita.casa_id, partita.trasferta_id], prima_di, partita.stagione
+        )
+        if panchina else {}
+    )
+    prob_vittoria = (
+        {partita.casa_id: float(partita.prob_casa), partita.trasferta_id: float(partita.prob_trasferta)}
+        if panchina and partita.prob_casa is not None and partita.prob_trasferta is not None
+        else {}
+    )
     nomi = {
         sq.id: sq.nome
         for sq in s.execute(
@@ -488,11 +623,16 @@ def carica_dati(
         nomi_squadre=nomi,
         titolari=titolari,
         storico=_storico(
-            s, [t.giocatore_id for t in titolari], partita.stagione, prima_di, partita.id, derby
+            s,
+            [t.giocatore_id for t in titolari] + [b.giocatore_id for b in panchina],
+            partita.stagione, prima_di, partita.id, derby,
         ),
         arbitro=_stat_arbitro(s, partita, prima_di),
         medie=_medie_campionato(s, partita.stagione, prima_di, campionato_id),
         contesto=_contesto(s, partita, prima_di, derby, campionato_id),
         duelli_manuali=duelli,
         campionato_id=campionato_id,
+        panchina=panchina,
+        tendenza_cambi=tendenze,
+        prob_vittoria=prob_vittoria,
     )

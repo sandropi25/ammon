@@ -19,6 +19,13 @@ PANCHINE_PRIOR = 8  # restringimento verso la media del ruolo
 PROB_INGRESSO_RUOLO = {"G": 0.03, "D": 0.35, "M": 0.45, "F": 0.5}
 MINUTI_SUBENTRO_PREDEFINITI = 20.0
 SOGLIA_INGRESSO = 0.15  # sotto non si mostra (decisione dell'utente)
+# mai entrato in almeno 5 panchine: "non entra quasi mai", fuori anche se il restringimento
+# verso la media del ruolo (con pochi dati) lo porterebbe sopra 0,15
+PANCHINE_SENZA_INGRESSI = 5
+
+
+def non_entra_mai(profilo: "ProfiloSubentro") -> bool:
+    return profilo.ingressi == 0 and profilo.panchine >= PANCHINE_SENZA_INGRESSI
 PARTITE_TENDENZA = 10
 MARGINE_PROB_SFAVORITA = 0.10  # quote 1X2: vittoria meno probabile di almeno 10 punti
 MARGINE_PUNTI_SFAVORITA = 0.5  # classifica: almeno mezzo punto a partita in meno
