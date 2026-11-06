@@ -126,6 +126,26 @@ def _salva_quote(s: Session, partita: Partita, fonte) -> None:
         partita.prob_casa, partita.prob_pareggio, partita.prob_trasferta = quote
 
 
+def crea_probabili(s: Session, partita: Partita) -> bool:
+    """Probabili dall'ultimo XI, se la partita non le ha ancora (commit incluso, nessuna
+    richiesta). True se le ha create."""
+    if _ha_probabili(s, partita.id):
+        return False
+    xi = {
+        squadra: probabili_automatiche(s, squadra, partita.data_utc)
+        or ultimo_xi(s, squadra, partita.data_utc)
+        for squadra in (partita.casa_id, partita.trasferta_id)
+    }
+    salva_probabili(
+        s,
+        partita.id,
+        {squadra: [t.giocatore_id for t in titolari] for squadra, titolari in xi.items()},
+        griglie={t.giocatore_id: t.griglia for titolari in xi.values() for t in titolari},
+    )
+    s.commit()
+    return True
+
+
 def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     """Per ogni partita nella finestra: probabili dall'ultimo XI se mancano, poi cerca le
     ufficiali. Restituisce quante partite sono passate a "ufficiali"."""
@@ -133,19 +153,7 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     for partita in partite_da_controllare(s, adesso_utc):
         partita_id = partita.id
         try:
-            if not _ha_probabili(s, partita_id):
-                xi = {
-                    squadra: probabili_automatiche(s, squadra, partita.data_utc)
-                    or ultimo_xi(s, squadra, partita.data_utc)
-                    for squadra in (partita.casa_id, partita.trasferta_id)
-                }
-                salva_probabili(
-                    s,
-                    partita_id,
-                    {squadra: [t.giocatore_id for t in titolari] for squadra, titolari in xi.items()},
-                    griglie={t.giocatore_id: t.griglia for titolari in xi.values() for t in titolari},
-                )
-                s.commit()
+            crea_probabili(s, partita)
             indica_competizione(fonte, partita_id, partita.competizione_id)
             formazioni = fonte.formazioni(partita_id)
         except LimiteSuperato:

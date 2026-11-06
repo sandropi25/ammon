@@ -7,9 +7,10 @@ probabilità di ammonizione, con quote e valore atteso per le giocate. L'interfa
 
 Medie di campionato, posta in classifica e diffide (con le soglie di ciascun campionato) sono calcolate sul campionato della partita: aggiungere la Liga non cambia i risultati della Serie A. Nelle pagine **Partite** e **Giocate** il selettore del campionato (Serie A / Liga / Tutti) parte da Serie A; in **Impostazioni** derby e campi caldi offrono le squadre di entrambi i campionati, con il campionato fra parentesi.
 
-Due job programmati tengono i dati aggiornati:
+Tre job programmati tengono i dati aggiornati:
 
-- `python -m ammonizioni.scheduler.notte`: ogni notte aggiorna calendario, risultati e statistiche (prima la Serie A, poi la Liga) e fa avanzare il caricamento dello storico (stagioni 2026, 2025, 2024).
+- `python -m ammonizioni.scheduler.orchestratore`: parte ogni ora (minuto 05) ma decide da solo (ora italiana, nessuna richiesta se non serve): **aggiornamento della giornata** 6-7 ore prima della prima partita del giorno (per una prima partita alle 15:00, tra le 08:00 e le 09:00): calendario, statistiche delle partite giocate, arbitri, probabili formazioni, biografie e storico (col suo tetto di tempo); **chiusura** delle partite finite da almeno 2 ore e non ancora chiuse (statistiche ed esiti delle giocate); nei giorni senza partite non fa nulla. Se un cron salta, l'aggiornamento della giornata si recupera fino a 3 ore prima della prima partita. Lo stato ("giornata aggiornata", "partite chiuse") è in Impostazione, quindi nulla gira due volte.
+- `python -m ammonizioni.scheduler.notte`: una volta a settimana (lunedì 03:00 UTC), come rete di sicurezza, aggiorna calendario, risultati e statistiche (prima la Serie A, poi la Liga) e fa avanzare il caricamento dello storico (stagioni 2026, 2025, 2024).
 - `python -m ammonizioni.scheduler.pre_partita`: ogni 10 minuti, da 75 minuti prima del calcio d'inizio, controlla se sono uscite le formazioni ufficiali (Serie A e Liga). Fuori finestra esce subito senza fare richieste.
 
 ## Fonti dati
@@ -142,13 +143,13 @@ Senza un `DATABASE_URL` Postgres i test marcati `postgres` vengono saltati.
 
    `API_FOOTBALL_KEY` (segreto) e `FONTE_DATI` (variabile, in **Variables**) servono solo per tornare ad API-Football: con `FONTE_DATI` vuota o assente si usa ESPN. `STORICO_MAX_MINUTI` (variabile, facoltativa) cambia il tetto di 40 minuti dello storico.
 3. Lancia il caricamento a mano: scheda **Actions > Caricamento notturno > Run workflow**. Nei log del passo `python -m ammonizioni.scheduler.notte` controlla le righe `Notte: ... richieste, ... partite aggiornate, completo=...` e `Storico: ...`: devono comparire il numero di richieste usate e `completo=True` (o `False` se lo storico si è fermato per il tempo massimo `STORICO_MAX_MINUTI`, se il controllo di salute di ESPN ha trovato la struttura cambiata, se football-data ha dato errore o se è stato raggiunto il limite giornaliero, caso normale mentre lo storico si carica).
-4. Da quel momento: `notte.yml` parte ogni giorno alle 03:00 UTC; `pre_partita.yml` parte ogni 10 minuti ma solo dalle 10:00 alle 20:50 UTC (cron `*/10 10-20 * * *`). Entrambi si possono lanciare anche a mano (`workflow_dispatch`) e hanno un gruppo di concorrenza che impedisce due esecuzioni sovrapposte.
+4. Da quel momento: `orchestratore.yml` parte ogni ora (cron `5 * * * *`) e decide se aggiornare la giornata, chiudere le partite finite o non fare nulla; `notte.yml` parte solo il lunedì alle 03:00 UTC (rete di sicurezza); `pre_partita.yml` parte ogni 10 minuti ma solo dalle 10:00 alle 20:50 UTC (cron `*/10 10-20 * * *`). Entrambi si possono lanciare anche a mano (`workflow_dispatch`) e hanno un gruppo di concorrenza che impedisce due esecuzioni sovrapposte.
 
 Nota: GitHub può ritardare l'avvio dei cron di qualche minuto (e a volte saltarne qualcuno nei momenti di carico). Per il controllo delle formazioni, a intervalli di 10 minuti, non è un problema. I cron dei repository senza attività per 60 giorni vengono disattivati da GitHub: basta riattivarli dalla scheda Actions.
 
 #### Minuti di GitHub Actions e orari del cron
 
-Con Serie A e Liga il pre-partita gira dalle 10:00 alle 20:50 UTC (la Liga arriva fino alle 21:00 spagnole, cioè le 19:00 o le 20:00 UTC): 11 ore x 6 esecuzioni = 66 al giorno, circa **1980 minuti al mese** (ogni esecuzione conta almeno 1 minuto), a cui si aggiungono la notte (almeno 30 minuti al mese, molti di più mentre lo storico si carica: fino a 40 minuti per le prime 3 notti). In totale si va **oltre i 2000 minuti mensili** del piano GitHub Free per i repository privati. Le strade sono due, e la scelta è tua:
+Con Serie A e Liga il pre-partita gira dalle 10:00 alle 20:50 UTC (la Liga arriva fino alle 21:00 spagnole, cioè le 19:00 o le 20:00 UTC): 11 ore x 6 esecuzioni = 66 al giorno, circa **1980 minuti al mese** (ogni esecuzione conta almeno 1 minuto), a cui si aggiungono l'orchestratore (24 esecuzioni al giorno, circa 720 al mese: ogni esecuzione conta almeno 1 minuto anche quando non fa nulla, quindi **circa 750-900 minuti al mese**, più gli aggiornamenti della giornata e lo storico finché non è completo: fino a 40 minuti per le prime giornate) e il job settimanale di sicurezza (circa 4-5 esecuzioni al mese). In totale si va **oltre i 2000 minuti mensili** del piano GitHub Free per i repository privati. Le strade sono due, e la scelta è tua:
 
 - **rendere pubblico il repository** (minuti illimitati; i segreti restano protetti, il codice è visibile a tutti): è la strada consigliata;
 - **accettare i minuti a pagamento** oltre la quota di 2000 (o restare privati e ridurre le ore del cron, rinunciando a coprire alcuni calci d'inizio).

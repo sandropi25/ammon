@@ -1,8 +1,8 @@
-name: Caricamento notturno
+name: Caricamento settimanale di sicurezza
 
 on:
   schedule:
-    - cron: "0 3 * * *" # 03:00 UTC ogni notte (GitHub può ritardarlo di qualche minuto)
+    - cron: "0 3 * * 1" # lunedì 03:00 UTC: rete di sicurezza settimanale (GitHub può ritardarlo di qualche minuto)
   workflow_dispatch:
 
 permissions:

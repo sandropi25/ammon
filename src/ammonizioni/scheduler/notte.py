@@ -30,6 +30,35 @@ def aggiorna_biografie(s):
     return biografie_giocatori.aggiorna(s, ClientBiografie(limite), usa_espn=espn)
 
 
+def aggiorna_tutto(
+    s, fonte_oggi, fonte_storico, fonte_fd, controllo, biografie, adesso=None, etichetta="Notte"
+) -> None:
+    """Calendario, statistiche, arbitri, esiti; biografie; storico col suo tetto di tempo.
+    Usato dal job settimanale e dall'aggiornamento della giornata dell'orchestratore."""
+    riepilogo = notturno.esegui(
+        s, fonte_oggi, adesso=adesso, fonte_fd=fonte_fd, controllo=controllo
+    )
+    log.info(
+        "%s: %s richieste, %s partite aggiornate, completo=%s",
+        etichetta, riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,
+    )
+    try:
+        bio = biografie(s)
+        log.info(
+            "Biografie: %s giocatori controllati (%s con anagrafica, %s con Wikipedia), "
+            "completo=%s", bio.controllati, bio.con_anagrafica, bio.con_wikipedia,
+            bio.completo,
+        )
+    except Exception:  # noqa: BLE001 - le biografie non devono fermare il job
+        s.rollback()
+        log.exception("Biografie non aggiornate")
+    riepilogo = storico.avanza(s, fonte_storico, fonte_fd)
+    log.info(
+        "Storico: %s richieste, %s partite aggiornate, completo=%s",
+        riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,
+    )
+
+
 def main(
     argv=None,
     crea_fonte=crea_fonte_predefinita,
@@ -50,27 +79,8 @@ def main(
         # con API-Football gli arbitri arrivano gia' dalla fonte: football-data non serve
         fonte_fd = crea_fd(s) if espn else None
         # il controllo di salute vale solo per ESPN (API non ufficiale)
-        riepilogo = notturno.esegui(
-            s, fonte_oggi, fonte_fd=fonte_fd, controllo=controllo if espn else None
-        )
-        log.info(
-            "Notte: %s richieste, %s partite aggiornate, completo=%s",
-            riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,
-        )
-        try:
-            bio = biografie(s)
-            log.info(
-                "Biografie: %s giocatori controllati (%s con anagrafica, %s con Wikipedia), "
-                "completo=%s", bio.controllati, bio.con_anagrafica, bio.con_wikipedia,
-                bio.completo,
-            )
-        except Exception:  # noqa: BLE001 - le biografie non devono fermare il job
-            s.rollback()
-            log.exception("Biografie non aggiornate")
-        riepilogo = storico.avanza(s, fonte_storico, fonte_fd)
-        log.info(
-            "Storico: %s richieste, %s partite aggiornate, completo=%s",
-            riepilogo.richieste_usate, riepilogo.partite_aggiornate, riepilogo.completo,
+        aggiorna_tutto(
+            s, fonte_oggi, fonte_storico, fonte_fd, controllo if espn else None, biografie
         )
     return 0
 
