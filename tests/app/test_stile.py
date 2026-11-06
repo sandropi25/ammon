@@ -307,7 +307,8 @@ def test_navigazione_in_alto_verso_le_pagine(sessione_db):
 
 def test_router_usa_la_navigazione_in_alto():
     testo = (RADICE / "app" / "Partite.py").read_text(encoding="utf-8")
-    assert 'position="top"' in testo and "st.navigation(" in testo
+    assert '"top" if auth.accesso_valido() else "hidden"' in testo
+    assert "st.navigation(pagine, position=menu)" in testo
 
 
 def test_ogni_pagina_chiama_applica_stile_dopo_la_password():

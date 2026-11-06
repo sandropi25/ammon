@@ -479,6 +479,61 @@ html, body, .stApp {{
 """
 
 
+TITOLO_BENVENUTO = "Benvenuto nel mondo del Yellow!"
+SOTTOTITOLO_BENVENUTO = "Pronostici sui cartellini di Serie A e Liga"
+
+
+def css_accesso(tema: str) -> str:
+    """CSS in più della schermata di benvenuto: niente barra in alto, sfondo a cartellini
+    che scorre piano (fermo con "riduci movimento"), scheda centrale stretta. Su telefono
+    la scheda sta in alto, così la tastiera non copre il pulsante "Entra"."""
+    p = PALETTE[tema]
+    return f"""
+[data-testid="stHeader"], [data-testid="stToolbar"] {{ display: none !important; }}
+[data-testid="stAppViewContainer"] {{
+  background-image: url("{sfondo_svg(tema)}"), radial-gradient(ellipse at 50% 0%, {_rgba(p["giallo"], 0.14)}, transparent 60%);
+  animation: cr-deriva 90s linear infinite;
+}}
+@keyframes cr-deriva {{ from {{ background-position: 0 0, 0 0; }} to {{ background-position: 280px 560px, 0 0; }} }}
+@media (prefers-reduced-motion: reduce) {{ [data-testid="stAppViewContainer"] {{ animation: none; }} }}
+[data-testid="stMainBlockContainer"] {{ padding-top: 7vh !important; }}
+.st-key-accesso {{ max-width: 430px; margin: 0 auto; }}
+.cr-benvenuto {{ text-align: center; margin-bottom: 1.2rem; }}
+.cr-benvenuto .cr-logo {{ filter: drop-shadow(0 8px 18px rgba(0,0,0,.25)); animation: cr-ondeggia 6s ease-in-out infinite; }}
+@keyframes cr-ondeggia {{ 0%, 100% {{ transform: rotate(-4deg); }} 50% {{ transform: rotate(4deg); }} }}
+@media (prefers-reduced-motion: reduce) {{ .cr-benvenuto .cr-logo {{ animation: none; }} }}
+.cr-benvenuto-titolo {{
+  font-family: 'Barlow Condensed', 'Barlow', sans-serif; font-weight: 800; font-size: 2.6rem;
+  line-height: 1.05; color: var(--cr-testo); margin: .6rem 0 .3rem; letter-spacing: .01em;
+}}
+.cr-benvenuto-titolo span {{ color: var(--cr-giallo); }}
+.cr-benvenuto-sotto {{ color: var(--cr-testo2); font-size: 1.05rem; }}
+.st-key-accesso [data-testid="stForm"] {{
+  background: var(--cr-superficie); border: 1px solid var(--cr-bordo) !important;
+  border-radius: 18px !important; box-shadow: var(--cr-ombra); padding: 1.3rem 1.3rem 1rem;
+}}
+.st-key-accesso input {{ font-size: 1.1rem !important; min-height: 48px; }}
+.st-key-accesso [data-testid="stCaptionContainer"] {{ text-align: center; }}
+@media (max-width: 640px) {{
+  [data-testid="stMainBlockContainer"] {{ padding-top: 1.2rem !important; }}
+  .cr-benvenuto-titolo {{ font-size: 2rem; }}
+  .cr-benvenuto svg {{ width: 76px; height: 76px; }}
+}}
+"""
+
+
+def benvenuto() -> str:
+    """Logo grande, titolo e sottotitolo della schermata di benvenuto."""
+    titolo = escape(TITOLO_BENVENUTO).replace("Yellow", "<span>Yellow</span>", 1)
+    return (
+        '<div class="cr-benvenuto">'
+        f"{logo_svg(104)}"
+        f'<div class="cr-benvenuto-titolo" role="heading" aria-level="1">{titolo}</div>'
+        f'<div class="cr-benvenuto-sotto">{escape(SOTTOTITOLO_BENVENUTO)}</div>'
+        "</div>"
+    )
+
+
 # ---------------------------------------------------------------- componenti HTML
 
 def badge(testo: str, tipo: str = "neutro") -> str:
@@ -803,6 +858,15 @@ def interruttore_tema() -> None:
         on_click=_alterna_tema,
         help="Passa al tema scuro" if chiaro else "Passa al tema chiaro",
     )
+
+
+def applica_stile_accesso() -> None:
+    """Grafica della schermata di benvenuto: tema, CSS, pulsante sole/luna. Nessuna query al
+    database (si vede prima dell'accesso)."""
+    tema = tema_corrente()
+    _scrivi_tema_nell_url(tema)
+    st.html(f"<style>{css_tema(tema)}{css_accesso(tema)}</style>")
+    interruttore_tema()
 
 
 def applica_stile() -> None:

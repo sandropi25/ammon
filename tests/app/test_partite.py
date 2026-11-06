@@ -151,16 +151,20 @@ def test_password_richiesta_se_configurata(sessione_db):
     _prepara(sessione_db)
     at = AppTest.from_file(PAGINA_PARTITE, default_timeout=30)
     at.secrets["password"] = "x"
+    at.switch_page("pagine/0_Partite.py")
     at.run()
     assert not at.exception
     assert "Casa FC" not in visibile(at)
     assert len(at.text_input) == 1
+    assert "Benvenuto nel mondo del" in visibile(at)
 
-    at.text_input[0].set_value("sbagliata").run()
+    at.text_input[0].set_value("sbagliata")
+    at.button(key="entra").click().run()
     assert "Casa FC" not in visibile(at)
     assert at.error
 
-    at.text_input[0].set_value("x").run()
+    at.text_input[0].set_value("x")
+    at.button(key="entra").click().run()
     assert not at.exception
     assert "Casa FC" in visibile(at)
 

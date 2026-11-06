@@ -15,6 +15,7 @@ import streamlit as st  # noqa: E402
 
 import cache_dati  # noqa: E402
 import componenti_giocate as cg  # noqa: E402
+import auth  # noqa: E402
 import stile  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.db import repo  # noqa: E402
@@ -26,6 +27,11 @@ richiedi_password()
 stile.applica_stile()
 
 st.title("Impostazioni")
+if auth.password_configurata():
+    st.button(
+        "Esci da questo dispositivo", key="esci", on_click=auth.esci,
+        help="Chiude l'accesso e dimentica il \"Ricordami\" su questo dispositivo",
+    )
 
 with apri() as s:
     pesi = carica_pesi(s)

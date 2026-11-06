@@ -15,11 +15,15 @@ aggiorna.ricarica_se_cambiato(lambda: __import__("streamlit").cache_data.clear()
 
 import streamlit as st  # noqa: E402
 
+import auth  # noqa: E402
 import stile  # noqa: E402
 
 st.set_page_config(
     page_title=stile.NOME_APP, page_icon="🟨", layout="wide", initial_sidebar_state="collapsed"
 )
+# prima dell'accesso il menu resta nascosto: la pagina richiesta (anche un link diretto come
+# /Dettaglio_partita?partita=123) mostra la schermata di benvenuto e, dopo, se stessa
+menu = "top" if auth.accesso_valido() else "hidden"
 
 pagine = [
     st.Page("pagine/0_Partite.py", title="Partite", icon="📅", default=True),
@@ -30,4 +34,4 @@ pagine = [
     st.Page("pagine/2_Giocate.py", title="Giocate", icon="🎯"),
     st.Page("pagine/3_Impostazioni.py", title="Impostazioni", icon="⚙️"),
 ]
-st.navigation(pagine, position="top").run()
+st.navigation(pagine, position=menu).run()
