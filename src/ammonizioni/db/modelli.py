@@ -58,6 +58,10 @@ class Giocatore(Base):
     wiki_estratto: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ultimo tentativo (anche senza risultati): si riprova solo dopo un mese
     bio_aggiornata: Mapped[datetime | None] = mapped_column(DataOraUTC, nullable=True)
+    # Foto (ritaglio senza sfondo) da TheSportsDB; foto_controllata = ultimo tentativo,
+    # anche senza risultato (si riprova dopo 30 giorni, con foto dopo 90)
+    foto_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    foto_controllata: Mapped[datetime | None] = mapped_column(DataOraUTC, nullable=True)
 
 
 class Arbitro(Base):

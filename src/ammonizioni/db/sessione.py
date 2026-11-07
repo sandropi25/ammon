@@ -57,6 +57,9 @@ COLONNE_AGGIUNTE: tuple[tuple[str, str, str], ...] = (
     ("partite", "gialli_totali", "INTEGER"),
     ("partite", "rossi_totali", "INTEGER"),
     ("partite", "falli_totali", "INTEGER"),
+    # foto dei giocatori (TheSportsDB)
+    ("giocatori", "foto_url", "VARCHAR"),
+    ("giocatori", "foto_controllata", "TIMESTAMP WITH TIME ZONE"),
 )
 
 
