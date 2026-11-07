@@ -162,6 +162,7 @@ def test_rendering_svg_con_ancore_colori_ed_escape(sessione_db):
     assert f'src="{LOGO}"' in html
     # volto come sfondo CSS (una foto mancante non mostra l'icona dell'immagine rotta)
     assert "background-image:url('https://a.espncdn.com/i/headshots/soccer/players/full/12.png')" in html
+    assert 'class="cr-etichetta"' in html and 'class="cr-bollino"' in html  # stile fantacalcio
     assert "<image" not in html
     # bordo per soglia: classi coerenti con le probabilità
     for g in dati.casa.titolari:

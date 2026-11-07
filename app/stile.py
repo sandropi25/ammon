@@ -838,12 +838,13 @@ def css_campo(tema: str) -> str:
 .cr-campo-sq span {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 .cr-campo-modulo {{ font-family: 'Barlow Condensed', sans-serif; font-weight: 800; color: var(--cr-giallo); }}
 .cr-pl text {{ font-family: 'Barlow', sans-serif; font-weight: 700; }}
-.cr-pl .cr-nome-pl {{ fill: #FFFFFF; paint-order: stroke; stroke: rgba(0,0,0,.55); stroke-width: 4px; }}
+.cr-pl .cr-nome-pl {{ fill: #FFFFFF; font-weight: 700; letter-spacing: .01em; }}
+.cr-pl .cr-numero, .cr-bollino text {{ font-weight: 800; }}
 .cr-pl {{ cursor: pointer; transition: opacity .15s; }}
 .cr-pl:hover .cr-maglia {{ filter: brightness(1.15); }}
 .cr-duello {{ display: none; }}
-.cr-volto {{ width: 34px; height: 34px; border-radius: 50%; background-size: cover;
-  background-position: center top; background-repeat: no-repeat; }}
+.cr-volto {{ width: 100%; height: 100%; border-radius: 50%; background-size: 118% auto;
+  background-position: center 8%; background-repeat: no-repeat; }}
 .cr-panche {{ display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .55rem; }}
 .cr-panca-titolo {{ font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700;
   color: var(--cr-testo2); margin-bottom: .25rem; }}
@@ -851,7 +852,7 @@ def css_campo(tema: str) -> str:
 .cr-panca-g {{ display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .45rem .15rem .2rem;
   border-radius: 999px; border: 2px solid var(--cr-bordo); background: var(--cr-superficie2);
   font-size: .78rem; font-weight: 600; color: var(--cr-testo) !important; max-width: 100%; }}
-.cr-panca-g svg {{ width: 26px; height: 26px; flex: 0 0 26px; border-radius: 0; }}
+.cr-panca-g svg {{ width: 30px; height: 30px; flex: 0 0 30px; border-radius: 0; }}
 .cr-panca-g span {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 .cr-panca-g.cr-rischio--verde {{ border-color: {p["verde"]}; }}
 .cr-panca-g.cr-rischio--giallo {{ border-color: {p["giallo"]}; }}

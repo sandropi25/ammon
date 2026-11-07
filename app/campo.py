@@ -2,10 +2,10 @@
 
 Su schermi larghi il campo è orizzontale (casa a sinistra, trasferta a destra) con le
 panchine sotto le due metà; su telefono è verticale (casa sotto, trasferta sopra) con la
-panchina della trasferta sopra e quella di casa sotto. Ogni giocatore: maglietta nei colori
-della squadra con il numero, cognome sotto, bordo per il rischio di giallo (verde < 15%,
-giallo 15-30%, rosso > 30%), il volto ESPN sopra la maglietta se le immagini sono accese
-(se la foto non esiste il browser non disegna niente e resta la maglietta).
+panchina della trasferta sopra e quella di casa sotto. Ogni giocatore (stile fantacalcio):
+tondo nei colori della squadra con la foto del giocatore, numero nel bollino, cognome in
+un'etichetta scura sotto, bordo per il rischio di giallo (verde < 15%, giallo 15-30%,
+rosso > 30%); se la foto non c'è o non si carica resta il numero al centro del tondo.
 
 Toccare un giocatore porta alla sua scheda nella classifica (ancora `#cand-<id>`); il CSS
 `:has(:target)` evidenzia lui e il suo avversario diretto con una linea tratteggiata.
@@ -21,7 +21,7 @@ from componenti_campo import DatiCampo, GiocatoreCampo, SquadraCampo, livello_ri
 
 LARGO, ALTO = 1050, 680  # campo orizzontale (105 x 68 m); il verticale è ruotato
 MARGINE = 46
-X_RIGA = {1: 52, 2: 150, 3: 255, 4: 350, 5: 448}  # distanza dalla propria porta per riga
+X_RIGA = {1: 66, 2: 155, 3: 255, 4: 350, 5: 448}  # distanza dalla propria porta per riga
 GIALLO_DUELLO = "#F5C518"
 COLORI_RISCHIO = {"verde": "#3DD68C", "giallo": "#F5C518", "rosso": "#E5484D"}
 MAGLIA = (
@@ -85,37 +85,62 @@ def _titolo(g: GiocatoreCampo) -> str:
     return f"{g.nome}{numero}{prob}"
 
 
+# omino generico (testa e spalle) nel tondo quando non ci sono né foto né numero
+SAGOMA = (
+    '<g class="cr-sagoma" fill="rgba(255,255,255,.55)"><circle cx="0" cy="-7" r="9"/>'
+    '<path d="M-17,19 Q-17,4 0,4 Q17,4 17,19 Z"/></g>'
+)
+RAGGIO = 25  # tondo del giocatore (stile fantacalcio): foto sopra il colore della squadra
+
+
+def _larghezza_nome(testo: str) -> float:
+    """Larghezza dell'etichetta del nome (font 16 grassetto, stima per carattere)."""
+    return 9.6 * len(testo) + 16
+
+
 def _maglia(g: GiocatoreCampo, colore: str, clip: str) -> str:
-    """Maglietta con numero, bordo del rischio e (se c'è) il volto sopra; centro in 0,0."""
+    """Tondo del giocatore stile fantacalcio, centro in 0,0: fondo nei colori della squadra,
+    foto scontornata sopra (se c'è), bordo del rischio, numero nel bollino; senza foto il
+    numero sta al centro del tondo."""
     livello = livello_rischio(g.probabilita)
     bordo = (
         f'stroke="{COLORI_RISCHIO[livello]}" stroke-width="4"' if livello in COLORI_RISCHIO
-        else 'stroke="rgba(0,0,0,.45)" stroke-width="2"'
+        else 'stroke="rgba(255,255,255,.75)" stroke-width="2.5"'
     )
-    numero = (
-        f'<text class="cr-numero" x="0" y="11" text-anchor="middle" font-size="19" '
-        f'fill="{colore_numero(colore)}">{escape(str(g.numero))}</text>'
-        if g.numero is not None else ""
-    )
-    volto = ""
     url = componenti.url_https(g.volto)
-    if url and URL_SICURO.fullmatch(url):
+    ha_foto = bool(url and URL_SICURO.fullmatch(url))
+    numero = "" if ha_foto else SAGOMA
+    if g.numero is not None and not ha_foto:
+        numero = (
+            f'<text class="cr-numero" x="0" y="8" text-anchor="middle" font-size="22" '
+            f'fill="{colore_numero(colore)}">{escape(str(g.numero))}</text>'
+        )
+    volto = bollino = ""
+    if ha_foto:
         # sfondo CSS e non <image>: se la foto non esiste il browser non disegna niente
         # (un <image> SVG rotto mostra l'icona dell'immagine mancante)
         volto = (
-            '<foreignObject x="-17" y="-52" width="34" height="34">'
-            '<div xmlns="http://www.w3.org/1999/xhtml" class="cr-volto" '
-            f"style=\"background-image:url('{escape(url)}')\"></div></foreignObject>"
+            f'<foreignObject x="-{RAGGIO - 2}" y="-{RAGGIO - 2}" width="{2 * RAGGIO - 4}" '
+            f'height="{2 * RAGGIO - 4}"><div xmlns="http://www.w3.org/1999/xhtml" class="cr-volto" '
+            f"style=\"background-color:{escape(colore)};background-image:url('{escape(url)}')\">"
+            "</div></foreignObject>"
         )
-    # alone bianco sotto il bordo del rischio: resta visibile anche su una maglia dello stesso colore
+        if g.numero is not None:
+            bollino = (
+                f'<g class="cr-bollino"><circle cx="19" cy="-19" r="10" fill="{colore}" '
+                'stroke="#FFFFFF" stroke-width="2"/>'
+                f'<text x="19" y="-14.5" text-anchor="middle" font-size="12.5" '
+                f'fill="{colore_numero(colore)}">{escape(str(g.numero))}</text></g>'
+            )
+    # alone bianco sotto il bordo del rischio: resta visibile anche su un fondo dello stesso colore
     alone = (
-        f'<path d="{MAGLIA}" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="9" '
-        'stroke-linejoin="round"/>' if livello in COLORI_RISCHIO else ""
+        f'<circle r="{RAGGIO}" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="9"/>'
+        if livello in COLORI_RISCHIO else ""
     )
-    return (
-        f'{alone}<path class="cr-maglia" d="{MAGLIA}" fill="{colore}" {bordo} stroke-linejoin="round"/>'
-        f"{numero}{volto}"
-    )
+    tondo = f'<circle class="cr-maglia" r="{RAGGIO}" fill="{colore}" {bordo}/>'
+    # con la foto il numero è nel bollino; la foto ha sotto il colore della squadra, così una
+    # foto scontornata non lascia vedere niente dietro (se non si carica resta il tondo pieno)
+    return f"{alone}{tondo}{numero}{volto}{bollino}"
 
 
 def _giocatore(g: GiocatoreCampo, x: float, y: float, colore: str, clip: str) -> str:
@@ -123,12 +148,22 @@ def _giocatore(g: GiocatoreCampo, x: float, y: float, colore: str, clip: str) ->
         f'<g class="cr-pl cr-pl-{g.id} cr-rischio--{livello_rischio(g.probabilita)}" '
         f'transform="translate({x:.0f},{y:.0f}) scale({SCALA_GIOCATORE})">'
         f"<title>{escape(_titolo(g))}</title>"
-        f"{_maglia(g, colore, clip)}"
-        f'<text class="cr-nome-pl" x="0" y="44" text-anchor="middle" font-size="21">'
-        f"{escape(_testo_corto(g.cognome))}</text></g>"
+        f"{_maglia(g, colore, clip)}{_etichetta(g.cognome)}</g>"
     )
     # solo i candidati hanno una scheda nella classifica a cui portare
     return f'<a href="#cand-{g.id}">{gruppo}</a>' if g.probabilita is not None else gruppo
+
+
+def _etichetta(cognome: str) -> str:
+    """Nome sotto il tondo in un'etichetta scura arrotondata, come nelle app di fantacalcio."""
+    testo = _testo_corto(cognome)
+    w = _larghezza_nome(testo)
+    return (
+        f'<rect class="cr-etichetta" x="{-w / 2:.1f}" y="30" width="{w:.1f}" height="22" rx="11" '
+        'fill="rgba(12,14,18,.86)" stroke="rgba(255,255,255,.18)" stroke-width="1"/>'
+        f'<text class="cr-nome-pl" x="0" y="46" text-anchor="middle" font-size="16">'
+        f"{escape(testo)}</text>"
+    )
 
 
 def _prato(verticale: bool) -> str:
@@ -207,7 +242,7 @@ def _gettone(g: GiocatoreCampo, colore: str, clip: str) -> str:
     return (
         f'<{tag} class="cr-panca-g cr-rischio--{livello_rischio(g.probabilita)}"{link} '
         f'title="{escape(_titolo(g))}">'
-        f'<svg viewBox="-32 -54 64 78" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+        f'<svg viewBox="-31 -31 62 62" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
         f"{_maglia(g, colore, clip)}</svg>"
         f"<span>{escape(numero + g.cognome)}</span></{tag}>"
     )

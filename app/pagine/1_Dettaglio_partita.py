@@ -71,7 +71,7 @@ candidati = componenti.applica_quote(det.candidati, quote)
 
 casa, trasf = dati.nomi_squadre.get(dati.casa_id, ""), dati.nomi_squadre.get(dati.trasferta_id, "")
 # desktop: titolo e contesto a sinistra, campo a destra (~45%); telefono: campo sotto il titolo
-sinistra, destra = st.columns([55, 45], gap="medium")
+sinistra, destra = st.columns([42, 58], gap="medium")
 with sinistra:
     st.header(f"{casa} – {trasf}")
     giornata = f" · Giornata {partita.giornata}" if partita.giornata else ""
