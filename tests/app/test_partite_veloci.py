@@ -96,5 +96,6 @@ def test_prossime_partite_poche_query(sessione):
     event.listen(sessione.get_bind(), "before_cursor_execute", lambda *a: conteggio.append(1))
     componenti.prossime_partite(sessione, ORA, giorni=7)
     # prima ~15 query per partita; ora un numero fisso che non cresce con le partite
-    # (13: c'è anche l'impostazione delle immagini ESPN, letta una volta per tutte)
-    assert len(conteggio) <= 13
+    # (13: c'è anche l'impostazione delle immagini ESPN, letta una volta per tutte;
+    # +9 per la media della partita e dell'arbitro sulle schede, sempre raggruppate)
+    assert len(conteggio) <= 22

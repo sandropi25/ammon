@@ -203,6 +203,11 @@ class RigaPartita:
     logo_casa: str | None = None
     logo_trasferta: str | None = None
     arbitro_id: int | None = None  # per il link alla scheda dell'arbitro (pagina Arbitri)
+    # solo per le partite da giocare: cartellini (gialli + rossi) attesi nella partita e
+    # cartellini a partita dell'arbitro designato con il numero di partite dirette
+    media_partita: float | None = None
+    media_arbitro: float | None = None
+    partite_arbitro: int = 0
 
 
 # ---------------------------------------------------------------- immagini ESPN
@@ -293,6 +298,8 @@ class Calore:
     attesi: float | None
     calda: bool
     motivi: tuple[str, ...]
+    arbitro_medi: float | None = None  # cartellini a partita dell'arbitro designato
+    arbitro_partite: int = 0
 
 
 def numero_it(valore: float) -> str:
@@ -346,7 +353,10 @@ def calore_partita(
         motivi.append(f"posta in classifica: {squadra} ({in_palio})")
 
     if not valori:
-        return Calore(attesi=None, calda=bool(derby), motivi=tuple(motivi))
+        return Calore(
+            attesi=None, calda=bool(derby), motivi=tuple(motivi),
+            arbitro_medi=arbitro_medi if arbitro_partite else None, arbitro_partite=arbitro_partite,
+        )
     attesi = (
         sum(valori) / len(valori)
         + (BONUS_DERBY if derby else 0.0)
@@ -356,7 +366,10 @@ def calore_partita(
     calda = bool(derby) or attesi >= SOGLIA_CARTELLINI_ATTESI
     if calda and not motivi:
         motivi.append("cartellini attesi elevati")
-    return Calore(attesi=attesi, calda=calda, motivi=tuple(motivi))
+    return Calore(
+        attesi=attesi, calda=calda, motivi=tuple(motivi),
+        arbitro_medi=arbitro_medi if arbitro_partite else None, arbitro_partite=arbitro_partite,
+    )
 
 
 def stato_aggiornamento(s: Session) -> tuple[str, bool]:
@@ -426,6 +439,11 @@ def righe_partite(s: Session, partite: list[Partita]) -> list[RigaPartita]:
     # per il badge servono solo liste manuali e arbitro: query raggruppate per tutte le partite
     calde = carica_dati_calda(s, da_giocare) if da_giocare else {}
     pesi = carica_pesi(s) if da_giocare else None
+    medie = {}
+    if da_giocare:
+        import componenti_calde  # import qui: componenti_calde importa questo modulo
+
+        medie = componenti_calde.calore_partite(s, da_giocare)
     arbitri_finite = {}
     ids_arbitri = {p.arbitro_id for p in finite if p.arbitro_id is not None}
     if ids_arbitri:
@@ -470,6 +488,9 @@ def righe_partite(s: Session, partite: list[Partita]) -> list[RigaPartita]:
             ),
             derby=bool(dc.rivalita),
             arbitro_severo=_arbitro_severo(dc.arbitro, dc.medie, dc.casa_id, dc.trasferta_id, pesi),
+            media_partita=medie[p.id].attesi if p.id in medie else None,
+            media_arbitro=medie[p.id].arbitro_medi if p.id in medie else None,
+            partite_arbitro=medie[p.id].arbitro_partite if p.id in medie else 0,
         ))
     return righe
 

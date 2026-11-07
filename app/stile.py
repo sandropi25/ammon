@@ -989,6 +989,15 @@ def scheda_partita(riga: componenti.RigaPartita) -> str:
             badges.append(badge("✅ Formazioni ufficiali", "verde"))
         else:
             badges.append(badge(f"📋 Formazioni {riga.formazioni}", "neutro"))
+        if riga.media_partita is not None:
+            badges.append(badge(
+                f"📊 Media partita {componenti.numero_it(riga.media_partita)} cartellini", "giallo"
+            ))
+        if riga.media_arbitro is not None and riga.partite_arbitro:
+            quante = "1 partita" if riga.partite_arbitro == 1 else f"{riga.partite_arbitro} partite"
+            badges.append(badge(
+                f"🧑‍⚖️ Media arbitro {componenti.numero_it(riga.media_arbitro)} ({quante})", "giallo"
+            ))
     calore = ""
     if riga.attesi is not None or riga.motivi:
         # pagina Partite calde: cartellini attesi e ragioni in chiaro

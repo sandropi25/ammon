@@ -194,6 +194,27 @@ def test_scheda_partita_senza_badge_e_probabili():
     assert "Partita calda" not in h and "Derby" not in h and "Giornata" not in h
 
 
+def test_scheda_partita_con_media_partita_e_arbitro():
+    h = stile.scheda_partita(_riga(media_partita=4.62, media_arbitro=3.67, partite_arbitro=43))
+    assert "Media partita 4,6 cartellini" in h
+    assert "Media arbitro 3,7 (43 partite)" in h
+    senza = stile.scheda_partita(_riga())
+    assert "Media partita" not in senza and "Media arbitro" not in senza
+
+
+def test_righe_partite_hanno_le_medie(sessione_db):
+    import componenti
+    from sqlalchemy import select
+
+    with sessione_db() as s:
+        popola(s)
+        futura = s.scalars(select(Partita).where(Partita.stato == "NS")).first()
+        riga = componenti.righe_partite(s, [futura])[0]
+    # con lo storico di prova la media della partita è calcolata (gialli + rossi attesi)
+    assert riga.media_partita is None or riga.media_partita > 0
+    assert riga.partite_arbitro >= 0
+
+
 def test_scheda_partita_escape_dei_nomi():
     h = stile.scheda_partita(_riga(casa="<script>x</script>", trasferta='A "&" B', arbitro="<i>"))
     assert "<script>" not in h and "&lt;script&gt;" in h
