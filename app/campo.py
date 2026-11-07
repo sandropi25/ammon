@@ -249,7 +249,7 @@ def _gettone(g: GiocatoreCampo, colore: str, clip: str) -> str:
 
 
 def _panca(squadra: SquadraCampo, colore: str, ufficiali: bool, suffisso: str) -> str:
-    titolo = "Panchina" if ufficiali else "Probabili subentranti"
+    titolo = "Panchina" if (ufficiali or squadra.ufficiale) else "Probabili subentranti"
     if squadra.panchina:
         gettoni = "".join(
             _gettone(g, colore, f"cr-tp-{suffisso}-{g.id}") for g in squadra.panchina
@@ -281,7 +281,13 @@ def legenda() -> str:
 def campo_html(dati: DatiCampo) -> str:
     """Il riquadro del campo (orizzontale e verticale: il CSS mostra quello giusto)."""
     colori = colori_squadre(dati.casa, dati.trasferta)
-    tipo = "Formazioni ufficiali" if dati.ufficiali else "Formazioni probabili (calcolate)"
+    if dati.ufficiali:
+        tipo = "Formazioni ufficiali"
+    elif dati.casa.ufficiale or dati.trasferta.ufficiale:
+        uff, prob = (dati.casa, dati.trasferta) if dati.casa.ufficiale else (dati.trasferta, dati.casa)
+        tipo = f"Ufficiale: {uff.nome} · probabile: {prob.nome}"
+    else:
+        tipo = "Formazioni probabili (calcolate)"
     orizzontale = (
         '<div class="cr-campo-o">'
         f'<div class="cr-campo-testa">{_testa(dati.casa)}{_testa(dati.trasferta, True)}</div>'

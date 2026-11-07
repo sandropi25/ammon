@@ -69,7 +69,8 @@ def test_pagina_dettaglio_un_solo_carica_dati_e_poche_query(sessione, monkeypatc
     assert len(pagina.dettaglio.candidati) == 6  # senza i due portieri
     assert set(pagina.extra) == {c.giocatore_id for c in pagina.dettaglio.candidati}
     # query fisse: non crescono col numero di candidati (prima ~5 per candidato)
-    assert len(conteggio) <= 40
+    # (+1: squadre con la formazione ufficiale già arrivata, per il campo)
+    assert len(conteggio) <= 41
     assert componenti.carica_pagina_dettaglio(sessione, 424242) is None
 
 

@@ -46,6 +46,7 @@ class SquadraCampo:
     modulo: str
     titolari: tuple[GiocatoreCampo, ...]
     panchina: tuple[GiocatoreCampo, ...]
+    ufficiale: bool = False  # formazione ufficiale arrivata per questa squadra
 
 
 @dataclass(frozen=True)
@@ -182,6 +183,17 @@ def carica_campo(
     probabili, i probabili subentranti), maglie, colori e stemmi. Poche query raggruppate.
     Le probabilità sono quelle del modello: il campo non ne calcola di nuove."""
     ufficiali = partita.stato_formazioni == "ufficiali"
+    # una squadra può avere l'ufficiale prima dell'altra (ESPN le pubblica separatamente):
+    # ognuna usa la sua appena arriva
+    squadre_ufficiali = {
+        int(sq) for sq in s.scalars(
+            select(Formazione.squadra_id).where(
+                Formazione.partita_id == partita.id, Formazione.tipo == "ufficiale"
+            ).distinct()
+        )
+    }
+    if ufficiali:
+        squadre_ufficiali |= {partita.casa_id, partita.trasferta_id}
     immagini = componenti.immagini_attive(s)
     squadre = {
         q.id: q for q in s.scalars(
@@ -191,16 +203,19 @@ def carica_campo(
     prob = {c.giocatore_id: c.probabilita for c in [*candidati, *subentranti]}
     avversari = {c.giocatore_id: c.avversario_diretto_id for c in candidati}
     in_campo = {t.giocatore_id for t in titolari}
-    if ufficiali:
-        panchina = [r for r in _panchina_ufficiale(s, partita.id) if r[1] not in in_campo]
-    else:
+    panchina = []
+    if squadre_ufficiali:
         panchina = [
-            (c.squadra_id, c.giocatore_id, c.nome)
-            for c in sorted(subentranti, key=lambda c: -c.probabilita)
-            if c.giocatore_id not in in_campo
+            r for r in _panchina_ufficiale(s, partita.id)
+            if r[0] in squadre_ufficiali and r[1] not in in_campo
         ]
+    panchina += [
+        (c.squadra_id, c.giocatore_id, c.nome)
+        for c in sorted(subentranti, key=lambda c: -c.probabilita)
+        if c.squadra_id not in squadre_ufficiali and c.giocatore_id not in in_campo
+    ]
     tutti = in_campo | {gid for _, gid, _ in panchina}
-    maglie = _maglie(s, partita, tutti, ufficiali)
+    maglie = _maglie(s, partita, tutti, bool(squadre_ufficiali))
     volti = componenti.url_volti(s, tutti) if immagini else {}  # una query per tutti
 
     def giocatore(gid: int, nome: str, riga: int, colonna: int, in_riga: int) -> GiocatoreCampo:
@@ -230,6 +245,7 @@ def carica_campo(
                 giocatore(gid, nome, 0, n, 0)
                 for n, (sq, gid, nome) in enumerate((r for r in panchina if r[0] == squadra_id), 1)
             ),
+            ufficiale=squadra_id in squadre_ufficiali,
         )
 
     return DatiCampo(

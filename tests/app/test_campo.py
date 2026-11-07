@@ -117,6 +117,29 @@ def test_campo_con_le_probabili_mostra_i_probabili_subentranti(sessione_db):
     assert panca[15].probabilita is not None
 
 
+def test_ufficiale_di_una_sola_squadra(sessione_db):
+    """ESPN pubblica le due formazioni separatamente: chi ha l'ufficiale la usa (con la
+    panchina in distinta), l'altra resta con i probabili subentranti."""
+    from sqlalchemy import delete
+
+    with sessione_db() as s:
+        _prepara(s)
+        s.execute(delete(Formazione).where(
+            Formazione.partita_id == PARTITA_FUTURA, Formazione.squadra_id == TRASF,
+            Formazione.tipo.in_(("ufficiale", "panchina")),
+        ))
+        s.get(Partita, PARTITA_FUTURA).stato_formazioni = "probabili"
+        s.flush()
+        dati = _campo(s)
+    assert not dati.ufficiali
+    assert dati.casa.ufficiale and not dati.trasferta.ufficiale
+    assert {g.id for g in dati.casa.panchina} == {15, 16, 17}  # distinta ufficiale
+    assert {g.id for g in dati.casa.titolari if g.numero == 2} == {12}  # maglia dell'ufficiale
+    html = campo.campo_html(dati)
+    assert "Ufficiale: Casa FC · probabile:" in html
+    assert "Panchina · Casa FC" in html and "Probabili subentranti ·" in html
+
+
 def test_immagini_spente_niente_volti_ne_stemmi(sessione_db):
     with sessione_db() as s:
         _prepara(s)
