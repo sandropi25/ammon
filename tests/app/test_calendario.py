@@ -268,7 +268,8 @@ def test_partite_divise_per_giorno_come_nella_pagina_partite(sessione_db):
         s.add(Partita(id=301, data_utc=PARTITA_DATA_DOPO, competizione_id=135, stagione=2026,
                       giornata=7, casa_id=TRASF, trasferta_id=CASA, stato="NS"))
     at = avvia(PAGINA_CALENDARIO)
-    titoli = [h.value for h in at.subheader]
+    # il titolo puo' iniziare con "Oggi · " o "Domani · " secondo la data in cui gira il test
+    titoli = [h.value.split(" · ")[-1] for h in at.subheader]
     assert titoli == ["domenica 8 novembre 2026", "lunedì 9 novembre 2026"]
     assert len(_schede(at)) == 2
 

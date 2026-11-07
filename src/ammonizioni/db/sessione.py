@@ -60,18 +60,40 @@ COLONNE_AGGIUNTE: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def colonne_mancanti(presenti: dict[str, set[str]]) -> list[tuple[str, str, str]]:
+    """Le colonne di COLONNE_AGGIUNTE che non ci sono ancora (presenti: tabella -> colonne)."""
+    return [(t, c, tipo) for t, c, tipo in COLONNE_AGGIUNTE if c not in presenti.get(t, set())]
+
+
 def _aggiungi_colonne_mancanti(engine: Engine) -> None:
+    """Aggiunge solo le colonne che mancano davvero. Su Postgres anche `ADD COLUMN IF NOT
+    EXISTS` prende un lock esclusivo sulla tabella: farlo a ogni apertura bloccava il sito, i
+    job e gli script che lavoravano insieme (deadlock visto il 2026-11-07). Ora si legge prima
+    lo schema e, se non manca niente, non si tocca nessuna tabella."""
     dialetto = engine.dialect.name
+    tabelle = sorted({t for t, _, _ in COLONNE_AGGIUNTE})
     with engine.begin() as conn:
-        for tabella, colonna, tipo in COLONNE_AGGIUNTE:
-            if dialetto == "postgresql":
+        if dialetto == "postgresql":
+            righe = conn.execute(
+                text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() AND table_name = ANY(:tabelle)"
+                ),
+                {"tabelle": tabelle},
+            )
+            presenti: dict[str, set[str]] = {}
+            for tabella, colonna in righe:
+                presenti.setdefault(tabella, set()).add(colonna)
+            for tabella, colonna, tipo in colonne_mancanti(presenti):
                 conn.execute(
                     text(f"ALTER TABLE {tabella} ADD COLUMN IF NOT EXISTS {colonna} {tipo}")
                 )
-            elif dialetto == "sqlite":
-                presenti = {r[1] for r in conn.execute(text(f"PRAGMA table_info({tabella})"))}
-                if colonna not in presenti:
-                    conn.execute(text(f"ALTER TABLE {tabella} ADD COLUMN {colonna} {tipo}"))
+        elif dialetto == "sqlite":
+            presenti = {
+                t: {r[1] for r in conn.execute(text(f"PRAGMA table_info({t})"))} for t in tabelle
+            }
+            for tabella, colonna, tipo in colonne_mancanti(presenti):
+                conn.execute(text(f"ALTER TABLE {tabella} ADD COLUMN {colonna} {tipo}"))
 
 
 def crea_tabelle(engine: Engine) -> None:
