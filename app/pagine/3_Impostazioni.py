@@ -21,6 +21,7 @@ import stile  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.db import repo  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
+from ammonizioni.motore import modello  # noqa: E402
 from ammonizioni.motore.pesi import Pesi, carica_pesi, salva_pesi  # noqa: E402
 
 st.set_page_config(page_title=f"Impostazioni · {stile.NOME_APP}", layout="wide")
@@ -36,6 +37,8 @@ if auth.password_configurata():
 
 with apri() as s:
     pesi = carica_pesi(s)
+    modello_attivo = modello.modello_scelto(s)
+    coefficienti_v2 = modello.carica_coefficienti(s)
     chiave_salvata = repo.leggi_impostazione(s, "chiave_api", None)
     chiave_football_data = repo.leggi_impostazione(s, "chiave_football_data", None)
     immagini = componenti.immagini_attive(s)
@@ -70,8 +73,24 @@ with schede[0], st.container(key="riquadro_impostazioni_0"):
 
 # ---------------------------------------------------------------- pesi
 
+def _salva_modello() -> None:
+    with apri() as s:
+        modello.salva_modello(s, st.session_state["modello_scelto"])
+    cache_dati.svuota()  # Dettaglio, Home e Cerca si ricalcolano col modello nuovo
+
+
 with schede[1], st.container(key="riquadro_impostazioni_1"):
+    st.header("Modello")
+    st.radio(
+        "Modello", modello.MODELLI, index=modello.MODELLI.index(modello_attivo),
+        horizontal=True, key="modello_scelto", on_change=_salva_modello,
+        help="V1 resta il predefinito finché la prova sulle stagioni passate non giustifica V2.",
+    )
+    for nome in modello.MODELLI:
+        st.caption(escape(modello.SPIEGAZIONE[nome]))
+    st.caption(escape(modello.descrizione_coefficienti(coefficienti_v2)))
     st.header("Pesi del modello")
+    st.caption("I pesi qui sotto valgono per V1 (V2 usa anche le soglie di diffida).")
     scalari, nomi_tuple = cg.campi_pesi()
     with st.form("form_pesi"):
         valori_scalari: dict[str, float] = {}

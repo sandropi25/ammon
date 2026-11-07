@@ -2,6 +2,8 @@
 
 Uso: python scripts/prova_stagione.py --stagione 2025 [--k 3] [--campionato 135|140]
      [--solo-titolari]  (senza i probabili subentranti, per confrontare con prima)
+     [--modello V1|V2]  (V2: coefficienti salvati; per la prova fuori campione con Brier,
+                         log-loss e decili usa scripts/prova_v2.py)
 Richiede lo storico gia' caricato nel database.
 """
 import argparse
@@ -49,6 +51,10 @@ def main(argv: list[str] | None = None) -> int:
         "--solo-titolari", action="store_true",
         help="come prima dei subentranti: i primi k scelti solo fra i titolari",
     )
+    parser.add_argument(
+        "--modello", choices=("V1", "V2"), default="V1",
+        help="V1 (predefinito) o V2 con i coefficienti salvati (scripts/calibra_v2.py --salva)",
+    )
     args = parser.parse_args(argv)
     if args.campionato not in CAMPIONATI:
         ammessi = " o ".join(str(c) for c in CAMPIONATI)
@@ -66,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     with apri() as s:
         r = prova_stagione(
             s, args.stagione, args.k, avanzamento=avanzamento, competizione_id=args.campionato,
-            solo_titolari=args.solo_titolari,
+            solo_titolari=args.solo_titolari, modello=args.modello,
         )
         c = copertura(s, args.stagione, args.campionato)
 

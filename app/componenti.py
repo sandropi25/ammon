@@ -31,8 +31,8 @@ from ammonizioni.db.modelli import (
     Squadra,
     UltimoAggiornamento,
 )
-from ammonizioni.motore import affidabilita
-from ammonizioni.motore.classifica import classifica, classifica_subentranti, converti_quota
+from ammonizioni.motore import affidabilita, modello
+from ammonizioni.motore.classifica import converti_quota
 from ammonizioni.motore.dati import carica_dati, carica_dati_calda
 from ammonizioni.motore.fattori.arbitro import fattore_arbitro
 from ammonizioni.motore.pesi import carica_pesi
@@ -635,9 +635,12 @@ def carica_dettaglio(s: Session, partita_id: int, quote: dict[int, float]) -> De
     if partita is None:
         return None
     dati = carica_dati(s, partita_id, con_panchina=True)
-    # una sola lettura dei dati: le classifiche lavorano sullo snapshot gia' caricato
+    # una sola lettura dei dati: le classifiche lavorano sullo snapshot gia' caricato;
+    # il modello (V1 o V2) è quello scelto in Impostazioni
     pesi = carica_pesi(s)
-    candidati = classifica(dati, pesi, quote or None)
+    scelto = modello.modello_scelto(s)
+    coeff = modello.carica_coefficienti(s) if scelto == modello.V2 else None
+    candidati, subentranti = modello.candidati(dati, pesi, quote or None, scelto, coeff)
     return Dettaglio(
         partita=InfoPartita(
             partita.id, partita.data_utc, partita.giornata, partita.stato_formazioni,
@@ -647,7 +650,7 @@ def carica_dettaglio(s: Session, partita_id: int, quote: dict[int, float]) -> De
         candidati=candidati,
         tipster=tipster_per_giocatore(s, partita_id),
         nomi_giocatori={t.giocatore_id: t.nome for t in dati.titolari},
-        subentranti=classifica_subentranti(dati, pesi, quote or None),
+        subentranti=subentranti,
     )
 
 

@@ -190,6 +190,35 @@ def test_dettaglio_non_si_blocca_con_pesi_non_validi_nel_db(sessione_db):
     assert len(at.dataframe[0].value) > 0
 
 
+def test_scelta_del_modello_v1_predefinito_e_v2_salvato(sessione_db):
+    from ammonizioni.motore import modello
+
+    with sessione_db() as s:
+        _prepara(s)
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert not at.exception
+    assert at.radio(key="modello_scelto").value == "V1"
+    t = visibile(at)
+    assert "Coefficienti V2 stimati il 07/11/2026 su 1516 partite" in t
+    at.radio(key="modello_scelto").set_value("V2").run()
+    assert not at.exception
+    with sessione_db() as s:
+        assert modello.modello_scelto(s) == "V2"
+    at = avvia(PAGINA_IMPOSTAZIONI)
+    assert at.radio(key="modello_scelto").value == "V2"
+
+
+def test_dettaglio_con_v2_mostra_i_candidati(sessione_db):
+    from ammonizioni.motore import modello
+
+    with sessione_db() as s:
+        _prepara(s)
+        modello.salva_modello(s, "V2")
+    at = avvia(PAGINA_DETTAGLIO, partita=PARTITA_FUTURA)
+    assert not at.exception
+    assert len(at.dataframe[0].value) > 0
+
+
 def test_tuple_con_virgola_decimale_e_punto_e_virgola():
     assert componenti_giocate.tupla_da_testo("0,5; 0,3; 0,2", float, 3) == (0.5, 0.3, 0.2)
     assert componenti_giocate.tupla_da_testo("4, 9, 13", int) == (4, 9, 13)

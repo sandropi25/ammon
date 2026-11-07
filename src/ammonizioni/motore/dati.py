@@ -31,6 +31,7 @@ from ammonizioni.motore.tipi import (
     MedieRuolo,
     RigaPresenza,
     StatArbitro,
+    StatSquadra,
     Titolare,
 )
 
@@ -376,6 +377,63 @@ def _contesto(
     )
 
 
+PESO_STAGIONE_PRECEDENTE = 0.5
+
+
+def _stat_squadre(
+    s: Session, partita: Partita, prima_di: datetime, campionato_id: int
+) -> dict[int, StatSquadra]:
+    """Gialli fatti e provocati delle due squadre nel campionato (stagione in corso e
+    precedente, a metà peso), solo partite con statistiche prima di `prima_di`. Ogni giallo
+    conta, anche dalla panchina. Due query (prima le partite, poi i gialli di quelle per
+    chiave primaria: molto più veloce di un join filtrato sulle squadre); squadra senza
+    partite: assente."""
+    squadre = (partita.casa_id, partita.trasferta_id)
+    partite = s.execute(
+        select(Partita.id, Partita.casa_id, Partita.trasferta_id, Partita.stagione).where(
+            Partita.competizione_id == campionato_id,
+            Partita.statistiche_scaricate.is_(True),
+            Partita.data_utc < prima_di,
+            Partita.id != partita.id,
+            Partita.stagione.in_((partita.stagione, partita.stagione - 1)),
+            or_(Partita.casa_id.in_(squadre), Partita.trasferta_id.in_(squadre)),
+        )
+    ).all()
+    per_partita: dict[int, tuple[int, int, float, dict[int, int]]] = {
+        int(pid): (
+            int(casa), int(trasf),
+            1.0 if stagione == partita.stagione else PESO_STAGIONE_PRECEDENTE, {},
+        )
+        for pid, casa, trasf, stagione in partite
+    }
+    if not per_partita:
+        return {}
+    righe = s.execute(
+        select(Presenza.partita_id, Presenza.squadra_id, func.sum(Presenza.gialli))
+        .where(Presenza.partita_id.in_(list(per_partita)))
+        .group_by(Presenza.partita_id, Presenza.squadra_id)
+    ).all()
+    con_presenze: set[int] = set()
+    for pid, sq, gialli in righe:
+        con_presenze.add(int(pid))
+        per_partita[int(pid)][3][int(sq)] = int(gialli or 0)  # Postgres: SUM come Decimal
+    # solo le partite con presenze (come le medie del campionato)
+    per_partita = {pid: v for pid, v in per_partita.items() if pid in con_presenze}
+    risultato: dict[int, StatSquadra] = {}
+    for squadra in squadre:
+        n = fatti = provocati = 0.0
+        for casa, trasf, peso, gialli in per_partita.values():
+            if squadra not in (casa, trasf):
+                continue
+            altra = trasf if squadra == casa else casa
+            n += peso
+            fatti += peso * gialli.get(squadra, 0)
+            provocati += peso * gialli.get(altra, 0)
+        if n > 0:
+            risultato[squadra] = StatSquadra(n, fatti, provocati)
+    return risultato
+
+
 PARTITE_MINIME_PUNTI = 3
 
 
@@ -636,4 +694,5 @@ def carica_dati(
         tendenza_cambi=tendenze,
         prob_vittoria=prob_vittoria,
         formazioni_ufficiali=partita.stato_formazioni == "ufficiali",
+        stat_squadre=_stat_squadre(s, partita, prima_di, campionato_id),
     )
