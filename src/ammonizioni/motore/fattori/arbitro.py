@@ -3,6 +3,26 @@ from ammonizioni.motore.tipi import Fattore, MedieCampionato, StatArbitro, decim
 
 SOGLIA_MOTIVAZIONE = 1.05
 SOGLIA_PARTITE_CON_SQUADRA = 2
+# Restringimento di "arbitro con questa squadra": il rapporto (gialli con la squadra /
+# gialli medi dell'arbitro) conta per n / (n + PRIOR) e per il resto vale 1. Prima contava
+# pieno già con 2 partite (2 partite da 7 gialli = +30%); ora con 2 partite conta per 2/10,
+# con 8 per metà, con 24 per tre quarti.
+PRIOR_PARTITE_CON_SQUADRA = 8
+
+
+def inclinazione_con_squadra(arbitro: StatArbitro | None, squadra_id: int) -> float:
+    """Moltiplicatore "arbitro con questa squadra" ristretto verso 1 (1 = nessun effetto):
+    almeno 2 partite con la squadra, poi peso n / (n + PRIOR_PARTITE_CON_SQUADRA)."""
+    if arbitro is None or arbitro.gialli_medi <= 0:
+        return 1.0
+    con = arbitro.gialli_medi_con.get(squadra_id)
+    if con is None:
+        return 1.0
+    gialli_con, n_con = con
+    if n_con < SOGLIA_PARTITE_CON_SQUADRA:
+        return 1.0
+    peso = n_con / (n_con + PRIOR_PARTITE_CON_SQUADRA)
+    return 1 + (gialli_con / arbitro.gialli_medi - 1) * peso
 
 
 def fattore_arbitro(
@@ -20,13 +40,7 @@ def fattore_arbitro(
         + pesi.coeff_gialli_arbitro * (arbitro.gialli_medi / medie.gialli_partita - 1)
         + pesi.coeff_falli_arbitro * (arbitro.falli_medi / medie.falli_partita - 1)
     )
-    con = arbitro.gialli_medi_con.get(squadra_id)
-    if con is not None and arbitro.gialli_medi > 0:
-        gialli_con, n_con = con
-        if n_con >= SOGLIA_PARTITE_CON_SQUADRA:
-            grezzo *= attenua(
-                gialli_con / arbitro.gialli_medi, n_con, SOGLIA_PARTITE_CON_SQUADRA, pesi
-            )
+    grezzo *= inclinazione_con_squadra(arbitro, squadra_id)
     valore = limita(attenua(grezzo, arbitro.partite, pesi.soglia_partite_arbitro, pesi), pesi)
 
     motivazione = None

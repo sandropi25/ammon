@@ -1,6 +1,7 @@
+import pytest
 from costruttori import medie_standard
 
-from ammonizioni.motore.fattori.arbitro import fattore_arbitro
+from ammonizioni.motore.fattori.arbitro import fattore_arbitro, inclinazione_con_squadra
 from ammonizioni.motore.pesi import Pesi
 from ammonizioni.motore.tipi import StatArbitro
 
@@ -48,6 +49,21 @@ def test_arbitro_storia_con_la_squadra_alza_con_almeno_2_partite():
     assert con.valore > base.valore
     una = fattore_arbitro(_arbitro(con={1: (7.0, 1)}), 1, medie_standard(), Pesi())
     assert una.valore == base.valore
+
+
+def test_arbitro_con_la_squadra_ristretto_verso_1():
+    # 7 gialli con la squadra contro 5,4 di media: rapporto 1,296
+    due = inclinazione_con_squadra(_arbitro(con={1: (7.0, 2)}), 1)
+    otto = inclinazione_con_squadra(_arbitro(con={1: (7.0, 8)}), 1)
+    assert due == pytest.approx(1 + (7.0 / 5.4 - 1) * 2 / 10)
+    assert otto == pytest.approx(1 + (7.0 / 5.4 - 1) * 0.5)
+    assert 1 < due < otto < 7.0 / 5.4
+    assert inclinazione_con_squadra(_arbitro(con={1: (7.0, 1)}), 1) == 1.0
+    assert inclinazione_con_squadra(_arbitro(), 1) == 1.0
+    assert inclinazione_con_squadra(None, 1) == 1.0
+    # anche verso il basso: con la squadra ammonisce meno, ma non a pieno
+    meno = inclinazione_con_squadra(_arbitro(con={1: (3.0, 4)}), 1)
+    assert 3.0 / 5.4 < meno < 1
 
 
 def test_arbitro_valore_limitato():
