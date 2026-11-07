@@ -48,6 +48,34 @@ def salva_coefficienti(s: Session, coeff: v2.CoefficientiV2) -> None:
     scrivi_impostazione(s, CHIAVE_COEFFICIENTI, coeff.come_json())
 
 
+SPIEGAZIONE = {
+    V1: "V1: probabilità di base del giocatore moltiplicata per i fattori (arbitro, duello, "
+        "contesto, storia, situazione).",
+    V2: "V2: gialli attesi della partita (arbitro, squadre, derby, classifica) divisi fra i "
+        "giocatori della distinta secondo la propensione di ciascuno; la somma delle "
+        "probabilità torna con i gialli attesi.",
+}
+
+
+def descrizione_coefficienti(coeff: v2.CoefficientiV2) -> str:
+    """Da dove vengono i coefficienti di V2, in chiaro."""
+    campione = coeff.campione or {}
+    nomi = {135: "Serie A", 140: "Liga"}
+    campionati = ", ".join(nomi.get(c, str(c)) for c in campione.get("campionati", []))
+    stagioni = ", ".join(str(x) for x in campione.get("stagioni", []))
+    quando = coeff.stimati_il or "data sconosciuta"
+    if quando[:4].isdigit() and len(quando) == 10:
+        quando = f"{quando[8:10]}/{quando[5:7]}/{quando[:4]}"
+    dettagli = " · ".join(t for t in (campionati, stagioni) if t)
+    partite = campione.get("partite")
+    testo = f"Coefficienti V2 stimati il {quando}"
+    if partite:
+        testo += f" su {partite} partite"
+    if dettagli:
+        testo += f" ({dettagli})"
+    return testo
+
+
 def _con_probabilita(c: Candidato, p: float, lam: float, quota: float) -> Candidato:
     valore = p - c.prob_implicita if c.prob_implicita is not None else None
     fattori = [*c.fattori, Fattore("partita", lam, None, 0), Fattore("quota", quota, None, 0)]

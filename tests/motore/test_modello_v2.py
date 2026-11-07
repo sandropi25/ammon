@@ -64,9 +64,24 @@ def test_panchinaro_che_non_entra_quasi_mai_conta_poco(sessione):
     assert minuti[17] >= v2.MINUTI_PANCHINA  # può comunque prendere un giallo in panchina
 
 
+def test_platt_e_formula_semplice():
+    mu = np.array([0.05, 0.2, 0.5])
+    assert v2.probabilita_da_attese(mu, {}) == pytest.approx(1 - np.exp(-mu))
+    platt = v2.probabilita_da_attese(mu, {"a": 0.3, "b": 1.0})
+    assert platt == pytest.approx(1 / (1 + np.exp(-(0.3 + np.log(mu)))))
+    assert list(platt) == sorted(platt)  # monotona: non cambia la classifica
+    assert v2.probabilita_da_attese(np.array([50.0]), {})[0] == v2.PROBABILITA_MASSIMA
+
+
 def test_coefficienti_json_andata_e_ritorno():
-    c = v2.CoefficientiV2({"intercetta": 0.2}, {"tasso": 0.9}, "2026-11-07", {"partite": 10})
+    c = v2.CoefficientiV2({"intercetta": 0.2}, {"tasso": 0.9}, "2026-11-07", {"partite": 10},
+                          {"a": 0.3, "b": 1.05})
     assert v2.CoefficientiV2.da_json(c.come_json()) == c
+    assert c.senza_calibrazione().calibrazione == {}
+    assert v2.CoefficientiV2.da_json({**c.come_json(), "calibrazione": {"a": 1.0}}) is None
+    # salvati prima della calibrazione: validi, senza Platt
+    vecchi = {k: v for k, v in c.come_json().items() if k != "calibrazione"}
+    assert v2.CoefficientiV2.da_json(vecchi).calibrazione == {}
     assert v2.CoefficientiV2.da_json({"partita": {"intercetta": "x"}, "giocatore": {}}) is None
     assert v2.CoefficientiV2.da_json({"partita": {"intercetta": float("nan")},
                                       "giocatore": {}}) is None
@@ -110,6 +125,19 @@ def test_v2_con_quote_ricalcola_il_valore(sessione):
     t2, _ = modello.candidati(dati, Pesi(), {12: 4.0}, modello="V2", coeff=COEFF)
     c = next(c for c in t2 if c.giocatore_id == 12)
     assert c.valore == pytest.approx(c.probabilita - 0.25)
+
+
+def test_mercato_usa_il_modello_scelto(sessione):
+    from ammonizioni.motore.mercati import MercatoAmmonizioni
+
+    dati = _dati(sessione)
+    v1 = MercatoAmmonizioni().classifica(sessione, PARTITA_FUTURA)
+    modello.salva_modello(sessione, "V2")
+    con_v2 = MercatoAmmonizioni().classifica(sessione, PARTITA_FUTURA)
+    prev = v2.previsione(dati, Pesi(), v2.COEFFICIENTI_PREDEFINITI)
+    assert {c.giocatore_id for c in con_v2} == {c.giocatore_id for c in v1}
+    for c in con_v2:
+        assert c.probabilita == pytest.approx(prev.probabilita[c.giocatore_id])
 
 
 def test_squadre_entrano_nelle_caratteristiche(sessione):

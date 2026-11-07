@@ -75,6 +75,8 @@ def test_stima_e_valuta(sessione):
     assert coeff.campione["gialli"] == sum(p.gialli_totali for p in partite)
     assert set(coeff.partita) == set(v2.NOMI_PARTITA)
     assert set(coeff.giocatore) == set(v2.NOMI_GIOCATORE)
+    assert set(coeff.calibrazione) == {"a", "b"}
+    assert bv2.stima(partite, platt=False).calibrazione == {}
     # il 24 prende sempre giallo: con i pesi stimati è il più probabile
     lam, prob = bv2.probabilita_v2(partite[-1], coeff)
     assert max(prob, key=prob.get) == 24
@@ -83,6 +85,10 @@ def test_stima_e_valuta(sessione):
     assert val.v2.successi == 12
     assert 0 <= val.v2.brier <= 1 and val.v2.log_loss > 0
     assert len(val.v2.decili) == 10
+    assert val.v2_grezzo.successi == val.v2.successi  # Platt non cambia la classifica
+    testo = bv2.testo_valutazione(val, "Prova")
+    assert "V2 senza Platt" in testo and "Scelta semplice" in testo
+    assert "Platt" in bv2.testo_coefficienti(coeff)
     assert val.lambda_somme.reali_medi == pytest.approx(
         np.mean([p.gialli_totali for p in partite])
     )

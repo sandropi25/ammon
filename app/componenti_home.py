@@ -16,6 +16,7 @@ import componenti
 import componenti_giocate
 from ammonizioni.config import NOMI_CAMPIONATI, STAGIONE_CORRENTE
 from ammonizioni.db.modelli import Giocata, Giocatore, Partita, Presenza, Squadra
+from ammonizioni.motore import modello
 from ammonizioni.motore.classifica import classifica
 from ammonizioni.motore.dati import carica_dati
 from ammonizioni.motore.pesi import carica_pesi
@@ -305,13 +306,19 @@ def piu_a_rischio(s: Session, partite_ids: list[int]) -> PiuARischio | None:
     """Il candidato con la probabilità di ammonizione più alta tra le partite date (le
     prime `PARTITE_RISCHIO`), con lo stesso modello della pagina Dettaglio."""
     pesi = carica_pesi(s)
+    scelto = modello.modello_scelto(s)
+    coeff = modello.carica_coefficienti(s) if scelto == modello.V2 else None
     migliore: PiuARischio | None = None
     for pid in partite_ids[:PARTITE_RISCHIO]:
         try:
-            dati = carica_dati(s, pid)
+            # V2 divide i cartellini attesi su tutta la distinta: serve anche la panchina
+            dati = carica_dati(s, pid, con_panchina=scelto == modello.V2)
         except (LookupError, ValueError):
             continue
-        candidati = classifica(dati, pesi, None)
+        if scelto == modello.V2:
+            candidati = modello.applica_v2(dati, pesi, coeff, classifica(dati, pesi, None), [])[0]
+        else:
+            candidati = classifica(dati, pesi, None)
         if not candidati:
             continue
         c = max(candidati, key=lambda c: (c.probabilita, -c.giocatore_id))

@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session
 from ammonizioni.caricamento.formazioni import titolare_da
 from ammonizioni.config import COMPETIZIONI, STATI_FINITI
 from ammonizioni.db.modelli import Giocatore, Partita, Presenza
-from ammonizioni.motore.classifica import classifica, classifica_subentranti
+from ammonizioni.motore import modello as mod
 from ammonizioni.motore.dati import carica_dati
 from ammonizioni.motore.pesi import carica_pesi
 from ammonizioni.motore.tipi import Titolare
+from ammonizioni.motore.v2 import CoefficientiV2
 
 SERIE_A = COMPETIZIONI["serie_a"]
 TITOLARI_MINIMI = 2
@@ -148,15 +149,19 @@ def prova_stagione(
     avanzamento: Callable[[int, int], None] | None = None,
     competizione_id: int = SERIE_A,
     solo_titolari: bool = False,
+    modello: str = mod.V1,
+    coeff: CoefficientiV2 | None = None,
 ) -> RisultatoProva:
     """Con i subentranti (predefinito) i primi k si scelgono fra titolari e probabili
     subentranti (la panchina reale in distinta) per probabilità; `solo_titolari` rifà la
-    prova di prima, per confronto."""
+    prova di prima, per confronto. `modello` V2 usa `coeff` (o quelli salvati)."""
     partite = s.execute(
         _partite_prova(stagione, competizione_id).order_by(Partita.data_utc, Partita.id)
     ).scalars().all()
 
     pesi = carica_pesi(s)
+    if modello == mod.V2 and coeff is None:
+        coeff = mod.carica_coefficienti(s)
     valutate = successi_modello = successi_base = 0
     successi_subentranti = partite_con_subentranti = 0
     for fatte, partita in enumerate(partite, start=1):
@@ -167,12 +172,10 @@ def prova_stagione(
                 s, partita.id, prima_di=partita.data_utc, titolari=titolari,
                 panchina=[] if solo_titolari else panchina,
             )
-            candidati = classifica(dati, pesi)
+            candidati, sub = mod.candidati(dati, pesi, None, modello, coeff)
             if not solo_titolari:
                 # stabile: a pari probabilità il titolare resta davanti
-                candidati = sorted(
-                    candidati + classifica_subentranti(dati, pesi), key=lambda c: -c.probabilita
-                )
+                candidati = sorted(candidati + sub, key=lambda c: -c.probabilita)
             primi = candidati[:k]
             if any(c.subentrante for c in primi):
                 partite_con_subentranti += 1

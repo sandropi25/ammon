@@ -8,13 +8,15 @@
    subentrante) e quota share_i = π_i·minuti_i / Σ_j π_j·minuti_j su tutta la distinta
    (titolari e panchina pesata con la probabilità di entrare).
 3. P(giallo_i) = 1 − e^(−λ·share_i): la somma delle attese della partita torna con λ.
+   Con i coefficienti stimati si applica anche la ricalibrazione di Platt (vedi
+   `CoefficientiV2.calibrazione`), stimata con una regressione logistica su log(λ·share).
 
 Tutto si calcola dallo snapshot `DatiPartita` (dati prima del calcio d'inizio): stesse
 caratteristiche nell'app, nella stima dei pesi e nella prova storica."""
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -56,6 +58,10 @@ class CoefficientiV2:
     giocatore: dict[str, float]
     stimati_il: str = ""
     campione: dict = field(default_factory=dict)  # partite, presenze, stagioni, campionati
+    # ricalibrazione di Platt {"a", "b"}: P = 1 / (1 + e^-(a + b·log μ)), μ = λ·share.
+    # Vuota: P = 1 − e^(−μ). Serve perché nei dati un giocatore ha al massimo un giallo (il
+    # secondo è rosso): la frequenza osservata segue μ più di 1 − e^(−μ).
+    calibrazione: dict[str, float] = field(default_factory=dict)
 
     def vettore_partita(self) -> np.ndarray:
         return np.array([float(self.partita.get(n, 0.0)) for n in NOMI_PARTITA])
@@ -63,10 +69,14 @@ class CoefficientiV2:
     def vettore_giocatore(self) -> np.ndarray:
         return np.array([float(self.giocatore.get(n, 0.0)) for n in NOMI_GIOCATORE])
 
+    def senza_calibrazione(self) -> "CoefficientiV2":
+        return replace(self, calibrazione={})
+
     def come_json(self) -> dict:
         return {
             "partita": dict(self.partita), "giocatore": dict(self.giocatore),
             "stimati_il": self.stimati_il, "campione": dict(self.campione),
+            "calibrazione": dict(self.calibrazione),
         }
 
     @staticmethod
@@ -77,13 +87,19 @@ class CoefficientiV2:
         try:
             partita = {str(k): float(v) for k, v in dict(valore["partita"]).items()}
             giocatore = {str(k): float(v) for k, v in dict(valore["giocatore"]).items()}
+            calibrazione = {
+                str(k): float(v) for k, v in dict(valore.get("calibrazione") or {}).items()
+            }
         except (KeyError, TypeError, ValueError):
             return None
-        if not all(map(math.isfinite, [*partita.values(), *giocatore.values()])):
+        tutti = [*partita.values(), *giocatore.values(), *calibrazione.values()]
+        if not all(map(math.isfinite, tutti)):
+            return None
+        if calibrazione and set(calibrazione) != {"a", "b"}:
             return None
         return CoefficientiV2(
             partita, giocatore, str(valore.get("stimati_il", "")),
-            dict(valore.get("campione") or {}),
+            dict(valore.get("campione") or {}), calibrazione,
         )
 
 
@@ -268,6 +284,20 @@ def caratteristiche_giocatori(dati: DatiPartita, pesi: Pesi) -> Giocatori:
     return Giocatori(ids, squadre, titolare, Z, np.log(np.maximum(np.array(minuti), 0.5) / 90))
 
 
+PROBABILITA_MASSIMA = 0.95
+
+
+def probabilita_da_attese(mu: np.ndarray, calibrazione: dict[str, float]) -> np.ndarray:
+    """P(giallo) dai gialli attesi μ = λ·share: 1 − e^(−μ), o Platt se c'è la calibrazione."""
+    mu = np.maximum(np.asarray(mu, float), 1e-12)
+    if calibrazione:
+        z = calibrazione["a"] + calibrazione["b"] * np.log(mu)
+        prob = 1 / (1 + np.exp(-np.clip(z, -30, 30)))
+    else:
+        prob = 1 - np.exp(-mu)
+    return np.minimum(prob, PROBABILITA_MASSIMA)
+
+
 def prevedi(
     x: np.ndarray, offset: float, giocatori: Giocatori, coeff: CoefficientiV2
 ) -> PrevisioneV2:
@@ -277,7 +307,7 @@ def prevedi(
     eta = giocatori.Z @ coeff.vettore_giocatore() + giocatori.log_minuti
     e = np.exp(eta - eta.max())
     share = e / e.sum()
-    prob = 1 - np.exp(-lam * share)
+    prob = probabilita_da_attese(lam * share, coeff.calibrazione)
     return PrevisioneV2(
         lam,
         {gid: float(q) for gid, q in zip(giocatori.ids, share)},
@@ -290,12 +320,32 @@ def previsione(dati: DatiPartita, pesi: Pesi, coeff: CoefficientiV2) -> Previsio
     return prevedi(x, offset, caratteristiche_giocatori(dati, pesi), coeff)
 
 
-# Pesi predefiniti (neutri finché `scripts/calibra_v2.py` non ne salva di stimati): λ = media
-# del campionato e quote proporzionali a gialli/90 × minuti attesi.
+# Pesi neutri: λ = media del campionato, quote proporzionali a gialli/90 × minuti attesi.
 COEFFICIENTI_NEUTRI = CoefficientiV2(
     partita={"intercetta": 0.0},
     giocatore={"tasso": 1.0},
     stimati_il="",
     campione={},
 )
-COEFFICIENTI_PREDEFINITI = COEFFICIENTI_NEUTRI
+# Predefiniti finché `scripts/calibra_v2.py --salva` non ne salva di nuovi nelle impostazioni:
+# stimati il 2026-11-07 su Serie A e Liga 2024 e 2025 (1516 partite, 69159 presenze in
+# distinta, 6091 gialli), L2 = 2 e 2.
+COEFFICIENTI_PREDEFINITI = CoefficientiV2(
+    partita={
+        "intercetta": 0.0055, "liga": 0.0143, "arbitro": 0.8111, "squadre_fatti": 0.7534,
+        "squadre_provocati": 0.6617, "derby": 0.1611, "campo_caldo": 0.0246, "posta": -0.02,
+        "squilibrio_quote": 0.0, "squilibrio_punti": -0.1505, "precedenti": -0.2128,
+    },
+    giocatore={
+        "ruolo_D": 1.1379, "ruolo_M": 1.092, "ruolo_F": 0.8535, "tasso": 0.2209,
+        "falli": 0.4498, "duello": 0.2334, "storia": 0.2125, "diffidato": -0.0357,
+        "casa": -0.141, "sfavorita": 0.1187, "squadra_fatti": 0.1241,
+        "avversaria_provoca": 0.4276, "arbitro_squadra": -0.278, "subentrante": 0.6439,
+    },
+    stimati_il="2026-11-07",
+    campione={
+        "partite": 1516, "presenze": 69159, "gialli": 6091, "stagioni": [2024, 2025],
+        "campionati": [135, 140], "l2": [2.0, 2.0],
+    },
+    calibrazione={"a": 0.2964, "b": 1.0616},
+)
