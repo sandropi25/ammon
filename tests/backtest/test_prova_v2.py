@@ -1,12 +1,16 @@
 """Stima e prova di V2: niente dati del futuro, ogni cartellino conta."""
+import importlib.util
+import sys
 from datetime import timedelta
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from ammonizioni.backtest import v2 as bv2
-from ammonizioni.db.modelli import Arbitro, Giocatore, Partita, Presenza, Squadra
-from ammonizioni.motore import v2
+from ammonizioni.db import sessione as modulo_sessione
+from ammonizioni.db.modelli import Arbitro, Giocatore, Partita, Presenza
+from ammonizioni.motore import modello, v2
 from ammonizioni.motore.pesi import Pesi
 
 from test_prova import INIZIO, ROSE, STAGIONE, aggiungi_partita, anagrafica
@@ -92,6 +96,56 @@ def test_stima_e_valuta(sessione):
     assert val.lambda_somme.reali_medi == pytest.approx(
         np.mean([p.gialli_totali for p in partite])
     )
+
+
+def _script(nome):
+    cartella = Path(__file__).resolve().parents[2] / "scripts"
+    if str(cartella) not in sys.path:
+        sys.path.insert(0, str(cartella))  # prova_v2 importa calibra_v2
+    spec = importlib.util.spec_from_file_location(f"{nome}_script", cartella / f"{nome}.py")
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def _db_con_due_stagioni(tmp_path, monkeypatch):
+    url = f"sqlite:///{tmp_path / 'prova.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    with modulo_sessione.apri(url) as s:
+        _campionato(s, partite=6)
+        # stessa rosa una stagione prima
+        for i in range(1, 7):
+            aggiungi_partita(s, 100 + i, -400 + 7 * i, gialli={24: 1, 13: i % 2})
+            s.get(Partita, 100 + i).stagione = STAGIONE - 1
+        s.flush()
+    return url
+
+
+def test_script_calibra_salva_i_coefficienti(tmp_path, monkeypatch, capsys):
+    url = _db_con_due_stagioni(tmp_path, monkeypatch)
+    codice = _script("calibra_v2").main(
+        ["--stagioni", str(STAGIONE), "--campionati", "135", "--salva"]
+    )
+    fuori = capsys.readouterr().out
+    assert codice == 0
+    assert "Livello partita" in fuori and "Platt" in fuori and "Coefficienti salvati" in fuori
+    with modulo_sessione.apri(url) as s:
+        coeff = modello.carica_coefficienti(s)
+        assert coeff.campione["partite"] == 6 and coeff.campione["stagioni"] == [STAGIONE]
+        assert modello.modello_scelto(s) == "V1"  # salvare i pesi non cambia il modello
+
+
+def test_script_prova_fuori_campione(tmp_path, monkeypatch, capsys):
+    _db_con_due_stagioni(tmp_path, monkeypatch)
+    codice = _script("prova_v2").main(
+        ["--addestra", str(STAGIONE - 1), "--prova", str(STAGIONE), "--campionati", "135"]
+    )
+    fuori = capsys.readouterr().out
+    assert codice == 0
+    assert f"Serie A {STAGIONE} (V2 stimato su {STAGIONE - 1})" in fuori
+    for metodo in ("| V1 |", "| V2 |", "| V2 senza Platt |", "| Scelta semplice |"):
+        assert metodo in fuori
+    assert _script("prova_v2").main(["--addestra", "2025", "--prova", "2025"]) == 2
 
 
 def test_cache_rilegge_senza_ricalcolare(sessione, tmp_path):
