@@ -279,6 +279,18 @@ def test_main_espn_senza_nessuna_chiave_non_esce_con_2(db_file, monkeypatch):
     ) == 0
 
 
+def test_main_pre_partita_collega_le_designazioni_aia_con_espn(db_file, monkeypatch):
+    from ammonizioni.caricamento import designazioni
+
+    chiamate = []
+    monkeypatch.setattr(
+        designazioni, "collega_designazioni_periodico", lambda s, adesso: chiamate.append(adesso)
+    )
+    fonte = FonteFinta()
+    assert pre_partita.main([], crea_fonte=lambda s, priorita: fonte) == 0
+    assert len(chiamate) == 1
+
+
 def test_main_pre_partita_senza_partite_nessuna_chiamata(db_file):
     dentro_db(db_file, lambda s: prepara(s, data=datetime.now(timezone.utc) + timedelta(hours=5)))
     fonte = FonteFinta()

@@ -9,7 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ammonizioni import config
-from ammonizioni.caricamento import arbitri_fd
+from ammonizioni.caricamento import arbitri_fd, designazioni
 from ammonizioni.caricamento.formazioni import (
     probabili_automatiche,
     salva_probabili,
@@ -241,6 +241,8 @@ def main(
             return 2
         adesso = datetime.now(timezone.utc)
         if config.fonte_dati() == "espn":  # con API-Football l'arbitro arriva dalla fonte
+            # prima le designazioni ufficiali AIA (2-4 giorni prima), poi football-data
+            designazioni.collega_designazioni_periodico(s, adesso)
             n_arbitri = collega_arbitri_prossimi(s, crea_fd(s), adesso)
             if n_arbitri:
                 log.info("Arbitri collegati alle prossime partite: %s", n_arbitri)
