@@ -213,11 +213,10 @@ class RigaPartita:
 # ---------------------------------------------------------------- immagini ESPN
 
 CHIAVE_IMMAGINI = "immagini_espn"  # Impostazione: stemmi e volti da ESPN (accesa di default)
-URL_VOLTO = "https://a.espncdn.com/i/headshots/soccer/players/full/{}.png"
 NOTA_IMMAGINI = (
-    "Stemmi e volti vengono caricati dal browser direttamente dal sito di ESPN, per solo uso "
-    "personale: sono immagini protette da diritti. Da spegnere (o sostituire) in caso di uso "
-    "commerciale o pubblico dell'app."
+    "Stemmi e volti vengono caricati dal browser direttamente dai siti di ESPN e di "
+    "TheSportsDB, per solo uso personale: sono immagini protette da diritti. Da spegnere (o "
+    "sostituire) in caso di uso commerciale o pubblico dell'app."
 )
 
 
@@ -235,9 +234,22 @@ def url_https(valore) -> str | None:
     return valore if isinstance(valore, str) and valore.startswith("https://") else None
 
 
-def url_volto(giocatore_id: int) -> str:
-    """Foto ESPN del giocatore (può non esistere: allora resta la maglietta)."""
-    return URL_VOLTO.format(int(giocatore_id))
+def url_volti(s: Session, ids) -> dict[int, str]:
+    """Foto (TheSportsDB, salvata in `foto_url`) dei giocatori indicati, una sola query per
+    tutti. Chi non ha la foto non compare (resta la maglietta): niente più foto ESPN."""
+    ids = {int(g) for g in ids}
+    if not ids:
+        return {}
+    risultato = {}
+    for gid, url in s.execute(
+        select(Giocatore.id, Giocatore.foto_url).where(
+            Giocatore.id.in_(ids), Giocatore.foto_url.is_not(None)
+        )
+    ):
+        valido = url_https(url)
+        if valido:
+            risultato[int(gid)] = valido
+    return risultato
 
 
 def ora_italiana(dt_utc: datetime) -> str:
