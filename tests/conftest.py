@@ -29,6 +29,20 @@ def _niente_rete_per_le_designazioni(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _niente_rete_per_le_foto(monkeypatch):
+    """I job cercano le foto su TheSportsDB: nei test la rete non si tocca (risposta 503)."""
+    from ammonizioni.fonti import foto
+
+    monkeypatch.setattr(
+        foto,
+        "crea_client",
+        lambda: foto.ClientFoto(
+            transport=httpx.MockTransport(lambda r: httpx.Response(503)), pausa=0
+        ),
+    )
+
+
 @pytest.fixture
 def sessione():
     engine = modulo_sessione.crea_engine("sqlite://")
