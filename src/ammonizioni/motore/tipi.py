@@ -62,6 +62,16 @@ class StatArbitro:
 
 
 @dataclass(frozen=True)
+class StatSquadra:
+    """Cartellini della squadra nel campionato prima della partita (stagione in corso e
+    precedente; le partite della precedente pesano `PESO_STAGIONE_PRECEDENTE`): somme pesate,
+    panchina compresa. Serve al modello V2 (cartellini attesi della partita)."""
+    partite: float  # partite pesate
+    gialli_fatti: float  # gialli presi dai giocatori della squadra
+    gialli_provocati: float  # gialli presi dagli avversari contro la squadra
+
+
+@dataclass(frozen=True)
 class ContestoInfo:
     rivalita: bool
     campo_caldo: bool
@@ -103,6 +113,7 @@ class DatiPartita:
     tendenza_cambi: dict[int, dict[str, float]] = field(default_factory=dict)  # squadra -> ruolo -> quota
     prob_vittoria: dict[int, float] = field(default_factory=dict)  # dalle quote 1X2 ESPN
     formazioni_ufficiali: bool = False  # solo per l'affidabilità: titolari ufficiali o probabili
+    stat_squadre: dict[int, StatSquadra] = field(default_factory=dict)  # per il modello V2
 
 
 @dataclass(frozen=True)

@@ -31,6 +31,7 @@ from ammonizioni.motore.tipi import (
     MedieRuolo,
     RigaPresenza,
     StatArbitro,
+    StatSquadra,
     Titolare,
 )
 
@@ -376,6 +377,55 @@ def _contesto(
     )
 
 
+PESO_STAGIONE_PRECEDENTE = 0.5
+
+
+def _stat_squadre(
+    s: Session, partita: Partita, prima_di: datetime, campionato_id: int
+) -> dict[int, StatSquadra]:
+    """Gialli fatti e provocati delle due squadre nel campionato (stagione in corso e
+    precedente, a metà peso), solo partite con statistiche prima di `prima_di`. Ogni giallo
+    conta, anche dalla panchina. Una query; squadra senza partite: assente."""
+    squadre = (partita.casa_id, partita.trasferta_id)
+    righe = s.execute(
+        select(
+            Presenza.partita_id, Presenza.squadra_id, Partita.casa_id, Partita.trasferta_id,
+            Partita.stagione, func.sum(Presenza.gialli),
+        )
+        .join(Partita, Partita.id == Presenza.partita_id)
+        .where(
+            Partita.competizione_id == campionato_id,
+            Partita.statistiche_scaricate.is_(True),
+            Partita.data_utc < prima_di,
+            Partita.id != partita.id,
+            Partita.stagione.in_((partita.stagione, partita.stagione - 1)),
+            or_(Partita.casa_id.in_(squadre), Partita.trasferta_id.in_(squadre)),
+        )
+        .group_by(
+            Presenza.partita_id, Presenza.squadra_id, Partita.casa_id, Partita.trasferta_id,
+            Partita.stagione,
+        )
+    ).all()
+    per_partita: dict[int, tuple[int, int, float, dict[int, int]]] = {}
+    for pid, sq, casa, trasf, stagione, gialli in righe:
+        peso = 1.0 if stagione == partita.stagione else PESO_STAGIONE_PRECEDENTE
+        voce = per_partita.setdefault(pid, (int(casa), int(trasf), peso, {}))
+        voce[3][int(sq)] = int(gialli or 0)  # Postgres: SUM come Decimal
+    risultato: dict[int, StatSquadra] = {}
+    for squadra in squadre:
+        n = fatti = provocati = 0.0
+        for casa, trasf, peso, gialli in per_partita.values():
+            if squadra not in (casa, trasf):
+                continue
+            altra = trasf if squadra == casa else casa
+            n += peso
+            fatti += peso * gialli.get(squadra, 0)
+            provocati += peso * gialli.get(altra, 0)
+        if n > 0:
+            risultato[squadra] = StatSquadra(n, fatti, provocati)
+    return risultato
+
+
 PARTITE_MINIME_PUNTI = 3
 
 
@@ -636,4 +686,5 @@ def carica_dati(
         tendenza_cambi=tendenze,
         prob_vittoria=prob_vittoria,
         formazioni_ufficiali=partita.stato_formazioni == "ufficiali",
+        stat_squadre=_stat_squadre(s, partita, prima_di, campionato_id),
     )
