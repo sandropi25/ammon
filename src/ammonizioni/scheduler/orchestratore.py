@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ammonizioni import config
-from ammonizioni.caricamento import notturno
+from ammonizioni.caricamento import designazioni, notturno
 from ammonizioni.config import CAMPIONATI, STATI_FINITI
 from ammonizioni.db import repo
 from ammonizioni.db import sessione as modulo_sessione
@@ -220,6 +220,8 @@ def main(
         if decisione.giornata is not None:
             fonte_fd = crea_fd(s) if espn else None
             try:
+                if espn:  # arbitri designati dall'AIA, prima del collegamento football-data
+                    designazioni.collega_designazioni_periodico(s, adesso)
                 aggiorna_tutto(
                     s, fonte_oggi, fonte_storico, fonte_fd, controllo if espn else None,
                     biografie, adesso=adesso, etichetta="Giornata",

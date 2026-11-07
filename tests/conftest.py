@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,18 @@ def _chiudi_engines_in_cache():
     """Gli engine aperti da `apri()` restano in cache per URL: chiusi dopo ogni test."""
     yield
     modulo_sessione.chiudi_engines()
+
+
+@pytest.fixture(autouse=True)
+def _niente_rete_per_le_designazioni(monkeypatch):
+    """I job chiamano l'AIA: nei test la rete non si tocca (risposta 503, nessuna designazione)."""
+    from ammonizioni.caricamento import designazioni
+
+    monkeypatch.setattr(
+        designazioni,
+        "crea_client",
+        lambda: httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503))),
+    )
 
 
 @pytest.fixture
