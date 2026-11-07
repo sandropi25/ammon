@@ -199,14 +199,16 @@ def carica_campo(
             for c in sorted(subentranti, key=lambda c: -c.probabilita)
             if c.giocatore_id not in in_campo
         ]
-    maglie = _maglie(s, partita, in_campo | {gid for _, gid, _ in panchina}, ufficiali)
+    tutti = in_campo | {gid for _, gid, _ in panchina}
+    maglie = _maglie(s, partita, tutti, ufficiali)
+    volti = componenti.url_volti(s, tutti) if immagini else {}  # una query per tutti
 
     def giocatore(gid: int, nome: str, riga: int, colonna: int, in_riga: int) -> GiocatoreCampo:
         return GiocatoreCampo(
             id=gid, nome=nome, cognome=cognome(nome), numero=maglie.get(gid),
             riga=riga, colonna=colonna, in_riga=in_riga, probabilita=prob.get(gid),
             avversario_id=avversari.get(gid),
-            volto=componenti.url_volto(gid) if immagini else None,
+            volto=volti.get(gid),
         )
 
     def squadra(squadra_id: int) -> SquadraCampo:

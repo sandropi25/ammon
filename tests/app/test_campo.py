@@ -8,10 +8,11 @@ from db_prova import CASA, PARTITA_FUTURA, TRASF, popola, popola_panchina
 import campo  # noqa: E402  (app/ è in sys.path grazie ad ayuda_app)
 import componenti  # noqa: E402
 import componenti_campo as cc  # noqa: E402
-from ammonizioni.db.modelli import Formazione, Partita, Presenza, Squadra
+from ammonizioni.db.modelli import Formazione, Giocatore, Partita, Presenza, Squadra
 from ammonizioni.motore.tipi import Titolare
 
 LOGO = "https://a.espncdn.com/i/teamlogos/soccer/500/2572.png"
+FOTO_12 = "https://r2.thesportsdb.com/images/media/player/cutout/dodici.png"
 
 
 @pytest.mark.parametrize("p,livello", [
@@ -74,7 +75,8 @@ def _prepara(s, ufficiali=True):
     if ufficiali:
         s.get(Formazione, (PARTITA_FUTURA, CASA, 12, "ufficiale")).maglia = 2
         s.get(Formazione, (PARTITA_FUTURA, CASA, 15, "panchina")).maglia = 19
-    s.get(Presenza, (6, 13)).maglia = 8  # nessuna maglia in formazione: dall'ultima presenza
+    s.get(Giocatore, 12).foto_url = FOTO_12
+    s.get(Presenza, (6, 13)).maglia = 8 # nessuna maglia in formazione: dall'ultima presenza
     s.get(Presenza, (1, 13)).maglia = 30  # più vecchia: non conta
     s.flush()
 
@@ -96,7 +98,8 @@ def test_campo_con_le_ufficiali(sessione_db):
     assert dati.casa.modulo == "1-1-1"
     assert casa[12].numero == 2 and casa[13].numero == 8 and casa[11].numero is None
     assert casa[12].avversario_id is not None and casa[11].probabilita is None  # portiere
-    assert casa[12].volto == "https://a.espncdn.com/i/headshots/soccer/players/full/12.png"
+    assert casa[12].volto == FOTO_12
+    assert casa[11].volto is None  # senza foto salvata: niente URL (resta la maglietta)
     # panchina ufficiale completa (anche chi non entra mai), con il numero
     panca = {g.id: g for g in dati.casa.panchina}
     assert set(panca) == {15, 16, 17} and panca[15].numero == 19
@@ -161,7 +164,7 @@ def test_rendering_svg_con_ancore_colori_ed_escape(sessione_db):
     assert "Formazioni ufficiali" in html
     assert f'src="{LOGO}"' in html
     # volto come sfondo CSS (una foto mancante non mostra l'icona dell'immagine rotta)
-    assert "background-image:url('https://a.espncdn.com/i/headshots/soccer/players/full/12.png')" in html
+    assert f"background-image:url('{FOTO_12}')" in html
     assert "<image" not in html
     # bordo per soglia: classi coerenti con le probabilità
     for g in dati.casa.titolari:
