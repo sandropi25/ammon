@@ -2,7 +2,7 @@
 
 V1 è il modello a fattori moltiplicativi (`classifica`). V2 (`motore.v2`) usa gli stessi
 candidati, motivazioni e affidabilità di V1 ma cambia la probabilità: cartellini attesi della
-partita divisi fra i giocatori. V1 resta il predefinito finché la prova non giustifica V2."""
+partita divisi fra i giocatori. V2 è il predefinito (prova fuori campione su Serie A e Liga 2024-2025)."""
 from __future__ import annotations
 
 import logging
@@ -22,7 +22,7 @@ CHIAVE_MODELLO = "modello"
 CHIAVE_COEFFICIENTI = "modello_v2_coefficienti"
 V1, V2 = "V1", "V2"
 MODELLI = (V1, V2)
-PREDEFINITO = V1
+PREDEFINITO = V2  # dal 07/11/2026: la prova fuori campione batte V1 e la scelta semplice
 
 
 def modello_scelto(s: Session) -> str:

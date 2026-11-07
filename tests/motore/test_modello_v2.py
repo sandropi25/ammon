@@ -88,10 +88,10 @@ def test_coefficienti_json_andata_e_ritorno():
     assert v2.CoefficientiV2.da_json("rotto") is None
 
 
-def test_modello_predefinito_v1_e_scelta_salvata(sessione):
-    assert modello.modello_scelto(sessione) == "V1"
-    modello.salva_modello(sessione, "V2")
+def test_modello_predefinito_v2_e_scelta_salvata(sessione):
     assert modello.modello_scelto(sessione) == "V2"
+    modello.salva_modello(sessione, "V1")
+    assert modello.modello_scelto(sessione) == "V1"
     with pytest.raises(ValueError):
         modello.salva_modello(sessione, "V3")
 
@@ -131,6 +131,7 @@ def test_mercato_usa_il_modello_scelto(sessione):
     from ammonizioni.motore.mercati import MercatoAmmonizioni
 
     dati = _dati(sessione)
+    modello.salva_modello(sessione, "V1")
     v1 = MercatoAmmonizioni().classifica(sessione, PARTITA_FUTURA)
     modello.salva_modello(sessione, "V2")
     con_v2 = MercatoAmmonizioni().classifica(sessione, PARTITA_FUTURA)

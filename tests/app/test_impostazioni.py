@@ -197,15 +197,15 @@ def test_scelta_del_modello_v1_predefinito_e_v2_salvato(sessione_db):
         _prepara(s)
     at = avvia(PAGINA_IMPOSTAZIONI)
     assert not at.exception
-    assert at.radio(key="modello_scelto").value == "V1"
+    assert at.radio(key="modello_scelto").value == "V2"
     t = visibile(at)
     assert "Coefficienti V2 stimati il 07/11/2026 su 1516 partite" in t
-    at.radio(key="modello_scelto").set_value("V2").run()
+    at.radio(key="modello_scelto").set_value("V1").run()
     assert not at.exception
     with sessione_db() as s:
-        assert modello.modello_scelto(s) == "V2"
+        assert modello.modello_scelto(s) == "V1"
     at = avvia(PAGINA_IMPOSTAZIONI)
-    assert at.radio(key="modello_scelto").value == "V2"
+    assert at.radio(key="modello_scelto").value == "V1"
 
 
 def test_dettaglio_con_v2_mostra_i_candidati(sessione_db):

@@ -132,7 +132,7 @@ def test_script_calibra_salva_i_coefficienti(tmp_path, monkeypatch, capsys):
     with modulo_sessione.apri(url) as s:
         coeff = modello.carica_coefficienti(s)
         assert coeff.campione["partite"] == 6 and coeff.campione["stagioni"] == [STAGIONE]
-        assert modello.modello_scelto(s) == "V1"  # salvare i pesi non cambia il modello
+        assert modello.modello_scelto(s) == "V2"  # salvare i pesi non cambia il modello
 
 
 def test_script_prova_fuori_campione(tmp_path, monkeypatch, capsys):

@@ -179,8 +179,11 @@ def test_duello_manuale_rende_certo_l_avversario_anche_con_formazione_probabile(
 
 
 def test_probabilita_e_ordine_dei_titolari_identici_a_prima(sessione):
-    """Valori di riferimento calcolati col codice precedente all'affidabilità precisa."""
+    """Valori di riferimento calcolati col codice precedente all'affidabilità precisa (V1)."""
+    from ammonizioni.motore import modello
+
     popola(sessione)
+    modello.salva_modello(sessione, "V1")
     c = MercatoAmmonizioni().classifica(sessione, PARTITA_FUTURA)
     assert [(x.giocatore_id, x.probabilita) for x in c] == [
         (12, 0.49844576734446583), (14, 0.49844576734446583), (22, 0.49844576734446583),
