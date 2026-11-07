@@ -3,9 +3,11 @@ Lancio: `python -m ammonizioni.scheduler.notte`."""
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from ammonizioni import config
 from ammonizioni.caricamento import biografie as biografie_giocatori
+from ammonizioni.caricamento.foto import aggiorna_foto_senza_errori
 from ammonizioni.caricamento import notturno, storico
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.fonti.biografie import ClientBiografie
@@ -20,6 +22,8 @@ from ammonizioni.scheduler.comune import (
 )
 
 log = logging.getLogger(__name__)
+
+LIMITE_FOTO = 300  # ricerche di foto per notte (circa 11 minuti a 2,2 s l'una)
 
 
 def aggiorna_biografie(s):
@@ -82,6 +86,8 @@ def main(
         aggiorna_tutto(
             s, fonte_oggi, fonte_storico, fonte_fd, controllo if espn else None, biografie
         )
+        # foto (TheSportsDB): a parte, per ultime; i giocatori delle prossime partite per primi
+        aggiorna_foto_senza_errori(s, datetime.now(timezone.utc), limite=LIMITE_FOTO)
     return 0
 
 

@@ -15,6 +15,7 @@ from ammonizioni.caricamento.formazioni import (
     salva_probabili,
     ultimo_xi,
 )
+from ammonizioni.caricamento.foto import aggiorna_foto_senza_errori
 from ammonizioni.caricamento.notturno import indica_competizione
 from ammonizioni.caricamento.stemmi import salva_stili_fonte
 from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A
@@ -37,6 +38,7 @@ STATI_ESCLUSI = ("PST", "CANC")
 CHIAVE_ARBITRI_PROSSIMI = "arbitri_prossimi_ultimo"  # Impostazione: ultimo tentativo (ISO UTC)
 INTERVALLO_ARBITRI = timedelta(hours=3)
 GIORNI_ARBITRI = 7
+LIMITE_FOTO = 40  # ricerche di foto per esecuzione (giocatori delle prossime partite)
 
 
 def partite_da_controllare(s: Session, adesso_utc: datetime) -> list[Partita]:
@@ -248,9 +250,11 @@ def main(
                 log.info("Arbitri collegati alle prossime partite: %s", n_arbitri)
         if not partite_da_controllare(s, adesso):
             log.info("Nessuna partita nella finestra di controllo")
-            return 0
-        n = esegui(s, fonte, adesso)
-        log.info("Formazioni ufficiali trovate per %s partite", n)
+        else:
+            n = esegui(s, fonte, adesso)
+            log.info("Formazioni ufficiali trovate per %s partite", n)
+        # ultime, dopo le formazioni: le foto (TheSportsDB) non devono ritardarle
+        aggiorna_foto_senza_errori(s, adesso, limite=LIMITE_FOTO)
     return 0
 
 
