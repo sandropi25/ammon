@@ -32,13 +32,20 @@ def test_stagione_precedente_a_meta_peso_e_niente_futuro(sessione):
 
 def test_somme_decimal_diventano_numeri():
     class Risultato:
+        def __init__(self, righe):
+            self.righe = righe
+
         def all(self):
-            return [(1, CASA, CASA, TRASF, 2026, Decimal("3")),
-                    (1, TRASF, CASA, TRASF, 2026, Decimal("1"))]
+            return self.righe
 
     class S:
+        risposte = [
+            Risultato([(1, CASA, TRASF, 2026)]),
+            Risultato([(1, CASA, Decimal("3")), (1, TRASF, Decimal("1"))]),
+        ]
+
         def execute(self, _):
-            return Risultato()
+            return self.risposte.pop(0)
 
     class P:
         id, casa_id, trasferta_id, stagione = 99, CASA, TRASF, 2026
