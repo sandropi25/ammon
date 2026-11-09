@@ -21,10 +21,17 @@ from ammonizioni import config
 from ammonizioni.db.sessione import apri
 
 TTL_SECONDI = 600
+TTL_FIRMA = 60  # una formazione ufficiale appena salvata si vede entro un minuto
+
+
+@st.cache_data(ttl=TTL_FIRMA, max_entries=2, show_spinner=False)
+def _firma_formazioni(db: str) -> int:
+    with apri(db) as s:
+        return componenti.firma_formazioni(s)
 
 
 @st.cache_data(ttl=TTL_SECONDI, max_entries=20, show_spinner=False)
-def _pagina_partite(db: str, blocco: datetime, campionati: tuple[int, ...]):
+def _pagina_partite(db: str, blocco: datetime, campionati: tuple[int, ...], firma: int):
     # finestra larga: dall'inizio dell'ora a 7 giorni dopo la fine dell'ora; il filtro
     # esatto su "adesso" si fa fuori dalla cache
     with apri(db) as s:
@@ -40,7 +47,8 @@ def pagina_partite(adesso: datetime, campionati: tuple[int, ...]):
     La cache è per ora intera: dentro i 10 minuti non si tocca il DB neanche se passano i
     minuti; le partite già iniziate escono dall'elenco grazie al filtro finale."""
     blocco = adesso.replace(minute=0, second=0, microsecond=0)
-    testo, completo, righe = _pagina_partite(config.url_database(), blocco, tuple(campionati))
+    db = config.url_database()
+    testo, completo, righe = _pagina_partite(db, blocco, tuple(campionati), _firma_formazioni(db))
     return testo, completo, componenti.nella_finestra(righe, adesso)
 
 
@@ -56,7 +64,7 @@ def stato_aggiornamento() -> tuple[str, bool]:
 
 
 @st.cache_data(ttl=TTL_SECONDI, max_entries=50, show_spinner=False)
-def _pagina_dettaglio(db: str, partita_id: int):
+def _pagina_dettaglio(db: str, partita_id: int, firma: int):
     with apri(db) as s:
         pagina = componenti.carica_pagina_dettaglio(s, partita_id)
     if pagina is None:
@@ -68,7 +76,8 @@ def _pagina_dettaglio(db: str, partita_id: int):
 def pagina_dettaglio(partita_id: int):
     """PaginaDettaglio della partita (senza quote), o None se non esiste."""
     try:
-        return _pagina_dettaglio(config.url_database(), partita_id)
+        db = config.url_database()
+        return _pagina_dettaglio(db, partita_id, _firma_formazioni(db))
     except LookupError:
         return None
 
@@ -178,14 +187,15 @@ def statistiche_stagione(campionati: tuple[int, ...], stagione: int = config.STA
 
 
 @st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)
-def _piu_a_rischio(db: str, partite: tuple[int, ...]):
+def _piu_a_rischio(db: str, partite: tuple[int, ...], firma: int):
     with apri(db) as s:
         return componenti_home.piu_a_rischio(s, list(partite))
 
 
 def piu_a_rischio(partite: list[int]):
     """Giocatore più a rischio tra le partite date (modello del Dettaglio), in cache."""
-    return _piu_a_rischio(config.url_database(), tuple(partite))
+    db = config.url_database()
+    return _piu_a_rischio(db, tuple(partite), _firma_formazioni(db))
 
 
 @st.cache_data(ttl=TTL_SECONDI, max_entries=6, show_spinner=False)

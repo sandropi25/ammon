@@ -48,6 +48,8 @@ LIMITE_FOTO = 40  # ricerche di foto per esecuzione (giocatori delle prossime pa
 ANTICIPO_PRESIDIO = timedelta(minutes=150)
 PAUSA_PRESIDIO = 120  # secondi tra due controlli
 DURATA_PRESIDIO = timedelta(minutes=200)  # poi riparte il lancio successivo (GitHub: max 6 ore)
+CHIAVE_ARRIVI = "formazioni_minuti_prima"  # Impostazione: partita -> squadra -> minuti prima del via
+ARRIVI_DA_TENERE = 80
 
 
 def _partite_in_attesa(s: Session, adesso_utc: datetime, entro: timedelta) -> list[Partita]:
@@ -133,6 +135,19 @@ def _salva_ufficiali(s: Session, partita: Partita, formazioni) -> bool:
     return True
 
 
+def _annota_arrivi(s: Session, partita: Partita, formazioni, adesso_utc: datetime) -> None:
+    """Quanti minuti prima del via ogni formazione e' stata vista la prima volta (ultime partite)."""
+    salvati = repo.leggi_impostazione(s, CHIAVE_ARRIVI, {}) or {}
+    arrivi = {k: dict(v) for k, v in salvati.items()}
+    viste = arrivi.setdefault(str(partita.id), {})
+    minuti = int((partita.data_utc - adesso_utc).total_seconds() // 60)
+    for formazione in formazioni:
+        if formazione.titolari:
+            viste.setdefault(str(formazione.squadra_id), minuti)
+    tenute = dict(list(arrivi.items())[-ARRIVI_DA_TENERE:])
+    repo.scrivi_impostazione(s, CHIAVE_ARRIVI, tenute)
+
+
 def _salva_quote(s: Session, partita: Partita, fonte) -> None:
     """Probabilità implicite 1X2 prima della partita, se la fonte le ha lette (ESPN: stesso
     summary delle formazioni). Per ora solo salvate."""
@@ -183,6 +198,7 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
         salva_stili_fonte(s, fonte)  # stemmi e colori dallo stesso summary
         if not formazioni:
             continue
+        _annota_arrivi(s, partita, formazioni, adesso_utc)
         complete = _salva_ufficiali(s, partita, formazioni)
         s.commit()
         if complete:

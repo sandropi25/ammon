@@ -961,3 +961,13 @@ def salva_duello(s: Session, partita_id: int, giocatore_id: int, avversario_id: 
     rimuovi_duello(s, partita_id, giocatore_id)
     s.add(DuelloManuale(partita_id=partita_id, giocatore_id=giocatore_id, avversario_id=avversario_id))
     s.flush()
+
+
+
+def firma_formazioni(s: Session) -> int:
+    """Quante righe di formazioni ufficiali ci sono: cambia appena ne arriva una nuova e fa
+    rinfrescare le pagine senza aspettare i 10 minuti della cache."""
+    return int(
+        s.scalar(select(func.count()).select_from(Formazione).where(Formazione.tipo == "ufficiale"))
+        or 0
+    )

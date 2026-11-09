@@ -6,6 +6,7 @@ from conftest import FonteFinta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ammonizioni.db import repo
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import (
     Formazione,
@@ -686,3 +687,27 @@ def test_main_resta_di_presidio_dopo_il_primo_controllo(db_file, monkeypatch):
     crea = lambda s, priorita: FonteFinta()  # noqa: E731
     assert pre_partita.main([], crea_fonte=crea) == 0
     assert chiamate == [crea]
+
+
+
+def test_annota_quanti_minuti_prima_arriva_ogni_formazione(sessione):
+    """Serve a sapere davvero a che ora ESPN pubblica: una squadra vista prima, l'altra dopo."""
+    prepara(sessione)
+    fonte = FonteFinta(formazioni_uscite={100: ufficiali()[100][:1]})
+    pre_partita.esegui(sessione, fonte, INIZIO - timedelta(minutes=60))
+    fonte.formazioni_uscite = ufficiali()
+    pre_partita.esegui(sessione, fonte, INIZIO - timedelta(minutes=41))
+    assert repo.leggi_impostazione(sessione, pre_partita.CHIAVE_ARRIVI) == {
+        "100": {"1": 60, "2": 41}
+    }
+
+
+def test_arrivi_formazioni_tiene_solo_le_ultime_partite(sessione):
+    vecchi = {str(i): {"1": 60} for i in range(pre_partita.ARRIVI_DA_TENERE)}
+    repo.scrivi_impostazione(sessione, pre_partita.CHIAVE_ARRIVI, vecchi)
+    prepara(sessione)
+    fonte = FonteFinta(formazioni_uscite=ufficiali())
+    pre_partita.esegui(sessione, fonte, INIZIO - timedelta(minutes=60))
+    arrivi = repo.leggi_impostazione(sessione, pre_partita.CHIAVE_ARRIVI)
+    assert len(arrivi) == pre_partita.ARRIVI_DA_TENERE
+    assert "100" in arrivi and "0" not in arrivi

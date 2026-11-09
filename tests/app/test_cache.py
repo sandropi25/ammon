@@ -6,9 +6,10 @@ import cache_dati
 import componenti
 import pytest
 from ayuda_app import PAGINA_DETTAGLIO, avvia, sessione_db, url_db
-from db_prova import PARTITA_FUTURA, popola
+from db_prova import CASA, DATA_FUTURA, PARTITA_FUTURA, popola
+from sqlalchemy import select
 
-from ammonizioni.db.modelli import Partita
+from ammonizioni.db.modelli import Formazione, Giocatore, Partita
 
 
 @pytest.fixture(autouse=True)
@@ -114,3 +115,31 @@ def test_calendario_e_turno_secondo_caricamento_dalla_cache(sessione_db, monkeyp
         calendario = cache_dati.calendario(135)
         assert len(cache_dati.righe_turno(calendario.turni[-1])) == 1
     assert len(chiamate) == 2  # una lettura del calendario e una del turno, non quattro
+
+
+
+def _arriva_una_ufficiale(sessione_db):
+    with sessione_db() as s:
+        s.add(Giocatore(id=999, nome="Nuovo", ruolo="D"))
+        s.flush()
+        s.add(Formazione(partita_id=PARTITA_FUTURA, squadra_id=CASA, giocatore_id=999, tipo="ufficiale"))
+
+
+def test_formazione_ufficiale_appena_arrivata_rinfresca_le_pagine(sessione_db, monkeypatch):
+    """Le pagine restano in cache 10 minuti, ma una formazione nuova si deve vedere subito:
+    al massimo dopo il minuto della cache della "firma"."""
+    with sessione_db() as s:
+        popola(s)
+    dettaglio = _contatore(monkeypatch, "carica_pagina_dettaglio")
+    partite = _contatore(monkeypatch, "prossime_partite")
+    adesso = DATA_FUTURA - timedelta(days=1)
+    for _ in range(2):
+        cache_dati.pagina_dettaglio(PARTITA_FUTURA)
+        cache_dati.pagina_partite(adesso, (135,))
+    assert (len(dettaglio), len(partite)) == (1, 1)
+
+    _arriva_una_ufficiale(sessione_db)
+    cache_dati._firma_formazioni.clear()  # passato il minuto
+    cache_dati.pagina_dettaglio(PARTITA_FUTURA)
+    cache_dati.pagina_partite(adesso, (135,))
+    assert (len(dettaglio), len(partite)) == (2, 2)
