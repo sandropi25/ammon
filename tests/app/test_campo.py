@@ -231,3 +231,52 @@ def test_pagina_dettaglio_mostra_il_campo_e_le_ancore(sessione_db):
     testi = [m.value for m in at.markdown]
     assert any('class="cr-campo"' in t for t in testi)
     assert any('id="cand-12"' in t for t in testi)  # ancora sulla barra del candidato
+
+
+
+@pytest.mark.parametrize("nome,atteso", [
+    ("Randal Kolo Muani", "Kolo Muani"), ("Hans Nicolussi Caviglia", "Nicolussi Caviglia"),
+    ("Filippo Delli Carri", "Delli Carri"), ("Zé Pedro", "Zé Pedro"),
+    ("Stephan El Shaarawy", "El Shaarawy"), ("Ignace van der Brempt", "van der Brempt"),
+    ("Enrico Del Prato", "Del Prato"), ("Christ Inao Oulaï", "Oulaï"),
+])
+def test_cognomi_composti(nome, atteso):
+    assert cc.cognome(nome) == atteso
+
+
+def test_omonimi_nella_stessa_partita_hanno_l_iniziale():
+    etichette = cc.etichette({
+        1: "Leonardo Colombo", 2: "Lorenzo Colombo", 3: "Pio Esposito", 4: "Bremer",
+    })
+    assert etichette == {1: "Le. Colombo", 2: "Lo. Colombo", 3: "Esposito", 4: "Bremer"}
+
+
+def test_omonimi_con_iniziali_diverse():
+    assert cc.etichette({1: "Pio Esposito", 2: "Salvatore Esposito"}) == {
+        1: "P. Esposito", 2: "S. Esposito",
+    }
+
+
+@pytest.mark.parametrize("cognome", ["Marcandalli", "Bernardeschi", "Alexander-Arnold"])
+def test_il_cognome_lungo_non_viene_tagliato(cognome):
+    html = campo._etichetta(cognome)
+    assert f">{cognome}</text>" in html and "…" not in html
+
+
+def test_il_cognome_lungo_rimpicciolisce_ma_la_larghezza_resta_quella_massima():
+    assert 'font-size="16"' in campo._etichetta("Martínez")
+    assert 'font-size="16"' not in campo._etichetta("Bernardeschi")
+    assert campo._larghezza_nome("Bernardeschi") == pytest.approx(campo._larghezza_nome("Rrahmani12"), abs=1)
+
+
+def test_cognome_doppio_troppo_lungo_abbrevia_il_primo():
+    html = campo._etichetta("Nicolussi Caviglia")
+    assert ">N. Caviglia</text>" in html
+
+
+
+def test_nome_corretto_a_mano_non_viene_sovrascritto_da_espn():
+    from ammonizioni import config
+
+    assert config.nome_corretto(330550, "Amar Ahmed") == "Amar Fatah"
+    assert config.nome_corretto(1, "Altro Nome") == "Altro Nome"

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ammonizioni import config
 from ammonizioni.caricamento import arbitri_fd
 from ammonizioni.caricamento.arbitri import trova_o_crea
 from ammonizioni.caricamento.stemmi import campi_stile, salva_stili_fonte
@@ -149,7 +150,10 @@ def _griglia(s: Session, dati: PresenzaDati) -> str | None:
 
 
 def _salva_presenza(s: Session, dati: PresenzaDati) -> None:
-    giocatore = {"id": dati.giocatore_id, "nome": dati.giocatore_nome}
+    giocatore = {
+        "id": dati.giocatore_id,
+        "nome": config.nome_corretto(dati.giocatore_id, dati.giocatore_nome),
+    }
     if dati.ruolo is not None:
         giocatore["ruolo"] = dati.ruolo
     repo.upsert(s, Giocatore(**giocatore))

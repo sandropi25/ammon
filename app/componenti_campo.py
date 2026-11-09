@@ -19,7 +19,12 @@ SOGLIA_GIALLO = 0.15  # sotto: bordo verde
 SOGLIA_ROSSO = 0.30  # sopra: bordo rosso; in mezzo giallo
 RIGA_DA_RUOLO = {"G": 1, "D": 2, "M": 3, "F": 5}
 GIORNI_MAGLIA = 400  # numero di maglia dalle presenze dell'ultimo anno (o poco più)
-PARTICELLE = {"de", "di", "da", "del", "della", "dos", "das", "van", "von", "le", "la", "dal", "mac"}
+PARTICELLE = {
+    "de", "di", "da", "del", "della", "dos", "das", "van", "von", "le", "la", "dal", "mac",
+    "el", "al", "der", "den", "ter",
+}
+# cognomi di due parole che ESPN scrive come nome + cognome
+COGNOMI_DOPPI = {"kolo muani", "nicolussi caviglia", "delli carri", "zé pedro"}
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,8 @@ def cognome(nome: str) -> str:
     parole = nome.split()
     if len(parole) <= 1:
         return nome.strip()
+    if " ".join(parole[-2:]).lower() in COGNOMI_DOPPI:
+        return " ".join(parole[-2:])
     finale = [parole[-1]]
     for parola in reversed(parole[:-1]):
         if parola.lower() in PARTICELLE:
@@ -87,6 +94,25 @@ def cognome(nome: str) -> str:
         else:
             break
     return " ".join(finale)
+
+
+def etichette(nomi: dict[int, str]) -> dict[int, str]:
+    """Nome da mostrare per ogni giocatore della partita: il cognome e, se due hanno lo
+    stesso, anche l'iniziale ("P. Esposito"), allungata se serve ("Le. Colombo")."""
+    cognomi = {gid: cognome(nome) for gid, nome in nomi.items()}
+    gruppi: dict[str, list[int]] = {}
+    for gid, c in cognomi.items():
+        gruppi.setdefault(c, []).append(gid)
+    risultato = dict(cognomi)
+    for c, gids in gruppi.items():
+        if len(gids) < 2:
+            continue
+        iniziali = {nomi[g].split()[0][0] for g in gids}
+        lettere = 1 if len(iniziali) == len(gids) else 2
+        for g in gids:
+            if nomi[g].strip() != c:
+                risultato[g] = f"{nomi[g].split()[0][:lettere]}. {c}"
+    return risultato
 
 
 def _riga_colonna(t: Titolare) -> tuple[int, int | None]:
@@ -218,9 +244,12 @@ def carica_campo(
     maglie = _maglie(s, partita, tutti, bool(squadre_ufficiali))
     volti = componenti.url_volti(s, tutti) if immagini else {}  # una query per tutti
 
+    nomi = {t.giocatore_id: t.nome for t in titolari} | {g: n for _, g, n in panchina}
+    scritte = etichette(nomi)
+
     def giocatore(gid: int, nome: str, riga: int, colonna: int, in_riga: int) -> GiocatoreCampo:
         return GiocatoreCampo(
-            id=gid, nome=nome, cognome=cognome(nome), numero=maglie.get(gid),
+            id=gid, nome=nome, cognome=scritte[gid], numero=maglie.get(gid),
             riga=riga, colonna=colonna, in_riga=in_riga, probabilita=prob.get(gid),
             avversario_id=avversari.get(gid),
             volto=volti.get(gid),

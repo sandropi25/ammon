@@ -28,7 +28,10 @@ MAGLIA = (
     "M-14,-20 L-25,-14 L-31,-1 L-21,4 L-18,-2 L-18,22 L18,22 L18,-2 L21,4 L31,-1 "
     "L25,-14 L14,-20 Q0,-10 -14,-20 Z"
 )
-MAX_COGNOME = 10
+MAX_COGNOME = 10  # oltre, il testo rimpicciolisce per restare nella stessa larghezza
+MAX_SCRITTA = 14  # oltre, un cognome doppio abbrevia la prima parola ("N. Caviglia")
+FONT_NOME = 16
+FONT_NOME_MINIMO = 10
 SCALA_GIOCATORE = 1.2
 URL_SICURO = re.compile(r"https://[A-Za-z0-9./_-]+")  # nel CSS di uno style: niente apici
 
@@ -75,8 +78,19 @@ def colore_numero(colore: str) -> str:
     return "#FFFFFF" if stile.contrasto(colore, "#FFFFFF") >= stile.contrasto(colore, "#15171C") else "#15171C"
 
 
-def _testo_corto(testo: str, massimo: int = MAX_COGNOME) -> str:
-    return testo if len(testo) <= massimo else testo[: massimo - 1] + "…"
+def _testo_nome(testo: str) -> str:
+    """Il nome intero: mai troncato. Solo un cognome doppio troppo lungo abbrevia la prima
+    parola; le iniziali degli omonimi ("Le. Colombo") restano come sono."""
+    if len(testo) <= MAX_SCRITTA or " " not in testo or "." in testo:
+        return testo
+    prima, resto = testo.split(" ", 1)
+    return f"{prima[0]}. {resto}"
+
+
+def _font_nome(testo: str) -> float:
+    if len(testo) <= MAX_COGNOME:
+        return FONT_NOME
+    return max(FONT_NOME_MINIMO, round(FONT_NOME * MAX_COGNOME / len(testo), 1))
 
 
 def _titolo(g: GiocatoreCampo) -> str:
@@ -95,7 +109,7 @@ RAGGIO = 25  # tondo del giocatore (stile fantacalcio): foto sopra il colore del
 
 def _larghezza_nome(testo: str) -> float:
     """Larghezza dell'etichetta del nome (font 16 grassetto, stima per carattere)."""
-    return 9.6 * len(testo) + 16
+    return 9.6 * len(testo) * _font_nome(testo) / FONT_NOME + 16
 
 
 def _maglia(g: GiocatoreCampo, colore: str, clip: str) -> str:
@@ -156,12 +170,12 @@ def _giocatore(g: GiocatoreCampo, x: float, y: float, colore: str, clip: str) ->
 
 def _etichetta(cognome: str) -> str:
     """Nome sotto il tondo in un'etichetta scura arrotondata, come nelle app di fantacalcio."""
-    testo = _testo_corto(cognome)
+    testo = _testo_nome(cognome)
     w = _larghezza_nome(testo)
     return (
         f'<rect class="cr-etichetta" x="{-w / 2:.1f}" y="30" width="{w:.1f}" height="22" rx="11" '
         'fill="rgba(12,14,18,.86)" stroke="rgba(255,255,255,.18)" stroke-width="1"/>'
-        f'<text class="cr-nome-pl" x="0" y="46" text-anchor="middle" font-size="16">'
+        f'<text class="cr-nome-pl" x="0" y="46" text-anchor="middle" font-size="{_font_nome(testo):g}">'
         f"{escape(testo)}</text>"
     )
 

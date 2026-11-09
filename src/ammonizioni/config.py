@@ -162,3 +162,13 @@ def url_database() -> str:
         if url.startswith(prefisso):
             return "postgresql+psycopg://" + url[len(prefisso):]
     return url
+
+
+# Nomi che ESPN scrive diversi da come li conosciamo (id ESPN -> nome giusto).
+NOMI_CORRETTI: dict[int, str] = {
+    330550: "Amar Fatah",  # Lecce: per ESPN e' "Amar Ahmed"
+}
+
+
+def nome_corretto(giocatore_id: int, nome: str) -> str:
+    return NOMI_CORRETTI.get(giocatore_id, nome)
