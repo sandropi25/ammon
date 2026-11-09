@@ -436,9 +436,10 @@ img.cr-stemma--img {{ object-fit: contain; border-radius: 0; box-shadow: none; b
 [data-testid="stAlertContainer"] * {{ color: var(--cr-testo) !important; }}
 {dataframe}
 
-/* pulsante sole/luna: fisso in alto a destra, fuori da ogni menu */
+/* pulsante sole/luna: fisso in alto a destra, SOTTO la barra del menu. Sta dentro stMain
+   (z-index 1), che non puo' superare stHeader (z-index 999990): sopra la barra resterebbe coperto */
 .st-key-cambia_tema {{
-  position: fixed !important; top: 10px; right: 58px; z-index: 1000002; width: auto !important;
+  position: fixed !important; top: 68px; right: 16px; z-index: 1000002; width: auto !important;
 }}
 .st-key-cambia_tema button {{
   width: 40px; height: 40px; min-height: 40px; padding: 0 !important; border-radius: 50% !important;
@@ -451,6 +452,8 @@ img.cr-stemma--img {{ object-fit: contain; border-radius: 0; box-shadow: none; b
   font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 1.9rem;
   line-height: 1; letter-spacing: .02em; color: var(--cr-testo);
 }}
+/* su telefono la riga lascia libero l'angolo del pulsante sole/luna */
+@media (max-width: 640px) {{ .cr-intestazione {{ padding-right: 50px; }} }}
 .cr-aggiornato {{
   font-size: .85rem; color: var(--cr-testo2); background: var(--cr-superficie);
   border: 1px solid var(--cr-bordo); border-radius: 999px; padding: .2rem .7rem;
@@ -661,6 +664,7 @@ def css_accesso(tema: str) -> str:
     p = PALETTE[tema]
     return f"""
 [data-testid="stHeader"], [data-testid="stToolbar"] {{ display: none !important; }}
+.st-key-cambia_tema {{ top: 10px; }}
 [data-testid="stAppViewContainer"] {{
   background-image: url("{sfondo_svg(tema)}"), radial-gradient(ellipse at 50% 0%, {_rgba(p["giallo"], 0.14)}, transparent 60%);
   animation: cr-deriva 90s linear infinite;

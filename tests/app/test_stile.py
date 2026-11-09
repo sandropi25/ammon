@@ -433,3 +433,13 @@ def test_config_tema_scuro_e_font():
     testo = (RADICE / ".streamlit" / "config.toml").read_text(encoding="utf-8")
     assert 'base = "dark"' in testo and "Barlow" in testo
     assert Path(stile.__file__).name == "stile.py"
+
+
+
+def test_pulsante_tema_sotto_la_barra_del_menu_che_altrimenti_lo_copre():
+    css = stile.css_tema("scuro")
+    regola = css[css.index(".st-key-cambia_tema {"):]
+    assert "top: 68px" in regola[: regola.index("}")]
+    # senza barra (schermata di accesso) puo' stare in alto
+    accesso = stile.css_accesso("scuro")
+    assert ".st-key-cambia_tema" in accesso and "top: 10px" in accesso
