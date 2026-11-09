@@ -267,6 +267,8 @@ def test_nome_arbitro_con_html_e_scritto_con_escape(sessione_db):
 def test_link_alla_scheda_dal_dettaglio_e_dalle_schede_partita(sessione_db):
     with sessione_db() as s:
         _scenario(s)
+        # la pagina Partite mostra i prossimi 7 giorni dall'orologio vero
+        s.get(Partita, PARTITA_FUTURA).data_utc = datetime.now(timezone.utc) + timedelta(days=1)
     for pagina, extra in ((PAGINA_DETTAGLIO, {"partita": PARTITA_FUTURA}), (PAGINA_PARTITE, {})):
         at = avvia(pagina, **extra)
         assert not at.exception

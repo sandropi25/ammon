@@ -1,11 +1,15 @@
 """Controllo pre-partita: da 75 minuti prima del calcio d'inizio cerca le formazioni ufficiali.
-Pensato per essere lanciato ogni 10 minuti: `python -m ammonizioni.scheduler.pre_partita`."""
+Lanciato da GitHub Actions: `python -m ammonizioni.scheduler.pre_partita`. GitHub non rispetta i
+10 minuti chiesti (il 7 e l'8/11/2026 un lancio ogni 35-55): per questo, se c'e' una partita
+vicina, il job resta acceso e ricontrolla ogni 2 minuti fino a formazioni complete o al via."""
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ammonizioni import config
@@ -39,11 +43,16 @@ CHIAVE_ARBITRI_PROSSIMI = "arbitri_prossimi_ultimo"  # Impostazione: ultimo tent
 INTERVALLO_ARBITRI = timedelta(hours=3)
 GIORNI_ARBITRI = 7
 LIMITE_FOTO = 40  # ricerche di foto per esecuzione (giocatori delle prossime partite)
+# Il job parte e aspetta se una partita inizia entro 150 minuti: anche con un'ora di buco tra
+# due lanci di GitHub e' gia' acceso quando si apre la finestra dei 75 minuti.
+ANTICIPO_PRESIDIO = timedelta(minutes=150)
+PAUSA_PRESIDIO = 120  # secondi tra due controlli
+DURATA_PRESIDIO = timedelta(minutes=200)  # poi riparte il lancio successivo (GitHub: max 6 ore)
 
 
-def partite_da_controllare(s: Session, adesso_utc: datetime) -> list[Partita]:
+def _partite_in_attesa(s: Session, adesso_utc: datetime, entro: timedelta) -> list[Partita]:
     """Partite dei campionati (Serie A e Liga) con formazioni ancora probabili, non
-    rinviate/annullate, che iniziano entro 75 minuti."""
+    rinviate/annullate, che iniziano entro `entro`."""
     return list(
         s.scalars(
             select(Partita)
@@ -52,12 +61,17 @@ def partite_da_controllare(s: Session, adesso_utc: datetime) -> list[Partita]:
                 Partita.stato_formazioni == "probabili",
                 Partita.stato.not_in(STATI_ESCLUSI),
                 Partita.data_utc > adesso_utc,
-                Partita.data_utc <= adesso_utc + timedelta(minutes=MINUTI_FINESTRA),
+                Partita.data_utc <= adesso_utc + entro,
             )
             # la Serie A per prima: se il limite di richieste finisce, le sue partite sono servite
             .order_by(Partita.competizione_id != SERIE_A, Partita.data_utc, Partita.id)
         )
     )
+
+
+def partite_da_controllare(s: Session, adesso_utc: datetime) -> list[Partita]:
+    """Le partite in attesa di formazioni che iniziano entro 75 minuti."""
+    return _partite_in_attesa(s, adesso_utc, timedelta(minutes=MINUTI_FINESTRA))
 
 
 def _ha_probabili(s: Session, partita_id: int) -> bool:
@@ -178,6 +192,31 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     return diventate_ufficiali
 
 
+def _adesso_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def presidia(crea_fonte, orologio=_adesso_utc, dormi=time.sleep) -> int:
+    """Resta acceso finche' c'e' una partita vicina senza formazioni complete e ricontrolla ogni
+    2 minuti dentro la finestra. Una sessione nuova a ogni giro (il pooler chiude le connessioni
+    ferme); un errore del database salta il giro e non ferma il presidio. Restituisce quante
+    partite sono passate a "ufficiali"."""
+    inizio = orologio()
+    trovate = 0
+    while orologio() - inizio < DURATA_PRESIDIO:
+        adesso = orologio()
+        try:
+            with modulo_sessione.apri() as s:
+                if not _partite_in_attesa(s, adesso, ANTICIPO_PRESIDIO):
+                    break
+                if partite_da_controllare(s, adesso):
+                    trovate += esegui(s, crea_fonte(s, Priorita.OGGI), adesso)
+        except SQLAlchemyError as errore:
+            log.warning("Presidio formazioni: errore del database, riprovo: %s", errore)
+        dormi(PAUSA_PRESIDIO)
+    return trovate
+
+
 def _ultimo_collegamento(s: Session) -> datetime | None:
     valore = repo.leggi_impostazione(s, CHIAVE_ARBITRI_PROSSIMI, None)
     if not isinstance(valore, str):
@@ -255,6 +294,9 @@ def main(
             log.info("Formazioni ufficiali trovate per %s partite", n)
         # ultime, dopo le formazioni: le foto (TheSportsDB) non devono ritardarle
         aggiorna_foto_senza_errori(s, adesso, limite=LIMITE_FOTO)
+    n = presidia(crea_fonte)
+    if n:
+        log.info("Formazioni ufficiali trovate durante il presidio: %s partite", n)
     return 0
 
 

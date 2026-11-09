@@ -575,3 +575,114 @@ def test_main_pre_partita_collega_gli_arbitri_anche_senza_formazioni(db_file):
     assert pre_partita.main([], crea_fonte=lambda s, p: fonte, crea_fd=lambda s: fd) == 0
     assert fd.chiamate == ["SA"]
     assert fonte.chiamate == []
+
+
+class Orologio:
+    """Tempo finto: `dormi` lo fa avanzare e può far arrivare le formazioni a un certo orario."""
+
+    def __init__(self, adesso, fonte=None, arrivo=None):
+        self.adesso = adesso
+        self.fonte = fonte
+        self.arrivo = arrivo
+        self.pause = 0
+
+    def __call__(self):
+        return self.adesso
+
+    def dormi(self, secondi):
+        self.pause += 1
+        self.adesso += timedelta(seconds=secondi)
+        if self.arrivo is not None and self.adesso >= self.arrivo:
+            self.fonte.formazioni_uscite = ufficiali()
+
+
+def stato_formazioni(url):
+    stati = []
+    dentro_db(url, lambda s: stati.append(s.get(Partita, 100).stato_formazioni))
+    return stati[0]
+
+
+def test_presidio_prende_la_formazione_uscita_poco_prima_del_via(db_file):
+    """Monza-Atalanta 8/11: GitHub ha lanciato il job alle 13:19 e alle 14:03 per il via delle
+    14:00, e la formazione uscita in mezzo si e' persa. Il job ora resta acceso e ricontrolla."""
+    dentro_db(db_file, lambda s: prepara(s))
+    fonte = FonteFinta()
+    orologio = Orologio(INIZIO - timedelta(minutes=120), fonte, INIZIO - timedelta(minutes=10))
+    trovate = pre_partita.presidia(
+        lambda s, priorita: fonte, orologio=orologio, dormi=orologio.dormi
+    )
+    assert trovate == 1
+    assert stato_formazioni(db_file) == "ufficiali"
+    assert orologio.adesso < INIZIO  # finite le formazioni smette di aspettare
+
+
+def test_presidio_controlla_spesso_solo_dentro_la_finestra(db_file):
+    dentro_db(db_file, lambda s: prepara(s))
+    fonte = FonteFinta()
+    orologio = Orologio(INIZIO - timedelta(minutes=135))
+    pre_partita.presidia(lambda s, priorita: fonte, orologio=orologio, dormi=orologio.dormi)
+    # dal 75° minuto prima al via, una richiesta ogni 2 minuti e nessuna prima
+    assert 36 <= len(fonte.chiamate) <= 38
+
+
+def test_presidio_finisce_al_calcio_d_inizio_se_la_formazione_non_arriva(db_file):
+    dentro_db(db_file, lambda s: prepara(s))
+    fonte = FonteFinta()
+    orologio = Orologio(INIZIO - timedelta(minutes=30))
+    assert pre_partita.presidia(
+        lambda s, priorita: fonte, orologio=orologio, dormi=orologio.dormi
+    ) == 0
+    assert INIZIO <= orologio.adesso <= INIZIO + timedelta(minutes=2)
+    assert stato_formazioni(db_file) == "probabili"
+
+
+def test_presidio_non_aspetta_una_partita_lontana(db_file):
+    dentro_db(db_file, lambda s: prepara(s))
+    fonte = FonteFinta()
+    orologio = Orologio(INIZIO - timedelta(minutes=151))
+    pre_partita.presidia(lambda s, priorita: fonte, orologio=orologio, dormi=orologio.dormi)
+    assert orologio.pause == 0
+    assert fonte.chiamate == []
+
+
+def test_presidio_ha_una_durata_massima(db_file):
+    def molte(s):
+        for i in range(8):
+            prepara(s, partita_id=100 + i, data=INIZIO + timedelta(minutes=100 * i))
+
+    dentro_db(db_file, molte)
+    orologio = Orologio(INIZIO - timedelta(minutes=60))
+    pre_partita.presidia(
+        lambda s, priorita: FonteFinta(), orologio=orologio, dormi=orologio.dormi
+    )
+    assert orologio.adesso - (INIZIO - timedelta(minutes=60)) <= pre_partita.DURATA_PRESIDIO
+
+
+def test_presidio_sopravvive_a_un_errore_del_database(db_file, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    dentro_db(db_file, lambda s: prepara(s))
+    vero = pre_partita.esegui
+    errori = []
+
+    def esegui(s, fonte, adesso):
+        if not errori:
+            errori.append(1)
+            raise OperationalError("select 1", {}, Exception("connessione caduta"))
+        return vero(s, fonte, adesso)
+
+    monkeypatch.setattr(pre_partita, "esegui", esegui)
+    fonte = FonteFinta(formazioni_uscite=ufficiali())
+    orologio = Orologio(INIZIO - timedelta(minutes=30))
+    assert pre_partita.presidia(
+        lambda s, priorita: fonte, orologio=orologio, dormi=orologio.dormi
+    ) == 1
+    assert errori == [1]
+
+
+def test_main_resta_di_presidio_dopo_il_primo_controllo(db_file, monkeypatch):
+    chiamate = []
+    monkeypatch.setattr(pre_partita, "presidia", lambda crea: chiamate.append(crea) or 0)
+    crea = lambda s, priorita: FonteFinta()  # noqa: E731
+    assert pre_partita.main([], crea_fonte=crea) == 0
+    assert chiamate == [crea]

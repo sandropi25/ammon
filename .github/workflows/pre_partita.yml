@@ -2,10 +2,11 @@ name: Controllo pre-partita
 
 on:
   schedule:
-    # Ogni 10 minuti dalle 10:00 alle 20:50 UTC (12:00-22:50 ora italiana in estate, 11:00-21:50 in inverno).
+    # Ogni 10 minuti dalle 08:00 alle 20:50 UTC (10:00-22:50 ora italiana in estate, 09:00-21:50 in inverno).
     # Copre i calci d'inizio della Serie A (12:30-20:45 italiane) e della Liga (fino alle 21:00
-    # spagnole, cioè le 19:00 UTC in estate e le 20:00 UTC in inverno). GitHub può ritardarlo di qualche minuto.
-    - cron: "*/10 10-20 * * *"
+    # spagnole, cioè le 19:00 UTC in estate e le 20:00 UTC in inverno). GitHub in realtà lancia ogni
+    # 35-55 minuti: con una partita vicina il job resta acceso fino al via (vedi `presidia`).
+    - cron: "*/10 8-20 * * *"
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,7 @@ concurrency:
 jobs:
   pre_partita:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 230
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

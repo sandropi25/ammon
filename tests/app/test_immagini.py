@@ -1,4 +1,6 @@
 """Stemmi ESPN al posto delle iniziali e impostazione "Immagini da ESPN"."""
+from datetime import datetime, timedelta, timezone
+
 from ayuda_app import PAGINA_IMPOSTAZIONI, PAGINA_PARTITE, avvia, sessione_db, url_db  # noqa: F401
 from db_prova import CASA, PARTITA_FUTURA, TRASF, popola
 from sqlalchemy import select
@@ -93,6 +95,8 @@ def test_impostazione_immagini_accesa_di_default_e_spegnibile(sessione_db):
 def test_pagina_partite_mostra_lo_stemma(sessione_db):
     with sessione_db() as s:
         _con_stemma(s)
+        # la pagina mostra i prossimi 7 giorni dall'orologio vero: la data fissa scadrebbe
+        s.get(Partita, PARTITA_FUTURA).data_utc = datetime.now(timezone.utc) + timedelta(days=1)
     at = avvia(PAGINA_PARTITE)
     assert not at.exception
     assert any(f'src="{LOGO}"' in m.value for m in at.markdown)
