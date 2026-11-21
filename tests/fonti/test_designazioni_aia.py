@@ -153,3 +153,57 @@ def test_parser_blocco_senza_arbitro_viene_saltato(caplog):
     )
     assert [d.arbitro for d in parsa_articolo_aia(html, OGGI)] == ["MASSA"]
     assert "arbitro non leggibile" in caplog.text
+
+
+OGGI_12 = date(2026, 11, 18)
+
+
+def test_parser_12a_giornata_partite_della_domenica_senza_giorno():
+    """Il 18/11/2026 l'AIA ha scritto il giorno solo per sabato e lunedi': le partite della
+    domenica ("JUVENTUS – VENEZIA h. 12.30") vanno lette lo stesso."""
+    trovate = parsa_articolo_aia(leggi("aia_serie_a_12a_giornata.html"), OGGI_12)
+    assert [(d.casa, d.trasferta, d.arbitro) for d in trovate] == [
+        ("COMO", "CAGLIARI", "CALZAVARA"),
+        ("LAZIO", "LECCE", "MARCENARO"),
+        ("PARMA", "ROMA", "SOZZA"),
+        ("NAPOLI", "TORINO", "RAPUANO"),
+        ("JUVENTUS", "VENEZIA", "ARENA"),
+        ("BOLOGNA", "UDINESE", "MARINELLI"),
+        ("SASSUOLO", "GENOA", "FERRIERI CAPUTI"),
+        ("MILAN", "FROSINONE", "PAIRETTO"),
+        ("ATALANTA", "INTER", "MARESCA"),
+        ("MONZA", "FIORENTINA", "DOVERI"),
+    ]
+    per_casa = {d.casa: d for d in trovate}
+    assert per_casa["JUVENTUS"].var == "GHERSINI"
+    assert per_casa["JUVENTUS"].data_ora_locale is None  # giorno non scritto
+    assert per_casa["MONZA"].data_ora_locale == datetime(2026, 11, 23, 20, 45)
+
+
+def test_variazione_vince_anche_se_l_indice_la_mette_dopo():
+    """Il 21/11/2026 l'indice AIA elencava prima l'articolo originale (ID 28854) e poi la
+    variazione (ID 28860, Di Bello al posto di Rapuano): vince l'articolo piu' recente."""
+    base_url = "https://www.aia-figc.it/dettaglio.asp?ID="
+    indice = (
+        f'<a href="{base_url}28854">SERIE A ENILIVE - DESIGNAZIONI 12a GIORNATA</a>'
+        f'<a href="{base_url}28860">SERIE A ENILIVE - VARIAZIONE DESIGNAZIONI 12a GIORNATA</a>'
+    )
+    client = client_finto(
+        {
+            designazioni.URL_INDICE_AIA: indice,
+            base_url + "28854": leggi("aia_serie_a_12a_giornata.html"),
+            base_url + "28860": leggi("aia_variazione_12a_giornata.html"),
+        }
+    )
+    trovate = {d.casa: d.arbitro for d in designazioni_serie_a(client, OGGI_12)}
+    assert trovate["NAPOLI"] == "DI BELLO"
+    assert len(trovate) == 10
+
+
+def test_assistenti_non_sono_scambiati_per_una_partita():
+    html = (
+        "<p>SASSUOLO – GENOA h. 15.00</p><p>FERRIERI CAPUTI</p>"
+        "<p>PERROTTI – ZINGARELLI</p><p>IV: MARIANI</p><p>VAR: MARINI</p>"
+    )
+    trovate = parsa_articolo_aia(html, OGGI_12)
+    assert [(d.casa, d.arbitro, d.var) for d in trovate] == [("SASSUOLO", "FERRIERI CAPUTI", "MARINI")]

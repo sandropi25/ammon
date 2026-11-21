@@ -80,10 +80,16 @@ def _articoli_serie_a(testo_html: str, base: str) -> list[str]:
 
 
 _GIORNI = "lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica"
+# "TORINO - LECCE Sabato 7/11 h. 15.00", oppure solo l'ora ("JUVENTUS – VENEZIA h. 12.30":
+# il 18/11/2026 l'AIA non ha scritto il giorno delle partite della domenica). Senza giorno ne'
+# "h." la riga non e' una partita ("PERROTTI – ZINGARELLI" sono gli assistenti).
 _INTESTAZIONE = re.compile(
     r"^(?P<casa>[^–\-]+?)\s+[–-]\s+(?P<trasferta>[^–\-]+?)\s+"
+    r"(?:"
     rf"(?:{_GIORNI})\s+(?P<g>\d{{1,2}})/(?P<m>\d{{1,2}})"
-    r"(?:\D+?(?P<h>\d{1,2})[.:](?P<min>\d{2}))?\s*$",
+    r"(?:\D+?(?P<h>\d{1,2})[.:](?P<min>\d{2}))?"
+    r"|h\.?\s*(?P<solo_h>\d{1,2})[.:](?P<solo_min>\d{2})"
+    r")\s*$",
     re.I,
 )
 _NOME = re.compile(r"^[A-Za-zÀ-ÿ'’. ]{3,40}$")
@@ -147,14 +153,27 @@ def parsa_articolo_aia(testo_html: str, oggi: date | None = None) -> list[Design
             Designazione(
                 casa=m.group("casa").strip(),
                 trasferta=m.group("trasferta").strip(),
-                data_ora_locale=_data_ora(
-                    int(m.group("g")), int(m.group("m")), m.group("h"), m.group("min"), oggi
+                data_ora_locale=(
+                    _data_ora(int(m.group("g")), int(m.group("m")), m.group("h"), m.group("min"), oggi)
+                    if m.group("g")
+                    else None  # solo l'ora: il giorno non e' scritto
                 ),
                 arbitro=arbitro,
                 var=var,
             )
         )
     return risultato
+
+
+def _dal_piu_recente(elenco: list[str]) -> list[str]:
+    """Articoli dal piu' recente: l'indice AIA non e' sempre in ordine (il 21/11/2026 la
+    variazione ID 28860 veniva dopo l'originale ID 28854), l'ID di dettaglio.asp invece cresce.
+    Gli indirizzi senza ID restano nell'ordine della pagina, dopo quelli con ID."""
+    def chiave(coppia: tuple[int, str]) -> tuple[int, int]:
+        posizione, url = coppia
+        m = re.search(r"[?&]ID=(\d+)", url, re.I)
+        return (-int(m.group(1)), posizione) if m else (0, posizione)
+    return [url for _, url in sorted(enumerate(elenco), key=chiave)]
 
 
 def designazioni_serie_a(client, oggi: date | None = None) -> list[Designazione]:
@@ -176,7 +195,7 @@ def designazioni_serie_a(client, oggi: date | None = None) -> list[Designazione]
             return []
         risultato: list[Designazione] = []
         viste: set[tuple[str, str]] = set()
-        for url in elenco[:ARTICOLI_MAX]:
+        for url in _dal_piu_recente(elenco)[:ARTICOLI_MAX]:
             testo = _scarica(client, url)
             if testo is None:
                 continue
