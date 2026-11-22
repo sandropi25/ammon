@@ -41,6 +41,8 @@ _STATI_SENZA_GOL = ("NS", "PST", "CANC")  # ESPN dà "0" a 0 prima del via
 # Posizione ESPN (parte prima del "-") -> (ruolo, riga della griglia)
 _POSIZIONI: dict[str, tuple[str, int]] = {
     "G": ("G", 1),
+    # ruoli generici: prima del via (formazioni appena uscite) ESPN da' solo G/D/M/F
+    "D": ("D", 2), "M": ("M", 3),
     "RB": ("D", 2), "LB": ("D", 2), "CD": ("D", 2), "SW": ("D", 2),
     "RWB": ("D", 2), "LWB": ("D", 2),
     "DM": ("M", 3), "CM": ("M", 3), "RM": ("M", 3), "LM": ("M", 3),
@@ -220,6 +222,47 @@ def _griglie(titolari: list[tuple[int, int, int, int]]) -> dict[int, str]:
     griglie = {}
     for riga, giocatori in per_riga.items():
         for colonna, (_, _, giocatore_id) in enumerate(sorted(giocatori), start=1):
+            griglie[giocatore_id] = f"{riga}:{colonna}"
+    return griglie
+
+
+_GENERICI = {"D", "M"}  # con questi la riga si ricava dal modulo, non dalla posizione
+# formationPlace (numerazione Opta) da destra a sinistra dentro una linea: il 2 e' il
+# terzino/esterno destro, il 3 il sinistro, il 9 la punta centrale
+_POSTI_DA_DESTRA = (2, 7, 6, 5, 4, 8, 10, 9, 11, 3)
+# righe della griglia (1..5) per le linee di movimento del modulo
+_RIGHE_PER_LINEE = {2: (2, 5), 3: (2, 3, 5), 4: (2, 3, 4, 5), 5: (2, 3, 4, 4, 5)}
+
+
+def _griglie_da_modulo(
+    titolari: list[tuple[int, int, int]], modulo: str | None
+) -> dict[int, str] | None:
+    """Griglia dai ruoli generici e dal modulo ESPN ("3-4-2-1"), date le tuple
+    (giocatore_id, riga del ruolo, formationPlace). I giocatori di movimento, dal ruolo piu'
+    arretrato e poi per formationPlace (la punta "9" per ultima), riempiono le linee del
+    modulo. None se il modulo manca o non torna con i giocatori."""
+    try:
+        linee = [int(x) for x in (modulo or "").split("-")]
+    except ValueError:
+        return None
+    portieri = [t for t in titolari if t[1] == 1]
+    movimento = [t for t in titolari if t[1] != 1]
+    if (
+        len(portieri) != 1 or sum(linee) != len(movimento)
+        or len(linee) not in _RIGHE_PER_LINEE or min(linee) < 1
+    ):
+        return None
+    movimento.sort(key=lambda t: (t[1], 11.5 if t[2] == 9 else t[2], t[0]))
+    griglie = {portieri[0][0]: "1:1"}
+    inizio = 0
+    for riga, quanti in zip(_RIGHE_PER_LINEE[len(linee)], linee):
+        linea = movimento[inizio:inizio + quanti]
+        inizio += quanti
+        linea.sort(
+            key=lambda t: _POSTI_DA_DESTRA.index(t[2]) if t[2] in _POSTI_DA_DESTRA else 5
+        )
+        gia = sum(1 for g in griglie.values() if g.startswith(f"{riga}:"))
+        for colonna, (giocatore_id, _, _) in enumerate(linea, start=gia + 1):
             griglie[giocatore_id] = f"{riga}:{colonna}"
     return griglie
 
@@ -408,7 +451,7 @@ class Espn:
             titolari = [g for g in giocatori if g.titolare]
             if len(titolari) != TITOLARI_PER_SQUADRA:
                 continue  # formazione non ancora uscita
-            griglie = self._griglie_titolari(giocatori)
+            griglie = self._griglie_titolari(giocatori, squadra.get("formation"))
             elenco = []
             for g in sorted(titolari, key=lambda g: (g.classe[1], g.ordine, g.id)):
                 elenco.append((g.id, g.nome, g.classe[0], griglie[g.id]))
@@ -498,13 +541,21 @@ class Espn:
         return giocatori
 
     @staticmethod
-    def _griglie_titolari(giocatori: list[_Giocatore]) -> dict[int, str]:
-        """Griglia dei titolari; vuota se non sono 11 (mai griglie parziali)."""
+    def _griglie_titolari(giocatori: list[_Giocatore], modulo: str | None = None) -> dict[int, str]:
+        """Griglia dei titolari; vuota se non sono 11 (mai griglie parziali). Con i ruoli
+        generici di prima del via (D/M/F) le linee vengono dal modulo ESPN."""
         titolari = [
             (g.id, g.classe[1], g.classe[2], g.ordine) for g in giocatori if g.titolare
         ]
         if len(titolari) != TITOLARI_PER_SQUADRA:
             return {}
+        generici = any(
+            g.abbreviazione.strip().upper() in _GENERICI for g in giocatori if g.titolare
+        )
+        if generici:
+            da_modulo = _griglie_da_modulo([(i, r, o) for i, r, _, o in titolari], modulo)
+            if da_modulo is not None:
+                return da_modulo
         return _griglie(titolari)
 
     @staticmethod

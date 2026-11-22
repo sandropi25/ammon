@@ -793,3 +793,52 @@ def test_risposta_json_non_oggetto_errore_fonte(espn):
     respx.get(f"{URL_ESPN}/ita.1/summary").mock(return_value=httpx.Response(200, json=[1, 2]))
     with pytest.raises(ErroreFonte, match="non valida"):
         espn.statistiche(PARTITA_SF)
+
+
+def _voce_grezza(gid, nome, posizione, posto):
+    return {
+        "starter": True, "formationPlace": str(posto), "jersey": str(posto),
+        "athlete": {"id": str(gid), "displayName": nome},
+        "position": {"abbreviation": posizione},
+    }
+
+
+# Genoa il 22/11/2026, 41 minuti prima del via: ESPN da' solo G/D/M/F e il modulo
+GENOA_GREZZO = [
+    (1, "Bijlow", "G", 1), (2, "Ostigard", "D", 5), (3, "Vasquez", "D", 4),
+    (4, "Marcandalli", "D", 6), (5, "Ellertsson", "M", 3), (6, "Traore", "M", 8),
+    (7, "Messias", "M", 11), (8, "Ehizibue", "M", 2), (9, "Baldanzi", "M", 10),
+    (10, "Amorim", "M", 7), (11, "Osmajic", "F", 9),
+]
+
+
+def test_formazione_con_ruoli_generici_usa_il_modulo_per_le_linee():
+    """Con "D"/"M"/"F" e modulo "3-4-2-1" i giocatori vanno su 4 linee (non 9 in una riga):
+    3 difensori, 4 centrocampisti, 2 trequartisti, 1 punta; da destra a sinistra."""
+    roster = [_voce_grezza(*v) for v in GENOA_GREZZO]
+    griglie = modulo_espn.Espn._griglie_titolari(
+        [modulo_espn._Giocatore(v) for v in roster], "3-4-2-1"
+    )
+    per_riga = {}
+    for gid, g in griglie.items():
+        riga, colonna = map(int, g.split(":"))
+        per_riga.setdefault(riga, []).append((colonna, gid))
+    linee = {r: [gid for _, gid in sorted(v)] for r, v in per_riga.items()}
+    assert linee == {
+        1: [1],
+        2: [4, 2, 3],  # Marcandalli (6) a destra, Ostigard (5), Vasquez (4) a sinistra
+        3: [8, 10, 6, 5],  # Ehizibue (2), Amorim (7), Traore (8), Ellertsson (3)
+        4: [9, 7],  # Baldanzi (10), Messias (11)
+        5: [11],
+    }
+
+
+def test_ruoli_generici_danno_il_ruolo_giusto():
+    assert modulo_espn._classifica("D")[:2] == ("D", 2)
+    assert modulo_espn._classifica("M")[:2] == ("M", 3)
+
+
+def test_ruoli_generici_senza_modulo_restano_sulle_righe_del_ruolo():
+    roster = [_voce_grezza(*v) for v in GENOA_GREZZO]
+    griglie = modulo_espn.Espn._griglie_titolari([modulo_espn._Giocatore(v) for v in roster], None)
+    assert griglie[2].startswith("2:") and griglie[5].startswith("3:") and griglie[11].startswith("5:")
