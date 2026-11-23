@@ -97,11 +97,11 @@ DERBY_PREDEFINITI: dict[int, tuple[tuple[str, str], ...]] = {
     ),
     61: (
         ("Paris Saint-Germain", "Marseille"),
-        ("Lyon", "AS Saint-Etienne"),
+        ("Lyon", "Saint-Étienne"),
         ("Marseille", "Lyon"),
         ("Nice", "AS Monaco"),
         ("Lens", "Lille"),
-        ("Rennes", "Nantes"),
+        ("Stade Rennais", "Nantes"),
         ("Paris Saint-Germain", "Lyon"),
     ),
 }

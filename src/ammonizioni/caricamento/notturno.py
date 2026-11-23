@@ -84,9 +84,30 @@ class FonteContata:
         leggi = getattr(self._fonte, "stili_squadre", None)
         return leggi() if callable(leggi) else {}
 
+    def arbitro(self, partita_id):
+        """Arbitro già letto dalla fonte nel summary (nessuna richiesta, non conta)."""
+        leggi = getattr(self._fonte, "arbitro", None)
+        return leggi(partita_id) if callable(leggi) else None
+
     def indica_competizione(self, partita_id, competizione_id):
         """Passa alla fonte (se lo sa usare) la competizione di una partita; non è una richiesta."""
         indica_competizione(self._fonte, partita_id, competizione_id)
+
+
+def salva_arbitro_fonte(s: Session, fonte, partita: Partita) -> bool:
+    """Se la partita non ha l'arbitro e la fonte l'ha letto nel summary (ESPN), lo salva.
+    Non sostituisce mai un arbitro già presente (designazioni AIA e football-data restano)."""
+    if partita.arbitro_id is not None:
+        return False
+    leggi = getattr(fonte, "arbitro", None)
+    nome = leggi(partita.id) if callable(leggi) else None
+    if not isinstance(nome, str):
+        return False
+    arbitro = trova_o_crea(s, nome, campionato_di(partita.competizione_id))
+    if arbitro is None:
+        return False
+    partita.arbitro_id = arbitro.id
+    return True
 
 
 def indica_competizione(fonte, partita_id: int, competizione_id: int) -> None:
@@ -217,6 +238,7 @@ def scarica_statistiche_partita(s: Session, fonte: Fonte, partita_id: int) -> bo
     for dati in presenze:
         _salva_presenza(s, dati)
     salva_stili_fonte(s, fonte)  # stemmi e colori dallo stesso summary
+    salva_arbitro_fonte(s, fonte, partita)  # l'arbitro, se mancava, dallo stesso summary
     partita.gialli_totali = sum(p.gialli for p in presenze)  # panchina compresa
     partita.rossi_totali = sum(p.rossi for p in presenze)
     partita.falli_totali = sum(p.falli_commessi for p in presenze)

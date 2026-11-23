@@ -842,3 +842,31 @@ def test_ruoli_generici_senza_modulo_restano_sulle_righe_del_ruolo():
     roster = [_voce_grezza(*v) for v in GENOA_GREZZO]
     griglie = modulo_espn.Espn._griglie_titolari([modulo_espn._Giocatore(v) for v in roster], None)
     assert griglie[2].startswith("2:") and griglie[5].startswith("3:") and griglie[11].startswith("5:")
+
+
+# --- arbitro dal summary -----------------------------------------------------
+
+@pytest.mark.parametrize(
+    "ufficiali, atteso",
+    [
+        ([{"fullName": "Clément Turpin", "displayName": "Clément Turpin", "order": 1}], "Clément Turpin"),
+        ([{"displayName": "Assistente", "order": 2}, {"displayName": "Benoit Bastien", "order": 1}],
+         "Benoit Bastien"),
+        ([], None),
+        (None, None),
+        ([{"order": 1}], None),
+    ],
+)
+def test_arbitro_summary(ufficiali, atteso):
+    corpo = {"gameInfo": {"officials": ufficiali}} if ufficiali is not None else {"gameInfo": {}}
+    assert modulo_espn.arbitro_summary(corpo) == atteso
+
+
+@respx.mock
+def test_statistiche_ricordano_l_arbitro_del_summary(espn):
+    corpo = carica("summary_sassuolo_fiorentina.json")
+    corpo.setdefault("gameInfo", {})["officials"] = [{"fullName": "Daniele Doveri", "order": 1}]
+    rotta_summary(corpo)
+    assert espn.arbitro(PARTITA_SF) is None
+    espn.statistiche(PARTITA_SF)
+    assert espn.arbitro(PARTITA_SF) == "Daniele Doveri"

@@ -340,6 +340,18 @@ class _Giocatore:
             self.classe = _classifica_o_centrocampista(self.abbreviazione)
 
 
+def arbitro_summary(corpo: dict) -> str | None:
+    """Il direttore di gara dal summary (`gameInfo.officials`, ordine 1), se c'è."""
+    ufficiali = ((corpo or {}).get("gameInfo") or {}).get("officials")
+    if not isinstance(ufficiali, list):
+        return None
+    validi = [u for u in ufficiali if isinstance(u, dict) and (u.get("fullName") or u.get("displayName"))]
+    if not validi:
+        return None
+    primo = min(validi, key=lambda u: u.get("order") if isinstance(u.get("order"), int) else 99)
+    return (primo.get("fullName") or primo.get("displayName")).strip() or None
+
+
 class Espn:
     def __init__(
         self,
@@ -356,6 +368,7 @@ class Espn:
         self._slug: dict[int, str] = {}
         self._quote: dict[int, tuple[float, float, float]] = {}
         self._stili: dict[int, StileSquadra] = {}
+        self._arbitri: dict[int, str] = {}
 
     def stili_squadre(self) -> dict[int, StileSquadra]:
         """Stemma e colori delle squadre viste nei summary già letti (statistiche e
@@ -495,7 +508,7 @@ class Espn:
             casa_nome=casa["team"]["displayName"],
             trasferta_id=int(trasferta["team"]["id"]),
             trasferta_nome=trasferta["team"]["displayName"],
-            arbitro_nome=None,  # arriva da football-data.org
+            arbitro_nome=None,  # da AIA/football-data; ESPN lo dà solo nel summary
             gol_casa=None if senza_gol else int(casa["score"]),
             gol_trasferta=None if senza_gol else int(trasferta["score"]),
             stato=stato,
@@ -512,7 +525,15 @@ class Espn:
 
     def _summary(self, partita_id: int) -> dict:
         slug = self._slug.get(partita_id, SLUG_ESPN[COMPETIZIONI["serie_a"]])
-        return self._get(f"/{slug}/summary", {"event": partita_id})
+        corpo = self._get(f"/{slug}/summary", {"event": partita_id})
+        nome = arbitro_summary(corpo)
+        if nome:
+            self._arbitri[partita_id] = nome
+        return corpo
+
+    def arbitro(self, partita_id: int) -> str | None:
+        """Arbitro letto nell'ultimo summary della partita (nessuna richiesta in più)."""
+        return self._arbitri.get(partita_id)
 
     @staticmethod
     def _rosters(corpo: dict, partita_id: int) -> list[dict]:

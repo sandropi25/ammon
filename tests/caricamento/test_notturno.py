@@ -367,3 +367,32 @@ def test_esegui_chiude_le_giocate_delle_partite_scaricate_nel_giro(sessione):
     assert giocata.esito == "in_attesa"
     esegui(sessione,FonteFinta(partite_ft=1))
     assert sessione.get(Giocata, giocata.id).esito == "vinta"
+
+class FonteConArbitro(FonteFinta):
+    def __init__(self, arbitri, **kwargs):
+        super().__init__(**kwargs)
+        self.arbitri = arbitri
+
+    def arbitro(self, partita_id):
+        return self.arbitri.get(partita_id)
+
+
+def test_statistiche_riempiono_l_arbitro_mancante_dal_summary(sessione):
+    ligue = partita_dati(8, ADESSO - timedelta(days=1), competizione_id=61,
+                         casa=(41, "Lyon"), trasferta=(42, "Nice"), arbitro=None)
+    notturno.salva_partita(sessione, ligue)
+    sessione.commit()
+    fonte = FonteConArbitro({8: "Clément Turpin"}, calendari={(61, 2026): [ligue]})
+    assert notturno.scarica_statistiche_partita(sessione, notturno.FonteContata(fonte), 8) is True
+    arbitro = sessione.get(Arbitro, sessione.get(Partita, 8).arbitro_id)
+    assert arbitro.nome_visualizzato == "Clément Turpin"
+
+
+def test_statistiche_non_sostituiscono_l_arbitro_designato(sessione):
+    partita = partita_dati(8, ADESSO - timedelta(days=1))  # Doveri
+    notturno.salva_partita(sessione, partita)
+    sessione.commit()
+    prima = sessione.get(Partita, 8).arbitro_id
+    fonte = FonteConArbitro({8: "Marco Guida"}, calendari={(135, 2026): [partita]})
+    notturno.scarica_statistiche_partita(sessione, notturno.FonteContata(fonte), 8)
+    assert sessione.get(Partita, 8).arbitro_id == prima

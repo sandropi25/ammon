@@ -20,7 +20,7 @@ from ammonizioni.caricamento.formazioni import (
     ultimo_xi,
 )
 from ammonizioni.caricamento.foto import aggiorna_foto_senza_errori
-from ammonizioni.caricamento.notturno import indica_competizione
+from ammonizioni.caricamento.notturno import indica_competizione, salva_arbitro_fonte
 from ammonizioni.caricamento.stemmi import salva_stili_fonte
 from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A
 from ammonizioni.db import repo
@@ -196,6 +196,8 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
             continue
         _salva_quote(s, partita, fonte)
         salva_stili_fonte(s, fonte)  # stemmi e colori dallo stesso summary
+        if salva_arbitro_fonte(s, fonte, partita):  # se manca ancora la designazione
+            s.commit()
         if not formazioni:
             continue
         _annota_arrivi(s, partita, formazioni, adesso_utc)
