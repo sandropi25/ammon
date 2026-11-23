@@ -10,6 +10,7 @@ from dataclasses import replace
 
 from sqlalchemy.orm import Session
 
+from ammonizioni.config import NOMI_CAMPIONATI
 from ammonizioni.db.repo import leggi_impostazione, scrivi_impostazione
 from ammonizioni.motore import v2
 from ammonizioni.motore.classifica import classifica, classifica_subentranti
@@ -60,7 +61,7 @@ SPIEGAZIONE = {
 def descrizione_coefficienti(coeff: v2.CoefficientiV2) -> str:
     """Da dove vengono i coefficienti di V2, in chiaro."""
     campione = coeff.campione or {}
-    nomi = {135: "Serie A", 140: "Liga"}
+    nomi = NOMI_CAMPIONATI
     campionati = ", ".join(nomi.get(c, str(c)) for c in campione.get("campionati", []))
     stagioni = ", ".join(str(x) for x in campione.get("stagioni", []))
     quando = coeff.stimati_il or "data sconosciuta"

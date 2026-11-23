@@ -5,15 +5,16 @@ from conftest import FonteFinta, partita_dati
 from sqlalchemy import select
 
 from ammonizioni.caricamento import storico
-from ammonizioni.config import COMPETIZIONI, STAGIONE_CORRENTE, STAGIONI
+from ammonizioni.config import CAMPIONATI, COMPETIZIONI, STAGIONE_CORRENTE, STAGIONI
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import Partita, Presenza, UltimoAggiornamento
 from ammonizioni.caricamento.notturno import salva_partita
 
 OGGI = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
-CARICATE = tuple(COMPETIZIONI.values())  # tutte e 7: due campionati, due coppe, tre europee
-CALENDARI = len(CARICATE) * len(STAGIONI) - 2  # tutti tranne i campionati della stagione corrente
-E2023 = 2  # stagione 2023: calendario di Serie A e Liga (una richiesta ciascuno), una tantum
+CARICATE = tuple(COMPETIZIONI.values())  # campionati, coppe nazionali, tre europee
+# tutti tranne i calendari dei campionati della stagione corrente (li scarica il job notturno)
+CALENDARI = len(CARICATE) * len(STAGIONI) - len(CAMPIONATI)
+E2023 = len(CAMPIONATI)  # stagione 2023: un calendario per campionato, una tantum
 
 
 def _salva(s, *partite):
@@ -64,16 +65,20 @@ def test_coda_storico_tutte_le_coppie_tranne_il_calendario_notturno(sessione):
     assert len(coda) == CALENDARI
     assert (COMPETIZIONI["serie_a"], STAGIONE_CORRENTE) not in coda
     assert {c for c, _ in coda} == set(CARICATE)
-    # dentro ogni gruppo (Serie A e coppe, poi Liga e Copa del Rey) le stagioni recenti per prime
-    for gruppo in (coda[:CALENDARI - 5], coda[CALENDARI - 5:]):
-        assert [st for _, st in gruppo] == sorted((st for _, st in gruppo), reverse=True)
+    # i gruppi nell'ordine dei campionati (Serie A con le europee, poi Liga, Premier, Ligue 1);
+    # dentro ogni gruppo le stagioni recenti per prime
+    ranghi = [storico._rango_competizione(c) for c, _ in coda]
+    assert ranghi == sorted(ranghi)
+    for rango in set(ranghi):
+        gruppo = [st for (_, st), r in zip(coda, ranghi) if r == rango]
+        assert gruppo == sorted(gruppo, reverse=True)
 
 
 def test_coda_storico_i_calendari_della_liga_dopo_quelli_della_serie_a(sessione):
     coda = storico.coda_storico(sessione, OGGI)
     liga = {COMPETIZIONI["liga"], COMPETIZIONI["copa_del_rey"]}
     posizioni = [i for i, (c, _) in enumerate(coda) if c in liga]
-    altre = [i for i, (c, _) in enumerate(coda) if c not in liga]
+    altre = [i for i, (c, _) in enumerate(coda) if storico._rango_competizione(c) == 0]
     assert len(posizioni) == 5 and max(altre) < min(posizioni)
     # la Serie A del 2025 e del 2024 prima di qualsiasi Liga; i campionati della stagione
     # corrente non sono in coda (li scarica il job notturno), la Copa del Rey si'

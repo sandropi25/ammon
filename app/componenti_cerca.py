@@ -40,6 +40,7 @@ ULTIME_PARTITE = 5
 
 NOMI_COMPETIZIONI: dict[int, str] = {
     135: "Serie A", 137: "Coppa Italia", 140: "Liga", 143: "Copa del Rey",
+    39: "Premier League", 45: "FA Cup", 61: "Ligue 1", 66: "Coupe de France",
     2: "Champions League", 3: "Europa League", 848: "Conference League",
 }
 _ORDINE_COMPETIZIONI = {c: i for i, c in enumerate(NOMI_COMPETIZIONI)}

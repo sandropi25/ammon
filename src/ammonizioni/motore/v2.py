@@ -39,9 +39,11 @@ MINUTI_PRIOR_FALLI = 900
 MINUTI_PANCHINA = 1.0
 MINUTI_SUBENTRO_PREDEFINITI = subentranti.MINUTI_SUBENTRO_PREDEFINITI
 LIGA = COMPETIZIONI["liga"]
+PREMIER = COMPETIZIONI["premier"]
+LIGUE_1 = COMPETIZIONI["ligue_1"]
 
 NOMI_PARTITA = (
-    "intercetta", "liga", "arbitro", "squadre_fatti", "squadre_provocati", "derby",
+    "intercetta", "liga", "premier", "ligue_1", "arbitro", "squadre_fatti", "squadre_provocati", "derby",
     "campo_caldo", "posta", "squilibrio_quote", "squilibrio_punti", "precedenti",
 )
 NOMI_GIOCATORE = (
@@ -173,6 +175,8 @@ def caratteristiche_partita(dati: DatiPartita) -> tuple[np.ndarray, float]:
     x = np.array([
         1.0,
         1.0 if dati.campionato_id == LIGA else 0.0,
+        1.0 if dati.campionato_id == PREMIER else 0.0,
+        1.0 if dati.campionato_id == LIGUE_1 else 0.0,
         arbitro,
         (casa[0] + trasf[0]) / 2,
         (casa[1] + trasf[1]) / 2,

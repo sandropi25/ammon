@@ -92,7 +92,7 @@ def test_schermata_di_benvenuto_senza_dati(sessione_db):
     assert not at.exception
     t = visibile(at)
     assert "Benvenuto nel mondo del <span>Yellow</span>!" in t
-    assert "Pronostici sui cartellini di Serie A e Liga" in t
+    assert "Pronostici sui cartellini di Serie A, Liga, Premier League e Ligue 1" in t
     assert "Casa FC" not in t and "Dati aggiornati" not in t and "Dati non ancora" not in t
     assert at.checkbox(key="ricordami").label == "Ricordami su questo dispositivo"
     assert at.button(key="cambia_tema")  # il tema si cambia anche prima di entrare

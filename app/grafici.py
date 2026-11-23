@@ -9,15 +9,21 @@ import altair as alt
 
 import stile
 
-# seconda serie (Liga) per tema: blu, lontano dal giallo per tinta e luminosità
+# colori degli altri campionati per tema, lontani dal giallo della Serie A e fra loro:
+# Liga blu, Premier viola, Ligue 1 verde
 BLU = {"scuro": "#5B9BFF", "chiaro": "#2F6FDB"}
+VIOLA = {"scuro": "#B98CFF", "chiaro": "#7A3FD6"}
+VERDE = {"scuro": "#3CC98A", "chiaro": "#1E8F5C"}
 ALTEZZA_BARRA = 22
 ALTEZZA_GRAFICO = 300
 
 
 def colori_campionati(tema: str) -> tuple[list[str], list[str]]:
     p = stile.PALETTE[tema]
-    return ["Serie A", "Liga"], [p["giallo"], BLU[tema]]
+    return (
+        ["Serie A", "Liga", "Premier League", "Ligue 1"],
+        [p["giallo"], BLU[tema], VIOLA[tema], VERDE[tema]],
+    )
 
 
 def _tema(grafico: alt.Chart, tema: str) -> alt.Chart:

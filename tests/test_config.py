@@ -35,7 +35,7 @@ def test_stati_finiti_comprendono_supplementari_e_rigori():
     assert config.STATI_FINITI == ("FT", "AET", "PEN")
 
 
-def test_competizioni_sette_voci_con_id_invariati():
+def test_competizioni_con_id_invariati():
     assert config.COMPETIZIONI == {
         "serie_a": 135,
         "coppa_italia": 137,
@@ -44,11 +44,16 @@ def test_competizioni_sette_voci_con_id_invariati():
         "champions": 2,
         "europa": 3,
         "conference": 848,
+        "premier": 39,
+        "fa_cup": 45,
+        "ligue_1": 61,
+        "coupe_de_france": 66,
     }
 
 
-def test_campionati():
-    assert config.CAMPIONATI == (135, 140)
+def test_campionati_serie_a_per_prima():
+    assert config.CAMPIONATI == (135, 140, 39, 61)
+    assert set(config.NOMI_CAMPIONATI) == set(config.CAMPIONATI)
 
 
 @pytest.mark.parametrize(
@@ -61,6 +66,10 @@ def test_campionati():
         (2, "uefa.champions"),
         (3, "uefa.europa"),
         (848, "uefa.europa.conf"),
+        (39, "eng.1"),
+        (45, "eng.fa"),
+        (61, "fra.1"),
+        (66, "fra.coupe_de_france"),
     ],
 )
 def test_slug_espn(competizione_id, slug):
@@ -72,9 +81,15 @@ def test_slug_espn_copre_tutte_le_competizioni():
 
 
 def test_codici_football_data_coppe_e_soglie():
-    assert config.CODICE_FOOTBALL_DATA == {135: "SA", 140: "PD"}
-    assert config.COPPE_NAZIONALI == {135: 137, 140: 143}
-    assert config.SOGLIE_DIFFIDA == {135: (4, 9, 13, 16, 19), 140: (4, 9, 14, 19)}
+    assert config.CODICE_FOOTBALL_DATA == {135: "SA", 140: "PD", 39: "PL", 61: "FL1"}
+    assert config.COPPE_NAZIONALI == {135: 137, 140: 143, 39: 45, 61: 66}
+    assert config.SOGLIE_DIFFIDA == {
+        135: (4, 9, 13, 16, 19), 140: (4, 9, 14, 19), 39: (5, 10, 15), 61: (3, 6, 9, 12, 15),
+    }
+    # ogni campionato ha tutto il necessario
+    for campionato in config.CAMPIONATI:
+        assert campionato in config.DERBY_PREDEFINITI and campionato in config.ZONE_CLASSIFICA
+        assert campionato in config.RETROCESSE
 
 
 def test_fonte_dati_predefinita_espn(monkeypatch):

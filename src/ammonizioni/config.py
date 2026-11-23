@@ -6,16 +6,20 @@ COMPETIZIONI: dict[str, int] = {
     "coppa_italia": 137,
     "liga": 140,
     "copa_del_rey": 143,
+    "premier": 39,
+    "fa_cup": 45,
+    "ligue_1": 61,
+    "coupe_de_france": 66,
     "champions": 2,
     "europa": 3,
     "conference": 848,
 }
 
-# Campionati nazionali gestiti (la Serie A per prima).
-CAMPIONATI: tuple[int, ...] = (135, 140)
+# Campionati nazionali gestiti (la Serie A per prima: ha la precedenza in tutte le code).
+CAMPIONATI: tuple[int, ...] = (135, 140, 39, 61)
 
 # Nome visualizzato di ogni campionato.
-NOMI_CAMPIONATI: dict[int, str] = {135: "Serie A", 140: "Liga"}
+NOMI_CAMPIONATI: dict[int, str] = {135: "Serie A", 140: "Liga", 39: "Premier League", 61: "Ligue 1"}
 
 # Slug ESPN di ogni competizione.
 SLUG_ESPN: dict[int, str] = {
@@ -23,22 +27,30 @@ SLUG_ESPN: dict[int, str] = {
     137: "ita.coppa_italia",
     140: "esp.1",
     143: "esp.copa_del_rey",
+    39: "eng.1",
+    45: "eng.fa",
+    61: "fra.1",
+    66: "fra.coupe_de_france",
     2: "uefa.champions",
     3: "uefa.europa",
     848: "uefa.europa.conf",
 }
 
 # Codici football-data.org dei campionati (arbitri).
-CODICE_FOOTBALL_DATA: dict[int, str] = {135: "SA", 140: "PD"}
+CODICE_FOOTBALL_DATA: dict[int, str] = {135: "SA", 140: "PD", 39: "PL", 61: "FL1"}
 
 # Coppa nazionale di ogni campionato.
-COPPE_NAZIONALI: dict[int, int] = {135: 137, 140: 143}
+COPPE_NAZIONALI: dict[int, int] = {135: 137, 140: 143, 39: 45, 61: 66}
 
 # Ammonizioni che portano alla squalifica (diffida = una prima della soglia).
 # DA VERIFICARE sui regolamenti in vigore.
 SOGLIE_DIFFIDA: dict[int, tuple[int, ...]] = {
     135: (4, 9, 13, 16, 19),
     140: (4, 9, 14, 19),
+    # Premier: 5 gialli (entro la 19a giornata), 10 (entro la 32a), 15 -> squalifica
+    39: (5, 10, 15),
+    # Ligue 1: 3 avvertimenti in 10 partite -> squalifica (finestra mobile, qui approssimata)
+    61: (3, 6, 9, 12, 15),
 }
 
 SERIE_A = COMPETIZIONI["serie_a"]
@@ -71,6 +83,27 @@ DERBY_PREDEFINITI: dict[int, tuple[tuple[str, str], ...]] = {
         ("Atlético Madrid", "Barcelona"),
         ("Osasuna", "Athletic Club"),
     ),
+    39: (
+        ("Arsenal", "Tottenham Hotspur"),
+        ("Liverpool", "Everton"),
+        ("Manchester United", "Manchester City"),
+        ("Manchester United", "Liverpool"),
+        ("Chelsea", "Tottenham Hotspur"),
+        ("Arsenal", "Chelsea"),
+        ("Newcastle United", "Sunderland"),
+        ("Aston Villa", "Birmingham City"),
+        ("Crystal Palace", "Brighton & Hove Albion"),
+        ("West Ham United", "Tottenham Hotspur"),
+    ),
+    61: (
+        ("Paris Saint-Germain", "Marseille"),
+        ("Lyon", "AS Saint-Etienne"),
+        ("Marseille", "Lyon"),
+        ("Nice", "AS Monaco"),
+        ("Lens", "Lille"),
+        ("Rennes", "Nantes"),
+        ("Paris Saint-Germain", "Lyon"),
+    ),
 }
 
 # Campo caldo automatico: nelle partite casalinghe di campionato delle ultime
@@ -87,8 +120,10 @@ CAMPO_CALDO_PARTITE_MINIME = 15
 ZONE_CLASSIFICA: dict[int, tuple[tuple[str, int, int], ...]] = {
     135: (("champions", 1, 4), ("europa", 5, 6), ("conference", 7, 7)),
     140: (("champions", 1, 4), ("europa", 5, 6), ("conference", 7, 7)),
+    39: (("champions", 1, 4), ("europa", 5, 5), ("conference", 6, 6)),
+    61: (("champions", 1, 4), ("europa", 5, 5), ("conference", 6, 6)),
 }
-RETROCESSE: dict[int, int] = {135: 3, 140: 3}
+RETROCESSE: dict[int, int] = {135: 3, 140: 3, 39: 3, 61: 2}
 
 # Partita calda: cartellini attesi (gialli + rossi) pari o sopra questa soglia, oppure derby.
 SOGLIA_CARTELLINI_ATTESI = 5.5

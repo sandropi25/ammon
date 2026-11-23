@@ -456,7 +456,12 @@ def test_main_notte_errore_sul_calendario_poi_storico(db_file, monkeypatch):
     assert len(fonti) == 2
     # lo storico ha scaricato i suoi calendari: 7 competizioni x 3 stagioni, meno i due
     # campionati della stagione corrente (sono del job notturno)
-    assert len(fonti[1].chiamate) == 21  # 19 + il 2023 di Serie A e Liga
+    from ammonizioni.config import CAMPIONATI, COMPETIZIONI, STAGIONI
+
+    # tutti i calendari tranne quelli dei campionati della stagione corrente, piu' il 2023
+    # dei campionati
+    calendari = len(COMPETIZIONI) * len(STAGIONI) - len(CAMPIONATI)
+    assert len(fonti[1].chiamate) == calendari + len(CAMPIONATI)
 
     def controlla(s):
         assert s.get(UltimoAggiornamento, "notte").completo is False

@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from ammonizioni.caricamento import storico, totali
 from ammonizioni.caricamento.notturno import salva_partita, scarica_statistiche_partita
-from ammonizioni.config import STAGIONI
+from ammonizioni.config import CAMPIONATI, STAGIONI
 from ammonizioni.db import repo
 from ammonizioni.db.modelli import Arbitro, Giocatore, Partita, Presenza
 from ammonizioni.fonti.base import ErroreFonte
@@ -135,7 +135,7 @@ def test_stagione_2023_calendario_totali_e_arbitri_senza_statistiche(sessione):
     assert p.giornata == 3
     assert sessione.get(Arbitro, p.arbitro_id).nome_visualizzato == "Daniele Doveri"
     # una richiesta ESPN per campionato; football-data solo dove ci sono partite da collegare
-    assert fonte.chiamate == [("partite", 135, 2023), ("partite", 140, 2023)]
+    assert fonte.chiamate == [("partite", c, 2023) for c in CAMPIONATI]
     assert [c[0] for c in fd.chiamate] == ["SA"]
     assert all(c[1:] == (date(2023, 7, 1), date(2024, 6, 30)) for c in fd.chiamate)
 
@@ -146,7 +146,7 @@ def test_stagione_2023_una_tantum(sessione):
     chiamate_fonte, chiamate_fd = len(fonte.chiamate), len(fd.chiamate)
     assert totali.carica_stagione_2023(sessione, fonte, fd) is True
     assert (len(fonte.chiamate), len(fd.chiamate)) == (chiamate_fonte, chiamate_fd)
-    assert repo.leggi_impostazione(sessione, totali.CALENDARI_2023) == [135, 140]
+    assert repo.leggi_impostazione(sessione, totali.CALENDARI_2023) == sorted(CAMPIONATI)
 
 
 def test_stagione_2023_errore_arbitri_si_riprova_ma_il_calendario_no(sessione):

@@ -654,7 +654,7 @@ img.cr-stemma--img {{ object-fit: contain; border-radius: 0; box-shadow: none; b
 
 
 TITOLO_BENVENUTO = "Benvenuto nel mondo del Yellow!"
-SOTTOTITOLO_BENVENUTO = "Pronostici sui cartellini di Serie A e Liga"
+SOTTOTITOLO_BENVENUTO = "Pronostici sui cartellini di Serie A, Liga, Premier League e Ligue 1"
 
 
 def css_accesso(tema: str) -> str:
@@ -1705,8 +1705,9 @@ def css_menu_scelto(chiave: str) -> str:
 
 
 def menu_campionati() -> None:
-    """Barra dei campionati sotto il menu: "Serie A ▾" e "Liga ▾" aprono la tendina con le
-    partite della giornata (e scelgono il campionato), "Tutti" mostra entrambi. Su telefono
+    """Barra dei campionati sotto il menu: "Serie A ▾", "Liga ▾", "Premier League ▾",
+    "Ligue 1 ▾" aprono la tendina con le partite della giornata (e scelgono il campionato),
+    "Tutti" li mostra insieme. Su telefono
     la tendina occupa la larghezza dello schermo."""
     corrente = campionato_corrente()
     if corrente in NOMI_CAMPIONATI.values():
@@ -1728,5 +1729,5 @@ def menu_campionati() -> None:
             componenti.TUTTI, key="campionato_tutti",
             type="primary" if corrente == componenti.TUTTI else "secondary",
             on_click=scegli_campionato, args=(componenti.TUTTI,),
-            help="Serie A e Liga insieme",
+            help="Tutti i campionati insieme",
         )

@@ -70,6 +70,7 @@ def test_notte_scarica_calendario_e_statistiche_della_liga_dopo_la_serie_a(sessi
     assert fonte.chiamate == [
         ("partite", 135, 2026), ("statistiche", 7),
         ("partite", 140, 2026), ("statistiche", 8),
+        ("partite", 39, 2026), ("partite", 61, 2026),  # Premier e Ligue 1 (vuoti qui)
     ]
     assert sessione.get(Partita, 8).statistiche_scaricate is True
     assert sessione.get(Partita, 9) is None  # il calendario della coppa non e' del job notturno
@@ -211,7 +212,7 @@ def test_esegui_completo(sessione):
     fonte = FonteFinta(partite_ft=3)
     r = esegui(sessione,fonte)
     assert r.completo is True
-    assert r.richieste_usate == 5  # 2 calendari (Serie A, Liga) + 3 partite
+    assert r.richieste_usate == 7  # 4 calendari (Serie A, Liga, Premier, Ligue 1) + 3 partite
     assert r.partite_aggiornate == 3
     assert conta_presenze_scaricate(sessione) == 3
 
@@ -222,7 +223,7 @@ def test_secondo_giro_non_riscarica(sessione):
     r = esegui(sessione,fonte)
     assert r.completo is True
     assert r.partite_aggiornate == 0
-    assert [c[0] for c in fonte.chiamate] == ["partite", "partite"]  # Serie A e Liga
+    assert [c[0] for c in fonte.chiamate] == ["partite"] * 4  # i calendari dei 4 campionati
 
 
 def test_partita_con_errore_saltata_le_altre_scaricate(sessione, caplog):

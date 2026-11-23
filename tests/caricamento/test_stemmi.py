@@ -109,7 +109,9 @@ def test_riempimento_una_tantum_dai_calendari(sessione):
     )]
     fonte = FonteFinta(calendari={(135, 2026): serie_a, (140, 2026): liga})
     assert stemmi.riempi_stemmi(sessione, fonte, 2026) == 2
-    assert fonte.chiamate == [("partite", 135, 2026), ("partite", 140, 2026)]
+    from ammonizioni.config import CAMPIONATI
+
+    assert fonte.chiamate == [("partite", c, 2026) for c in CAMPIONATI]
     assert sessione.get(Squadra, 3).colore == "#D11F26"
     assert sessione.get(Partita, 1) is None  # le partite non si toccano
     assert sessione.get(Squadra, 4) is None
