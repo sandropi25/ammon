@@ -8,7 +8,7 @@ import aggiorna  # noqa: E402
 
 aggiorna.ricarica_se_cambiato(lambda: __import__("streamlit").cache_data.clear())
 
-from datetime import datetime  # noqa: E402
+from datetime import datetime, timedelta  # noqa: E402
 
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
@@ -17,6 +17,7 @@ import cache_dati  # noqa: E402
 import campo  # noqa: E402
 import componenti  # noqa: E402
 import componenti_giocate as cg  # noqa: E402
+import componenti_incolla  # noqa: E402
 import stile  # noqa: E402
 from auth import richiedi_password  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
@@ -89,6 +90,15 @@ with sinistra, st.container(key="solo_desktop_contesto"):
 with st.container(key="solo_telefono_contesto"):
     st.markdown(contesto, unsafe_allow_html=True)
     stile.link_arbitro(partita.arbitro_id, nome_arbitro, "dettaglio_telefono")
+
+# fino a un quarto d'ora dopo il via: dopo, le formazioni arrivano da ESPN col tabellino
+if partita.data_utc > datetime.now(componenti.ROMA) - timedelta(minutes=15):
+    componenti_incolla.riquadro(
+        partita_id,
+        [(dati.casa_id, casa), (dati.trasferta_id, trasf)],
+        aperto=partita.stato_formazioni != "ufficiali"
+        and partita.data_utc - datetime.now(componenti.ROMA) < timedelta(minutes=75),
+    )
 
 if cambi:
     st.subheader("Cambi rispetto alle formazioni probabili")
