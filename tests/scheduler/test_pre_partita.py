@@ -60,20 +60,24 @@ def test_finestra_75_minuti(sessione):
     assert ids(INIZIO + timedelta(minutes=1)) == []
 
 
-def test_solo_serie_a_con_probabili(sessione):
-    prepara(sessione, 100, competizione=137)
+def test_solo_partite_con_probabili(sessione):
     prepara(sessione, 101, probabili=False)
     prepara(sessione, 102)
     adesso = INIZIO - timedelta(minutes=30)
     assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [102]
 
 
-def test_anche_la_liga_e_controllata_la_copa_del_rey_no(sessione):
+def test_tutte_le_competizioni_prima_i_campionati_poi_le_coppe(sessione):
     prepara(sessione, 100, competizione=140)
-    prepara(sessione, 101, competizione=143)
+    prepara(sessione, 101, competizione=143)  # Copa del Rey
     prepara(sessione, 102)  # Serie A
+    prepara(sessione, 103, competizione=2)  # Champions
+    prepara(sessione, 104, competizione=39)
+    prepara(sessione, 105, competizione=999)  # competizione sconosciuta: ESPN non la sa leggere
     adesso = INIZIO - timedelta(minutes=30)
-    assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [102, 100]
+    assert [p.id for p in pre_partita.partite_da_controllare(sessione, adesso)] == [
+        102, 100, 104, 101, 103,
+    ]
 
 
 def test_serie_a_servita_prima_della_liga_anche_se_piu_tarda(sessione):

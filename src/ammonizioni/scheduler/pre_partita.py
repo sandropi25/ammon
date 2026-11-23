@@ -22,7 +22,7 @@ from ammonizioni.caricamento.formazioni import (
 from ammonizioni.caricamento.foto import aggiorna_foto_senza_errori
 from ammonizioni.caricamento.notturno import indica_competizione, salva_arbitro_fonte
 from ammonizioni.caricamento.stemmi import salva_stili_fonte
-from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A
+from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A, SLUG_ESPN
 from ammonizioni.db import repo
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
@@ -53,20 +53,26 @@ ARRIVI_DA_TENERE = 80
 
 
 def _partite_in_attesa(s: Session, adesso_utc: datetime, entro: timedelta) -> list[Partita]:
-    """Partite dei campionati (Serie A e Liga) con formazioni ancora probabili, non
-    rinviate/annullate, che iniziano entro `entro`."""
+    """Partite di tutte le competizioni gestite (campionati, coppe nazionali ed europee) con
+    formazioni ancora probabili, non rinviate/annullate, che iniziano entro `entro`."""
     return list(
         s.scalars(
             select(Partita)
             .where(
-                Partita.competizione_id.in_(CAMPIONATI),
+                Partita.competizione_id.in_(tuple(SLUG_ESPN)),
                 Partita.stato_formazioni == "probabili",
                 Partita.stato.not_in(STATI_ESCLUSI),
                 Partita.data_utc > adesso_utc,
                 Partita.data_utc <= adesso_utc + entro,
             )
-            # la Serie A per prima: se il limite di richieste finisce, le sue partite sono servite
-            .order_by(Partita.competizione_id != SERIE_A, Partita.data_utc, Partita.id)
+            # la Serie A per prima, poi gli altri campionati, poi le coppe: se il limite di
+            # richieste finisce, le partite più importanti sono già servite
+            .order_by(
+                Partita.competizione_id != SERIE_A,
+                Partita.competizione_id.not_in(CAMPIONATI),
+                Partita.data_utc,
+                Partita.id,
+            )
         )
     )
 
