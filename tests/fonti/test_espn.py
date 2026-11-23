@@ -870,3 +870,26 @@ def test_statistiche_ricordano_l_arbitro_del_summary(espn):
     assert espn.arbitro(PARTITA_SF) is None
     espn.statistiche(PARTITA_SF)
     assert espn.arbitro(PARTITA_SF) == "Daniele Doveri"
+
+
+# --- minuto del giallo -------------------------------------------------------
+
+def test_minuti_gialli_primo_giallo_e_recuperi():
+    def giallo(atleta, testo):
+        return {"type": {"type": "yellow-card", "text": "Yellow Card"},
+                "clock": {"displayValue": testo}, "participants": [{"athlete": {"id": atleta}}]}
+    eventi = [giallo("7", "40'"), giallo("8", "90'+2'"), giallo("7", "70'"),
+              {"type": {"type": "substitution"}, "clock": {"displayValue": "60'"},
+               "participants": [{"athlete": {"id": "9"}}]}]
+    assert modulo_espn.minuti_gialli(eventi) == {7: 40, 8: 90}
+    assert modulo_espn.minuti_gialli(None) == {}
+
+
+@respx.mock
+def test_statistiche_minuto_del_giallo(espn):
+    rotta_summary(carica("summary_sassuolo_fiorentina.json"))
+    presenze = per_id(espn.statistiche(PARTITA_SF))
+    assert presenze[347018].minuto_giallo == 40
+    assert presenze[297784].minuto_giallo == 90
+    senza = [p for p in presenze.values() if not p.gialli]
+    assert senza and all(p.minuto_giallo is None for p in senza)

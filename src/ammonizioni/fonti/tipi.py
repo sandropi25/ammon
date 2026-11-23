@@ -59,6 +59,7 @@ class PresenzaDati:
     assist: int
     voto: float | None
     maglia: int | None = None  # numero di maglia (ESPN `jersey`), se noto
+    minuto_giallo: int | None = None  # minuto del primo giallo (recuperi: 45 o 90), se ammonito
 
 
 @dataclass(frozen=True)

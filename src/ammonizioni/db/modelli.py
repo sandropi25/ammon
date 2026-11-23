@@ -119,6 +119,8 @@ class Presenza(Base):
     assist: Mapped[int] = mapped_column(Integer, default=0)
     voto: Mapped[float | None] = mapped_column(Float, nullable=True)
     maglia: Mapped[int | None] = mapped_column(Integer, nullable=True)  # numero di maglia
+    # minuto del primo giallo (recuperi contati come 45 o 90); None se non ammonito o non noto
+    minuto_giallo: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Formazione(Base):

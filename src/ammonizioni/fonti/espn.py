@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import httpx
@@ -340,6 +341,28 @@ class _Giocatore:
             self.classe = _classifica_o_centrocampista(self.abbreviazione)
 
 
+def minuti_gialli(eventi) -> dict[int, int]:
+    """Minuto del primo giallo di ogni giocatore, dai `keyEvents` (tipo "yellow-card")."""
+    minuti: dict[int, int] = {}
+    if not isinstance(eventi, list):
+        return minuti
+    for evento in eventi:
+        if not isinstance(evento, dict):
+            continue
+        tipo = evento.get("type") or {}
+        codice = str(tipo.get("type") or "").lower()
+        testo = str(tipo.get("text") or "").lower()
+        if codice != "yellow-card" and testo != "yellow card":
+            continue
+        minuto = _minuto(evento.get("clock"))
+        partecipanti = evento.get("participants") or []
+        giocatore = _id(((partecipanti[0] or {}).get("athlete") or {}).get("id")) if partecipanti else None
+        if minuto is None or giocatore is None:
+            continue
+        minuti[giocatore] = min(minuto, minuti.get(giocatore, minuto))
+    return minuti
+
+
 def arbitro_summary(corpo: dict) -> str | None:
     """Il direttore di gara dal summary (`gameInfo.officials`, ordine 1), se c'è."""
     ufficiali = ((corpo or {}).get("gameInfo") or {}).get("officials")
@@ -430,6 +453,7 @@ class Espn:
     def statistiche(self, partita_id: int) -> list[PresenzaDati]:
         corpo = self._summary(partita_id)
         entrate, uscite = self._minuti_eventi(corpo.get("keyEvents"))
+        gialli = minuti_gialli(corpo.get("keyEvents"))
         presenze: list[PresenzaDati] = []
         for squadra in self._rosters(corpo, partita_id):
             self._ricorda_stile(squadra)
@@ -441,6 +465,8 @@ class Espn:
             for g in giocatori:
                 presenza = self._presenza(partita_id, squadra_id, g, griglie, entrate, uscite)
                 if presenza is not None:
+                    if presenza.gialli and g.id in gialli:
+                        presenza = replace(presenza, minuto_giallo=gialli[g.id])
                     presenze.append(presenza)
         return presenze
 

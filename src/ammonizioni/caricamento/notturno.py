@@ -182,6 +182,9 @@ def _salva_presenza(s: Session, dati: PresenzaDati) -> None:
     griglia = _griglia(s, dati)
     # il numero di maglia solo se noto: una fonte senza numero non cancella quello salvato
     maglia = {"maglia": dati.maglia} if dati.maglia is not None else {}
+    minuto = getattr(dati, "minuto_giallo", None)
+    if minuto is not None:
+        maglia["minuto_giallo"] = minuto
     repo.upsert(
         s,
         Presenza(
