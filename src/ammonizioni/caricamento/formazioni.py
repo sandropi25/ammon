@@ -182,12 +182,28 @@ def _squalificati(
     return sospesi
 
 
+def _non_convocati(s: Session, squadra_id: int, partita_id: int, candidati: set[int]) -> set[int]:
+    """Candidati che nell'ultima partita non erano nemmeno in panchina (infortunati o fuori
+    rosa). Solo se di quella partita conosciamo la panchina: senza, l'assenza non dice nulla."""
+    convocati = {
+        int(g): bool(tit)
+        for g, tit in s.execute(
+            select(Presenza.giocatore_id, Presenza.titolare).where(
+                Presenza.partita_id == partita_id, Presenza.squadra_id == squadra_id
+            )
+        ).all()
+    }
+    if all(convocati.values()):  # nessun panchinaro nei dati
+        return set()
+    return {g for g in candidati if g not in convocati}
+
+
 def probabili_automatiche(s: Session, squadra_id: int, prima_di: datetime) -> list[Titolare]:
     """Formazione probabile calcolata dalle ultime 5 partite di campionato della squadra:
     il modulo più usato (titolari per riga della griglia); per ogni posto il giocatore che
     ci ha giocato più spesso (a pari merito quello più usato nella riga); gli squalificati
-    noti (rosso, o gialli che superano una soglia di diffida nell'ultima partita) sono
-    esclusi e sostituiti dal più usato dello stesso ruolo. Griglia sintetica "riga:colonna".
+    noti (rosso, o gialli che superano una soglia di diffida nell'ultima partita) e chi
+    nell'ultima partita non era nemmeno in panchina (infortunato) sono esclusi e sostituiti dal più usato dello stesso ruolo. Griglia sintetica "riga:colonna".
     Lista vuota senza partite di campionato con titolari: allora si usa `ultimo_xi`."""
     ultime = [
         (int(p), int(c), int(st), d)
@@ -234,7 +250,9 @@ def probabili_automatiche(s: Session, squadra_id: int, prima_di: datetime) -> li
     modulo = max((firme[p] for p in complete), key=lambda f: frequenze[f])
     posti = [(riga, colonna) for riga, n in modulo for colonna in range(1, n + 1)]
 
-    sospesi = _squalificati(s, squadra_id, ultime[0])
+    sospesi = _squalificati(s, squadra_id, ultime[0]) | _non_convocati(
+        s, squadra_id, ultime[0][0], {g.id for p in complete for _, _, _, g in per_partita[p]}
+    )
 
     giocatori: dict[int, Giocatore] = {}
     corsia: dict[tuple[int, int], Counter] = {}

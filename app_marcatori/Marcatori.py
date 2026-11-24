@@ -46,9 +46,26 @@ FORMAZIONI = {
 }
 
 
-@st.cache_data(ttl=1800, show_spinner="Calcolo i pronostici…")
+def perche(f) -> str:
+    """I numeri del giocatore dietro la percentuale, in breve."""
+    if f is None:
+        return ""
+    pezzi = [f"{f.ritmo:.2f} gol/90' (gol e tiri)".replace(".", ","), f"~{f.minuti_attesi:.0f}' attesi"]
+    if f.forma > 0.3:  # ultime settimane nettamente sopra il suo solito
+        pezzi.append("in forma ↑")
+    elif f.forma < -0.3:
+        pezzi.append("in calo ↓")
+    if f.rientro:
+        pezzi.append("rientra da un'assenza")
+    if f.fatica >= 1.5:
+        pezzi.append("tanti minuti negli ultimi 7 giorni")
+    return " · ".join(pezzi)
+
+
+@st.cache_data(ttl=600, show_spinner="Calcolo i pronostici…")
 def carica_pronostici(db: str, blocco: datetime) -> list[dict]:
-    """Pronostici delle partite dei 4 campionati nei prossimi 7 giorni (ricalcolati ogni 30')."""
+    """Pronostici delle partite dei 4 campionati nei prossimi 7 giorni (ricalcolati ogni 10':
+    le formazioni probabili e ufficiali entrano appena il job le salva)."""
     with apri(db) as s:
         partite = list(s.scalars(
             select(Partita)
@@ -75,9 +92,12 @@ def carica_pronostici(db: str, blocco: datetime) -> list[dict]:
                 "casa": nomi_s.get(p.casa_id, "?"), "trasferta": nomi_s.get(p.trasferta_id, "?"),
                 "casa_id": p.casa_id,
                 "formazioni": pr.formazioni,
+                "gol_attesi": pr.gol_attesi,
+                "derby": any(x.fattori and x.fattori.derby for x in pr.previsioni),
                 "giocatori": [
                     {"nome": nomi_g.get(x.giocatore_id, "?"), "casa": x.squadra_id == p.casa_id,
-                     "ruolo": RUOLI.get(x.ruolo, ""), "titolare": x.titolare, "p": x.probabilita}
+                     "ruolo": RUOLI.get(x.ruolo, ""), "titolare": x.titolare, "p": x.probabilita,
+                     "perche": perche(x.fattori)}
                     for x in pr.previsioni[:MOSTRATI]
                 ],
                 "stimati": coeff.get("stimati_utc"),
@@ -87,9 +107,10 @@ def carica_pronostici(db: str, blocco: datetime) -> list[dict]:
 
 st.title("⚽ Marcatori · beta")
 st.caption(
-    "Probabilità che il giocatore segni almeno un gol. Modello: gol attesi della squadra "
-    "(attacco, difesa avversaria, casa/trasferta) × ritmo del giocatore (gol e tiri) × minuti "
-    "attesi, con forma recente, derby, rientro da assenza e minuti degli ultimi 7 giorni."
+    "Probabilità che il giocatore segni almeno un gol in questa partita: gol attesi della sua "
+    "squadra contro questo avversario (attacco, difesa avversaria, casa/trasferta) × suo ritmo "
+    "(gol e tiri a 90') × minuti attesi, corretti per forma recente, derby, rientro da assenza "
+    "e minuti negli ultimi 7 giorni."
 )
 with st.expander("Quanto è preciso (verifica sulla stagione 2025)"):
     st.markdown(
@@ -121,7 +142,12 @@ for d in partite:
             f"**{d['casa']} – {d['trasferta']}**  ·  "
             f"{GIORNI_SETTIMANA[ora.weekday()]} {ora:%d/%m %H:%M}"
         )
-        st.caption(FORMAZIONI.get(d["formazioni"], "formazioni non ancora disponibili"))
+        gc, gt = d["gol_attesi"]
+        st.caption(
+            f"Gol attesi: {d['casa']} {gc:.1f} – {d['trasferta']} {gt:.1f}".replace(".", ",")
+            + (" · derby" if d["derby"] else "") + "  \n"
+            + FORMAZIONI.get(d["formazioni"], "formazioni non ancora disponibili")
+        )
         if not d["giocatori"]:
             st.write("Pronostico non disponibile: mancano le formazioni.")
             continue
@@ -129,8 +155,9 @@ for d in partite:
             squadra = d["casa"] if g["casa"] else d["trasferta"]
             panchina = "" if g["titolare"] else " · dalla panchina"
             c1, c2 = st.columns([3, 2])
-            c1.markdown(f"{g['nome']}  \n<small>{squadra} · {g['ruolo']}{panchina}</small>",
+            c1.markdown(f"{g['nome']}  \n<small>{squadra} · {g['ruolo']}{panchina}<br>{g['perche']}</small>",
                         unsafe_allow_html=True)
             c2.progress(min(g["p"] / 0.6, 1.0), text=f"{g['p']:.0%}")
 
-st.caption("Beta: le formazioni ufficiali sostituiscono quelle stimate circa un'ora prima del via.")
+st.caption("Le formazioni si aggiornano da sole: stimate dalle ultime partite (fuori chi non era "
+           "convocato l'ultima volta), poi probabili, poi ufficiali circa un'ora prima del via.")

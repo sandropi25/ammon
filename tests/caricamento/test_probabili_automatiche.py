@@ -200,3 +200,21 @@ def test_titolari_usa_le_probabili_calcolate_senza_ufficiali(sessione):
     sessione.flush()
     titolari = _titolari(sessione, sessione.get(Partita, 100), OGGI)
     assert {t.giocatore_id for t in titolari if t.squadra_id == 1} == {g for g, _, _ in XI_442}
+
+def test_non_convocato_nell_ultima_partita_escluso(sessione):
+    """Raimondo: titolare 4 volte su 5, poi nemmeno in panchina (infortunato) -> fuori."""
+    prepara(sessione)
+    for n in range(4):
+        gioca(sessione, n + 1, n + 1, XI_442)
+    senza_10 = [(13, "F", "5:1") if g == 10 else (g, r, gr) for g, r, gr in XI_442]
+    gioca(sessione, 5, 5, senza_10, extra=[(14, False, 0, 0)])  # panchina nota, 10 assente
+    xi = ids(formazioni.probabili_automatiche(sessione, 1, OGGI))
+    assert 10 not in xi and 13 in xi and len(xi) == 11
+
+
+def test_senza_panchina_nei_dati_l_assenza_non_esclude(sessione):
+    prepara(sessione)
+    for n in range(4):
+        gioca(sessione, n + 1, n + 1, XI_442)
+    gioca(sessione, 5, 5, [(13, "F", "5:1") if g == 10 else (g, r, gr) for g, r, gr in XI_442])
+    assert 10 in ids(formazioni.probabili_automatiche(sessione, 1, OGGI))

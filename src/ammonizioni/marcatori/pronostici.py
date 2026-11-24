@@ -17,6 +17,7 @@ class Pronostico:
     partita_id: int
     formazioni: str  # "ufficiali" | "probabili" | "" (nessuna formazione: niente pronostico)
     previsioni: list[Previsione]
+    gol_attesi: tuple[float, float] = (0.0, 0.0)  # (casa, trasferta) per la partita
 
 
 def storico_fino_a(s: Session, prima_di: datetime) -> Storico:
@@ -37,5 +38,6 @@ def pronostica(s: Session, partite: list[Partita], storico: Storico | None = Non
     for p in partite:
         rosa, tipo = rosa_partita(s, p)
         previsioni = storico.prevedi(partita_m(p), rosa) if rosa else []
-        risultato.append(Pronostico(p.id, tipo, previsioni))
+        casa, trasferta, _ = storico.gol_attesi(partita_m(p))
+        risultato.append(Pronostico(p.id, tipo, previsioni, (casa, trasferta)))
     return risultato

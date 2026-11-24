@@ -99,6 +99,8 @@ class Fattori:
     derby: float  # 1 se derby
     rientro: float  # 1 se non gioca da almeno 21 giorni (ma ha uno storico)
     fatica: float  # minuti giocati negli ultimi 7 giorni / 90
+    ritmo: float = 0.0  # gol a 90' stimati (gol e tiri, verso la media del ruolo): per l'app
+    minuti_attesi: float = 0.0  # per l'app
 
     def vettore(self) -> tuple[float, ...]:
         return (math.log(self.attesi), self.forma, self.derby, self.rientro, self.fatica)
@@ -276,5 +278,5 @@ class Storico:
             rientro = 1.0 if ultima is not None and g - ultima >= GIORNI_RIENTRO else 0.0
             fatica = sum(m for d, m in self.recenti.get(gid, []) if g - d <= GIORNI_FATICA) / 90
             forma = math.log(max(recente, 1e-6) / max(ritmo, 1e-6))
-            risultato.append(Fattori(attesi, forma, derby, rientro, fatica))
+            risultato.append(Fattori(attesi, forma, derby, rientro, fatica, ritmo, minuti_attesi))
         return risultato
