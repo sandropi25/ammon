@@ -13,6 +13,13 @@ import streamlit as st  # noqa: E402
 import auth  # noqa: E402
 
 st.set_page_config(page_title="Marcatori (beta)", page_icon="⚽", layout="wide")
+try:  # online la password e' obbligatoria: senza, l'app resta chiusa (mai aperta a tutti)
+    senza_password = auth._password_attesa() is None
+except auth.SegretiIllegibili:
+    senza_password = True
+if senza_password:
+    st.error("App chiusa: nei Secrets manca la riga `password` (come nell'app dei cartellini).")
+    st.stop()
 auth.richiedi_password()
 
 st.title("⚽ Marcatori · beta")
