@@ -720,3 +720,17 @@ def test_arrivi_formazioni_tiene_solo_le_ultime_partite(sessione):
     arrivi = repo.leggi_impostazione(sessione, pre_partita.CHIAVE_ARRIVI)
     assert len(arrivi) == pre_partita.ARRIVI_DA_TENERE
     assert "100" in arrivi and "0" not in arrivi
+
+
+def test_cernita_fissata_sulle_probabili_e_poi_sulle_ufficiali(sessione, monkeypatch):
+    from ammonizioni import resoconto
+
+    monkeypatch.setattr(resoconto, "classifica_v2", lambda s, i: [2, 1, 5])
+    prepara(sessione)
+    adesso = INIZIO - timedelta(minutes=30)
+    assert pre_partita.esegui(sessione, FonteFinta(), adesso) == 0
+    assert repo.leggi_impostazione(sessione, "cernita_100")["formazioni"] == "probabili"
+    assert pre_partita.esegui(sessione, FonteFinta(formazioni_uscite=ufficiali()), adesso) == 1
+    assert repo.leggi_impostazione(sessione, "cernita_100") == {
+        "ids": [2, 1, 5], "formazioni": "ufficiali", "salvata_utc": adesso.isoformat(),
+    }

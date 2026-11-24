@@ -8,7 +8,8 @@ Tre casi, tutti con l'ora italiana:
    Se un cron viene saltato o ritardato, l'aggiornamento si recupera nelle ore seguenti
    fino a 3 ore prima della prima partita.
 2. Chiusura: partite finite da almeno 2 ore (fine stimata = inizio + 2 ore) e non ancora
-   chiuse: statistiche ed esiti delle giocate.
+   chiuse: statistiche ed esiti delle giocate. Quando si chiude l'ultima partita di una
+   giornata, resoconto della giornata e precisione della cernita (modulo `resoconto`).
 3. Altrimenti niente (giorni senza partite compresi).
 
 Lo stato e' in Impostazione: "giornata_aggiornata" (data italiana dell'ultimo aggiornamento
@@ -33,6 +34,7 @@ from ammonizioni.fonti.base import ErroreFonte
 from ammonizioni.fonti.controllo_espn import controlla_struttura
 from ammonizioni.fonti.limite import LimiteSuperato, Priorita
 from ammonizioni.giocate.registro import aggiorna_esiti
+from ammonizioni.resoconto import chiudi_giornate
 from ammonizioni.scheduler.comune import (
     ErroreConfigurazione,
     configura_log,
@@ -188,6 +190,12 @@ def chiudi_partite(s: Session, fonte, ids: list[int]) -> int:
     repo.scrivi_impostazione(s, CHIAVE_TENTATIVI, tentativi)
     repo.segna_aggiornamento(s, "chiusura", True)
     s.commit()
+    try:  # finita l'ultima partita di una giornata: resoconto e precisione della cernita
+        if chiudi_giornate(s, datetime.now(timezone.utc), set(chiuse)):
+            s.commit()
+    except Exception:  # noqa: BLE001 - il resoconto non deve far ripetere la chiusura
+        s.rollback()
+        log.exception("Resoconto di fine giornata non scritto")
     log.info("Chiusura: %s richieste, %s partite chiuse su %s", contata.richieste, nuove, len(ids))
     return nuove
 

@@ -26,6 +26,7 @@ from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A, SLUG_ESPN
 from ammonizioni.db import repo
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
+from ammonizioni.resoconto import salva_cernita
 from ammonizioni.fonti.base import ErroreFonte, Fonte
 from ammonizioni.fonti.limite import LimiteSuperato, Priorita
 from ammonizioni.scheduler.comune import (
@@ -183,6 +184,17 @@ def crea_probabili(s: Session, partita: Partita) -> bool:
     return True
 
 
+def _fissa_cernita(s: Session, partita: Partita, adesso_utc: datetime) -> None:
+    """Cernita salvata prima del via (per il resoconto di fine giornata): un errore del
+    modello non deve fermare il controllo delle formazioni."""
+    try:
+        if salva_cernita(s, partita, adesso_utc):
+            s.commit()
+    except Exception:  # noqa: BLE001
+        s.rollback()
+        log.exception("Cernita della partita %s non salvata", partita.id)
+
+
 def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     """Per ogni partita nella finestra: probabili dall'ultimo XI se mancano, poi cerca le
     ufficiali. Restituisce quante partite sono passate a "ufficiali"."""
@@ -205,10 +217,12 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
         if salva_arbitro_fonte(s, fonte, partita):  # se manca ancora la designazione
             s.commit()
         if not formazioni:
+            _fissa_cernita(s, partita, adesso_utc)  # sulle probabili, se non c'e' ancora
             continue
         _annota_arrivi(s, partita, formazioni, adesso_utc)
         complete = _salva_ufficiali(s, partita, formazioni)
         s.commit()
+        _fissa_cernita(s, partita, adesso_utc)  # rifatta con le ufficiali appena arrivano
         if complete:
             diventate_ufficiali += 1
         else:
