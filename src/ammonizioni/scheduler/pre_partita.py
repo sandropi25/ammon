@@ -26,7 +26,7 @@ from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI, SERIE_A, SLUG_ESPN
 from ammonizioni.db import repo
 from ammonizioni.db import sessione as modulo_sessione
 from ammonizioni.db.modelli import Formazione, Giocatore, Partita
-from ammonizioni.resoconto import salva_cernita
+from ammonizioni.resoconto import salva_cernita, salva_cernita_marcatori
 from ammonizioni.fonti.base import ErroreFonte, Fonte
 from ammonizioni.fonti.limite import LimiteSuperato, Priorita
 from ammonizioni.scheduler.comune import (
@@ -184,21 +184,26 @@ def crea_probabili(s: Session, partita: Partita) -> bool:
     return True
 
 
-def _fissa_cernita(s: Session, partita: Partita, adesso_utc: datetime) -> None:
-    """Cernita salvata prima del via (per il resoconto di fine giornata): un errore del
-    modello non deve fermare il controllo delle formazioni."""
-    try:
-        if salva_cernita(s, partita, adesso_utc):
-            s.commit()
-    except Exception:  # noqa: BLE001
-        s.rollback()
-        log.exception("Cernita della partita %s non salvata", partita.id)
+def _fissa_cernita(s: Session, partita: Partita, adesso_utc: datetime, cache: dict) -> None:
+    """Cernite (cartellini e marcatori) salvate prima del via, per il resoconto di fine
+    giornata: un errore dei modelli non deve fermare il controllo delle formazioni."""
+    for nome, salva in (
+        ("cartellini", lambda: salva_cernita(s, partita, adesso_utc)),
+        ("marcatori", lambda: salva_cernita_marcatori(s, partita, adesso_utc, cache)),
+    ):
+        try:
+            if salva():
+                s.commit()
+        except Exception:  # noqa: BLE001
+            s.rollback()
+            log.exception("Cernita %s della partita %s non salvata", nome, partita.id)
 
 
 def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
     """Per ogni partita nella finestra: probabili dall'ultimo XI se mancano, poi cerca le
     ufficiali. Restituisce quante partite sono passate a "ufficiali"."""
     diventate_ufficiali = 0
+    cache: dict = {}  # storico dei marcatori, costruito una volta per giro
     for partita in partite_da_controllare(s, adesso_utc):
         partita_id = partita.id
         try:
@@ -217,12 +222,12 @@ def esegui(s: Session, fonte: Fonte, adesso_utc: datetime) -> int:
         if salva_arbitro_fonte(s, fonte, partita):  # se manca ancora la designazione
             s.commit()
         if not formazioni:
-            _fissa_cernita(s, partita, adesso_utc)  # sulle probabili, se non c'e' ancora
+            _fissa_cernita(s, partita, adesso_utc, cache)  # sulle probabili, se non c'e' ancora
             continue
         _annota_arrivi(s, partita, formazioni, adesso_utc)
         complete = _salva_ufficiali(s, partita, formazioni)
         s.commit()
-        _fissa_cernita(s, partita, adesso_utc)  # rifatta con le ufficiali appena arrivano
+        _fissa_cernita(s, partita, adesso_utc, cache)  # rifatta con le ufficiali appena arrivano
         if complete:
             diventate_ufficiali += 1
         else:

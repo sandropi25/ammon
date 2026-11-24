@@ -95,3 +95,22 @@ def test_giornate_vecchie_restano_fuori(sessione):
     squadre(sessione)
     partita(sessione, 40)
     assert resoconto.giornate_concluse(sessione, INIZIO + timedelta(days=11), set()) == []
+
+
+def test_cernita_marcatori_e_marcatori_nel_resoconto(sessione):
+    squadre(sessione)
+    p = partita(sessione, 50, stato="NS", stats=False)
+    prima = INIZIO - timedelta(minutes=60)
+    finta = lambda s, partita, cache: [(4, 0.4), (1, 0.3), (2, 0.2)]  # noqa: E731
+    assert resoconto.salva_cernita_marcatori(sessione, p, prima, {}, finta)
+    assert not resoconto.salva_cernita_marcatori(sessione, p, prima, {}, finta)  # gia' fissata
+    coppa = partita(sessione, 51, comp=2, stato="NS", stats=False, casa=3, trasf=4)
+    assert not resoconto.salva_cernita_marcatori(sessione, coppa, prima, {}, finta)  # solo campionati
+    p.stato, p.statistiche_scaricate = "FT", True
+    presenza(sessione, 50, 1, 1)
+    sessione.get(Presenza, (50, 1)).gol = 2
+    r = resoconto.resoconto_partita(sessione, p)
+    assert r["marcatori"] == [
+        {"giocatore_id": 1, "nome": "G1", "squadra": "S1", "gol": 2, "posizione": 2}
+    ]
+    assert r["primi_marcatori"] == 1 and r["cernita_marcatori"] == "probabili"

@@ -8,6 +8,8 @@
   e la posizione in cernita, chi ha fatto tanti falli senza giallo. Impostazione
   "resoconto_<campionato>_<stagione>_<giornata>"; la precisione cumulata della cernita per lega
   in "precisione_cernita". Nessuna richiesta esterna: legge solo il database.
+- Marcatori (beta): cernita in "marcatori_cernita_<partita>", stessi tempi; il resoconto riporta
+  chi ha segnato con la posizione in cernita e quante volte almeno uno dei primi 3 ha segnato.
 """
 from __future__ import annotations
 
@@ -33,6 +35,10 @@ VICINANZA_GIORNATA = timedelta(days=3)  # giornata mancante: quella della partit
 
 def chiave_cernita(partita_id: int) -> str:
     return f"cernita_{partita_id}"
+
+
+def chiave_cernita_marcatori(partita_id: int) -> str:
+    return f"marcatori_cernita_{partita_id}"
 
 
 def chiave_resoconto(competizione_id: int, stagione: int, giornata: int) -> str:
@@ -77,6 +83,40 @@ def salva_cernita(s: Session, partita: Partita, adesso_utc: datetime, classifica
     return True
 
 
+def classifica_marcatori(s: Session, partita: Partita, cache: dict) -> list[tuple[int, float]]:
+    """(giocatore, probabilita') dal modello marcatori; lo storico si costruisce una volta per
+    giro (`cache`), perche' costa qualche secondo."""
+    from ammonizioni.marcatori.pronostici import pronostica, storico_fino_a
+
+    if "storico" not in cache:
+        cache["storico"] = storico_fino_a(s, _utc(partita.data_utc))
+    pronostico = pronostica(s, [partita], cache["storico"])[0]
+    return [(x.giocatore_id, round(x.probabilita, 4)) for x in pronostico.previsioni]
+
+
+def salva_cernita_marcatori(
+    s: Session, partita: Partita, adesso_utc: datetime, cache: dict, classifica=None
+) -> bool:
+    """Come `salva_cernita`, per i marcatori (solo campionati): fissata prima del via, rifatta
+    una volta con le ufficiali."""
+    if partita.competizione_id not in CAMPIONATI or adesso_utc >= _utc(partita.data_utc):
+        return False
+    chiave = chiave_cernita_marcatori(partita.id)
+    salvata = repo.leggi_impostazione(s, chiave, None)
+    if salvata and (
+        salvata.get("formazioni") == "ufficiali" or partita.stato_formazioni != "ufficiali"
+    ):
+        return False
+    lista = (classifica or classifica_marcatori)(s, partita, cache)
+    if not lista:
+        return False
+    repo.scrivi_impostazione(s, chiave, {
+        "ids": [g for g, _ in lista], "probabilita": [q for _, q in lista],
+        "formazioni": partita.stato_formazioni, "salvata_utc": adesso_utc.isoformat(),
+    })
+    return True
+
+
 def resoconto_partita(s: Session, partita: Partita) -> dict:
     nomi = {
         q.id: q.nome
@@ -112,6 +152,18 @@ def resoconto_partita(s: Session, partita: Partita) -> dict:
         key=lambda g: -g["falli"],
     )
     primi = set(cernita.get("ids", [])[:PRIMI])
+    cernita_m = repo.leggi_impostazione(s, chiave_cernita_marcatori(partita.id), None) or {}
+    posizione_m = {gid: i for i, gid in enumerate(cernita_m.get("ids", []), 1)}
+    primi_m = set(cernita_m.get("ids", [])[:PRIMI])
+    marcatori = sorted(
+        (
+            {"giocatore_id": p.giocatore_id, "nome": nome, "squadra": nomi.get(p.squadra_id),
+             "gol": p.gol, "posizione": posizione_m.get(p.giocatore_id)}
+            for p, nome in righe
+            if p.gol
+        ),
+        key=lambda m: -m["gol"],
+    )
     return {
         "partita_id": partita.id,
         "casa": nomi.get(partita.casa_id), "trasferta": nomi.get(partita.trasferta_id),
@@ -123,6 +175,11 @@ def resoconto_partita(s: Session, partita: Partita) -> dict:
         "primi_ammoniti": sum(1 for a in ammoniti if a["giocatore_id"] in primi) if primi else None,
         "ammoniti": ammoniti,
         "graziati": graziati,
+        "marcatori": marcatori,
+        "cernita_marcatori": cernita_m.get("formazioni"),
+        "primi_marcatori": (
+            sum(1 for m in marcatori if m["giocatore_id"] in primi_m) if primi_m else None
+        ),
     }
 
 
@@ -191,6 +248,8 @@ def chiudi_giornate(s: Session, adesso_utc: datetime, chiuse: set[int]) -> int:
         con_cernita = [r for r in resoconti if r["primi_ammoniti"] is not None]
         azzeccate = sum(1 for r in con_cernita if r["primi_ammoniti"] > 0)
         gialli = sum(r["gialli"] or 0 for r in resoconti)
+        con_marcatori = [r for r in resoconti if r["primi_marcatori"] is not None]
+        azzeccate_m = sum(1 for r in con_marcatori if r["primi_marcatori"] > 0)
         repo.scrivi_impostazione(
             s, chiave_resoconto(comp, stagione, giornata),
             {
@@ -200,6 +259,8 @@ def chiudi_giornate(s: Session, adesso_utc: datetime, chiuse: set[int]) -> int:
                 "gialli_medi": round(gialli / len(resoconti), 2),
                 "partite_con_cernita": len(con_cernita),
                 "partite_primi_ammoniti": azzeccate,
+                "partite_con_cernita_marcatori": len(con_marcatori),
+                "partite_primi_marcatori": azzeccate_m,
             },
         )
         voce = dict(precisione.get(str(comp), {}))
@@ -208,6 +269,8 @@ def chiudi_giornate(s: Session, adesso_utc: datetime, chiuse: set[int]) -> int:
         voce["gialli"] = voce.get("gialli", 0) + gialli
         voce["partite_con_cernita"] = voce.get("partite_con_cernita", 0) + len(con_cernita)
         voce["partite_primi_ammoniti"] = voce.get("partite_primi_ammoniti", 0) + azzeccate
+        voce["partite_con_cernita_marcatori"] = voce.get("partite_con_cernita_marcatori", 0) + len(con_marcatori)
+        voce["partite_primi_marcatori"] = voce.get("partite_primi_marcatori", 0) + azzeccate_m
         voce["ultima"] = f"{stagione}/{giornata}"
         precisione[str(comp)] = voce
         log.info(
