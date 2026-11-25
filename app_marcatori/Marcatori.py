@@ -25,12 +25,12 @@ if senza_password and os.environ.get("MARCATORI_LOCALE") != "1":  # solo prove s
     st.stop()
 auth.richiedi_password()
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import func, select  # noqa: E402
 
 from ammonizioni import config  # noqa: E402
 from ammonizioni.config import CAMPIONATI, NOMI_CAMPIONATI  # noqa: E402
 from ammonizioni.db import repo  # noqa: E402
-from ammonizioni.db.modelli import Giocatore, Partita, Squadra  # noqa: E402
+from ammonizioni.db.modelli import Formazione, Giocatore, Partita, Squadra  # noqa: E402
 from ammonizioni.db.sessione import apri  # noqa: E402
 from ammonizioni.marcatori.pronostici import pronostica  # noqa: E402
 
@@ -39,11 +39,7 @@ GIORNI = 7
 MOSTRATI = 8
 GIORNI_SETTIMANA = ("Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom")
 RUOLI = {"F": "Att", "M": "Cen", "D": "Dif", "G": "Por", "?": ""}
-FORMAZIONI = {
-    "ufficiali": "✅ formazioni ufficiali",
-    "probabili": "🟡 formazioni probabili",
-    "stimate": "⚪ formazioni stimate dalle ultime partite",
-}
+TIPO_SQUADRA = {"ufficiale": "✅ ufficiale", "probabile": "🟡 probabile", "stimata": "⚪ stimata"}
 
 
 def perche(f) -> str:
@@ -62,8 +58,18 @@ def perche(f) -> str:
     return " · ".join(pezzi)
 
 
-@st.cache_data(ttl=600, show_spinner="Calcolo i pronostici…")
-def carica_pronostici(db: str, blocco: datetime) -> list[dict]:
+@st.cache_data(ttl=60, max_entries=2, show_spinner=False)
+def firma_ufficiali(db: str) -> int:
+    """Righe di formazioni ufficiali salvate: cambia appena ne esce una e fa ricalcolare
+    i pronostici entro un minuto (come l'app dei cartellini)."""
+    with apri(db) as s:
+        return int(s.scalar(
+            select(func.count()).select_from(Formazione).where(Formazione.tipo == "ufficiale")
+        ) or 0)
+
+
+@st.cache_data(ttl=600, max_entries=4, show_spinner="Calcolo i pronostici…")
+def carica_pronostici(db: str, blocco: datetime, firma: int) -> list[dict]:
     """Pronostici delle partite dei 4 campionati nei prossimi 7 giorni (ricalcolati ogni 10':
     le formazioni probabili e ufficiali entrano appena il job le salva)."""
     with apri(db) as s:
@@ -78,7 +84,9 @@ def carica_pronostici(db: str, blocco: datetime) -> list[dict]:
             .order_by(Partita.data_utc, Partita.id)
         ))
         pronostici = {pr.partita_id: pr for pr in pronostica(s, partite)}
-        ids = {x.giocatore_id for pr in pronostici.values() for x in pr.previsioni}
+        ids = {x.giocatore_id for pr in pronostici.values() for x in pr.previsioni} | {
+            e[0] for pr in pronostici.values() for e in pr.esclusi
+        }
         nomi_g = dict(s.execute(select(Giocatore.id, Giocatore.nome).where(Giocatore.id.in_(ids))).all()) if ids else {}
         squadre = {p.casa_id for p in partite} | {p.trasferta_id for p in partite}
         nomi_s = dict(s.execute(select(Squadra.id, Squadra.nome).where(Squadra.id.in_(squadre))).all()) if squadre else {}
@@ -93,6 +101,11 @@ def carica_pronostici(db: str, blocco: datetime) -> list[dict]:
                 "casa_id": p.casa_id,
                 "formazioni": pr.formazioni,
                 "gol_attesi": pr.gol_attesi,
+                "tipi": pr.tipi_squadra,
+                "esclusi": [
+                    {"nome": nomi_g.get(g, "?"), "p": prob, "panchina": panca}
+                    for g, prob, panca in pr.esclusi
+                ],
                 "derby": any(x.fattori and x.fattori.derby for x in pr.previsioni),
                 "giocatori": [
                     {"nome": nomi_g.get(x.giocatore_id, "?"), "casa": x.squadra_id == p.casa_id,
@@ -123,7 +136,7 @@ with st.expander("Quanto è preciso (verifica sulla stagione 2025)"):
 
 adesso = datetime.now(timezone.utc)
 blocco = adesso.replace(minute=0, second=0, microsecond=0)
-dati = carica_pronostici(config.url_database(), blocco)
+dati = carica_pronostici(config.url_database(), blocco, firma_ufficiali(config.url_database()))
 dati = [d for d in dati if d["data"] > adesso]
 
 scelta = st.pills(
@@ -146,11 +159,19 @@ for d in partite:
         st.caption(
             f"Gol attesi: {d['casa']} {gc:.1f} – {d['trasferta']} {gt:.1f}".replace(".", ",")
             + (" · derby" if d["derby"] else "") + "  \n"
-            + FORMAZIONI.get(d["formazioni"], "formazioni non ancora disponibili")
+            + "Formazioni: " + " · ".join(
+                f"{nome} {TIPO_SQUADRA.get(tipo, 'non disponibile')}"
+                for nome, tipo in zip((d["casa"], d["trasferta"]), d["tipi"])
+            )
         )
         if not d["giocatori"]:
             st.write("Pronostico non disponibile: mancano le formazioni.")
             continue
+        if d["esclusi"]:
+            st.warning("Non partono titolari: " + ", ".join(
+                f"{e['nome']} ({'in panchina' if e['panchina'] else 'non convocato'}, "
+                f"da titolare era al {e['p']:.0%})" for e in d["esclusi"]
+            ), icon="🔄")
         for g in d["giocatori"]:
             squadra = d["casa"] if g["casa"] else d["trasferta"]
             panchina = "" if g["titolare"] else " · dalla panchina"
@@ -159,5 +180,6 @@ for d in partite:
                         unsafe_allow_html=True)
             c2.progress(min(g["p"] / 0.6, 1.0), text=f"{g['p']:.0%}")
 
-st.caption("Le formazioni si aggiornano da sole: stimate dalle ultime partite (fuori chi non era "
-           "convocato l'ultima volta), poi probabili, poi ufficiali circa un'ora prima del via.")
+st.caption("Le formazioni si aggiornano da sole, squadra per squadra: stimate dalle ultime partite "
+           "(fuori chi non era convocato l'ultima volta), poi probabili, poi ufficiali circa un'ora "
+           "prima del via. Appena esce un'ufficiale i pronostici si ricalcolano entro un minuto.")

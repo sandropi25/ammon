@@ -66,29 +66,54 @@ def costruisci_storico(partite, presenze, parametri) -> Storico:
     return storico
 
 
-def rosa_partita(s: Session, partita: Partita) -> tuple[list[Giocante], str]:
-    """Giocatori della partita: ufficiali + panchina se ci sono, altrimenti le probabili
-    salvate, altrimenti quelle calcolate dalle ultime partite (solo titolari). Restituisce
-    anche il tipo ("ufficiali", "probabili", "stimate" o "")."""
+def stimate_squadra(s: Session, squadra_id: int, prima_di: datetime) -> list[Giocante]:
+    """Titolari calcolati dalle ultime partite (come l'app dei cartellini)."""
+    from ammonizioni.caricamento.formazioni import probabili_automatiche, ultimo_xi
+
+    xi = probabili_automatiche(s, squadra_id, prima_di) or ultimo_xi(s, squadra_id, prima_di)
+    return [Giocante(t.giocatore_id, squadra_id, True, t.ruolo) for t in xi]
+
+
+def rosa_partita_per_squadra(s: Session, partita: Partita) -> dict[int, tuple[list[Giocante], str]]:
+    """Per ogni squadra la formazione migliore che c'e': ufficiale + panchina appena esce
+    (ESPN le pubblica una squadra alla volta), altrimenti la probabile salvata, altrimenti
+    quella stimata dalle ultime partite. Tipo: "ufficiale", "probabile", "stimata" o ""."""
     righe = s.execute(
         select(Formazione.giocatore_id, Formazione.squadra_id, Formazione.tipo, Giocatore.ruolo)
         .join(Giocatore, Giocatore.id == Formazione.giocatore_id)
         .where(Formazione.partita_id == partita.id)
     ).all()
-    ufficiali = [r for r in righe if r.tipo in ("ufficiale", "panchina")]
-    if any(r.tipo == "ufficiale" for r in ufficiali):
-        return [Giocante(r.giocatore_id, r.squadra_id, r.tipo == "ufficiale", r.ruolo)
-                for r in ufficiali], "ufficiali"
-    probabili = [r for r in righe if r.tipo == "probabile"]
-    if probabili:
-        return [Giocante(r.giocatore_id, r.squadra_id, True, r.ruolo) for r in probabili], "probabili"
-    # partita ancora lontana: probabili calcolate dalle ultime partite (come l'app dei cartellini)
-    from ammonizioni.caricamento.formazioni import probabili_automatiche, ultimo_xi
-
-    rosa = []
+    risultato = {}
     for squadra_id in (partita.casa_id, partita.trasferta_id):
-        xi = probabili_automatiche(s, squadra_id, partita.data_utc) or ultimo_xi(
-            s, squadra_id, partita.data_utc
-        )
-        rosa += [Giocante(t.giocatore_id, squadra_id, True, t.ruolo) for t in xi]
-    return rosa, "stimate" if rosa else ""
+        sue = [r for r in righe if r.squadra_id == squadra_id]
+        if any(r.tipo == "ufficiale" for r in sue):
+            risultato[squadra_id] = ([
+                Giocante(r.giocatore_id, squadra_id, r.tipo == "ufficiale", r.ruolo)
+                for r in sue if r.tipo in ("ufficiale", "panchina")
+            ], "ufficiale")
+            continue
+        probabili = [Giocante(r.giocatore_id, squadra_id, True, r.ruolo) for r in sue if r.tipo == "probabile"]
+        if probabili:
+            risultato[squadra_id] = (probabili, "probabile")
+            continue
+        stimate = stimate_squadra(s, squadra_id, partita.data_utc)
+        risultato[squadra_id] = (stimate, "stimata" if stimate else "")
+    return risultato
+
+
+def rosa_partita(s: Session, partita: Partita, per_squadra=None) -> tuple[list[Giocante], str]:
+    """Giocatori della partita e tipo complessivo: "ufficiali" (entrambe), "miste" (una sola
+    ufficiale), "probabili", "stimate" o "" (nessuna formazione)."""
+    if per_squadra is None:
+        per_squadra = rosa_partita_per_squadra(s, partita)
+    rosa = [g for giocanti, _ in per_squadra.values() for g in giocanti]
+    tipi = {t for _, t in per_squadra.values()}
+    if tipi == {"ufficiale"}:
+        tipo = "ufficiali"
+    elif "ufficiale" in tipi:
+        tipo = "miste"
+    elif "probabile" in tipi:
+        tipo = "probabili"
+    else:
+        tipo = "stimate" if rosa else ""
+    return rosa, tipo
